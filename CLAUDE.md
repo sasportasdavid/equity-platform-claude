@@ -27,6 +27,7 @@ Ne pas anticiper les modules futurs sauf instruction explicite.
 
 [À mettre à jour au fur et à mesure]
 
-- [ ] Phase 1 — Bootstrap (Module 1)
-- [ ] Phase 2 — Identity & Roles (Module 2)
-      ...
+## État actuel
+
+- [x] Module 1 — Foundation (terminé le X)
+- [ ] Module 2 — Identity & Roles (en cours)

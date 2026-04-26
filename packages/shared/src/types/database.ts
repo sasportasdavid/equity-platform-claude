@@ -1,5 +1,5 @@
 // Auto-generated from Supabase schema. Do NOT edit by hand.
-// Regenerate via Supabase MCP  or:
+// Regenerate via Supabase MCP generate_typescript_types or:
 //   pnpm dlx supabase gen types typescript --project-id ytlfnxcrclugrsbvqdkb > packages/shared/src/types/database.ts
 
 export type Json =
@@ -608,13 +608,13 @@ export type Database = {
       }
       beneficiaries: {
         Row: {
-          address: Json | null
+          address_encrypted: string | null
           beneficiary_type: string
           company_id: string | null
           created_at: string
           created_by: string | null
           custom_fields: Json
-          date_of_birth: string | null
+          date_of_birth_encrypted: string | null
           deleted_at: string | null
           department: string | null
           email: string
@@ -626,7 +626,7 @@ export type Database = {
           last_name: string
           nationality: string
           org_id: string
-          phone: string | null
+          phone_encrypted: string | null
           social_security_number: string | null
           status: string
           tax_residence_country: string
@@ -636,13 +636,13 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
-          address?: Json | null
+          address_encrypted?: string | null
           beneficiary_type: string
           company_id?: string | null
           created_at?: string
           created_by?: string | null
           custom_fields?: Json
-          date_of_birth?: string | null
+          date_of_birth_encrypted?: string | null
           deleted_at?: string | null
           department?: string | null
           email: string
@@ -654,7 +654,7 @@ export type Database = {
           last_name: string
           nationality?: string
           org_id: string
-          phone?: string | null
+          phone_encrypted?: string | null
           social_security_number?: string | null
           status?: string
           tax_residence_country?: string
@@ -664,13 +664,13 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
-          address?: Json | null
+          address_encrypted?: string | null
           beneficiary_type?: string
           company_id?: string | null
           created_at?: string
           created_by?: string | null
           custom_fields?: Json
-          date_of_birth?: string | null
+          date_of_birth_encrypted?: string | null
           deleted_at?: string | null
           department?: string | null
           email?: string
@@ -682,7 +682,7 @@ export type Database = {
           last_name?: string
           nationality?: string
           org_id?: string
-          phone?: string | null
+          phone_encrypted?: string | null
           social_security_number?: string | null
           status?: string
           tax_residence_country?: string
@@ -2756,12 +2756,71 @@ export type Database = {
     }
     Functions: {
       current_org_id: { Args: never; Returns: string }
+      custom_access_token_hook: { Args: { event: Json }; Returns: Json }
+      decrypt_sensitive: { Args: { ciphertext: string }; Returns: string }
+      encrypt_sensitive: { Args: { plaintext: string }; Returns: string }
+      get_beneficiary_decrypted: {
+        Args: { p_id: string }
+        Returns: {
+          address: Json
+          beneficiary_type: string
+          company_id: string
+          date_of_birth: string
+          department: string
+          email: string
+          first_name: string
+          hire_date: string
+          id: string
+          job_title: string
+          last_name: string
+          org_id: string
+          phone: string
+          social_security_number: string
+          status: string
+        }[]
+      }
+      get_invitation_by_token: {
+        Args: { p_token: string }
+        Returns: {
+          beneficiary_id: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string
+          invited_by_email: string
+          is_for_beneficiary: boolean
+          message: string
+          org_id: string
+          org_name: string
+          roles: string[]
+        }[]
+      }
       has_permission: { Args: { perm: string }; Returns: boolean }
+      insert_beneficiary_encrypted: {
+        Args: {
+          p_address?: Json
+          p_beneficiary_type?: string
+          p_company_id?: string
+          p_department?: string
+          p_dob?: string
+          p_email: string
+          p_first_name: string
+          p_hire_date?: string
+          p_job_title?: string
+          p_last_name: string
+          p_nss?: string
+          p_org_id: string
+          p_phone?: string
+        }
+        Returns: string
+      }
       is_award_beneficiary: {
         Args: { award_id_param: string }
         Returns: boolean
       }
       is_org_member: { Args: { org_id_param: string }; Returns: boolean }
+      user_all_permissions: { Args: never; Returns: string[] }
+      user_has_permission: { Args: { p_perm: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
