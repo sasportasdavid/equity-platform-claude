@@ -12,3 +12,10 @@ pnpm-lock.yaml
 supabase/.branches
 supabase/.temp
 *.tsbuildinfo
+
+# SQL migrations are written by humans; Prettier has no SQL parser without an
+# extra plugin. Use pgFormatter or the Supabase Studio editor for formatting.
+*.sql
+
+# Generated DB types (very large, regenerated from Supabase)
+packages/shared/src/types/database.ts
