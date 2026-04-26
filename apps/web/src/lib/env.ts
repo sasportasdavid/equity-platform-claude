@@ -1,4 +1,6 @@
 import { z } from 'zod';
+// Smoke import to validate workspace wiring (no runtime cost — type re-export only).
+export type { Permission, Role, AwardStatus } from '@equity/shared';
 
 /**
  * Validation runtime des variables d'environnement.
