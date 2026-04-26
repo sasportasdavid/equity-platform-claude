@@ -1,0 +1,14 @@
+node_modules
+.next
+.turbo
+dist
+build
+out
+coverage
+playwright-report
+test-results
+pnpm-lock.yaml
+.vercel
+supabase/.branches
+supabase/.temp
+*.tsbuildinfo
