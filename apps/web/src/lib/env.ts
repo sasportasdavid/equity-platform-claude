@@ -10,22 +10,36 @@ export type { Permission, Role, AwardStatus } from '@equity/shared';
  * on ne les valide que côté serveur ; côté client on les consomme directement.
  */
 
+/** Treat empty strings (`FOO=`) as undefined so optional URL/email checks pass. */
+const optionalString = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+  z.string().optional(),
+);
+const optionalUrl = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+  z.string().url().optional(),
+);
+const optionalEmail = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+  z.string().email().optional(),
+);
+
 const serverEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   NEXT_PUBLIC_APP_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(20),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(20).optional(),
-  QUANT_ENGINE_URL: z.string().url().optional(),
-  QUANT_ENGINE_API_KEY: z.string().optional(),
-  YOUSIGN_API_KEY: z.string().optional(),
-  YOUSIGN_API_BASE_URL: z.string().url().optional(),
-  YOUSIGN_WEBHOOK_SECRET: z.string().optional(),
-  RESEND_API_KEY: z.string().optional(),
-  RESEND_FROM_EMAIL: z.string().email().optional(),
-  RESEND_WEBHOOK_SECRET: z.string().optional(),
-  EODHD_API_KEY: z.string().optional(),
-  SENTRY_DSN: z.string().url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: optionalString,
+  QUANT_ENGINE_URL: optionalUrl,
+  QUANT_ENGINE_API_KEY: optionalString,
+  YOUSIGN_API_KEY: optionalString,
+  YOUSIGN_API_BASE_URL: optionalUrl,
+  YOUSIGN_WEBHOOK_SECRET: optionalString,
+  RESEND_API_KEY: optionalString,
+  RESEND_FROM_EMAIL: optionalEmail,
+  RESEND_WEBHOOK_SECRET: optionalString,
+  EODHD_API_KEY: optionalString,
+  SENTRY_DSN: optionalUrl,
 });
 
 const clientEnvSchema = z.object({
