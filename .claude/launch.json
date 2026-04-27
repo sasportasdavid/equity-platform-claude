@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Next.js dev (apps/web)",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "port": 3000
+    },
+    {
+      "name": "Next.js dev (Playwright port)",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "web", "exec", "next", "dev", "-p", "3100"],
+      "port": 3100
+    },
+    {
+      "name": "Supabase local (Studio + Postgres + Auth, Docker)",
+      "runtimeExecutable": "supabase",
+      "runtimeArgs": ["start"],
+      "port": 54323
+    }
+  ]
+}

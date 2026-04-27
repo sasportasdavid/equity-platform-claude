@@ -12,13 +12,6 @@
   "tailwindFunctions": ["cn", "clsx", "cva"],
   "overrides": [
     {
-      "files": "*.sql",
-      "options": {
-        "tabWidth": 2,
-        "printWidth": 120
-      }
-    },
-    {
       "files": "*.md",
       "options": {
         "proseWrap": "preserve"
