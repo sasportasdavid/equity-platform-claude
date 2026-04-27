@@ -220,7 +220,12 @@ export type Step3Data = z.infer<typeof step3Schema>;
 export const peerCompanySchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string(),
-  ticker: z.string().regex(/^[A-Z0-9.-]{1,20}$/),
+  // Tolère l'empty pour que le message Zod du regex ne masque pas le
+  // message FR « Ticker requis » émis par le superRefine. Le regex
+  // s'applique uniquement quand l'utilisateur a saisi qqch.
+  ticker: z
+    .string()
+    .regex(/^[A-Z0-9.\-^_]{0,20}$/, 'Ticker invalide (majuscules / chiffres / . - ^ _)'),
   weight: z.number().min(0).max(100).optional(),
   s0: z.number().optional(),
   volatility: z.number().optional(),
@@ -669,6 +674,36 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
           });
         }
       }
+
+      if (cond.marketMetricType === 'TSR_REL_PEERS') {
+        // Mode flat (4.6) : on attend au moins un peer dans `peerGroup`.
+        // Mode weighted (4.7) : on validera `weightedPeerGroups` à la place.
+        const peers = cond.peerGroup ?? [];
+        if (peers.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['conditions', idx, 'peerGroup'],
+            message: 'Au moins un peer est requis pour TSR relatif vs panel',
+          });
+        }
+        // Validation de chaque peer : ticker non-vide + format
+        peers.forEach((peer, peerIdx) => {
+          if (!peer.ticker || peer.ticker.trim().length === 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['conditions', idx, 'peerGroup', peerIdx, 'ticker'],
+              message: 'Ticker requis',
+            });
+          }
+          if (!peer.name || peer.name.trim().length === 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['conditions', idx, 'peerGroup', peerIdx, 'name'],
+              message: 'Nom requis',
+            });
+          }
+        });
+      }
     });
   }
 });
@@ -765,6 +800,7 @@ export const MARKET_METRICS_AVAILABLE: ReadonlySet<MarketMetric> = new Set([
   'SHARE_PRICE',
   'TSR_ABS',
   'TSR_REL_INDEX',
+  'TSR_REL_PEERS',
 ]);
 
 /** Référence de compatibilité pour les imports antérieurs (à supprimer

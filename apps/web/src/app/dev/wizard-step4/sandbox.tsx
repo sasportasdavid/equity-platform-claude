@@ -32,7 +32,7 @@ function uuid(suffix: string) {
 
 type Preset = {
   label: string;
-  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5';
+  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5' | '4.6';
   apply: () => void;
 };
 
@@ -409,6 +409,140 @@ export function WizardStep4Sandbox() {
         }),
     },
 
+    // ----- Groupe 4.6 — branche MARKET TSR_REL_PEERS (mode flat / legacy) -----
+    {
+      label: '4.6 · TSR vs panel pharma (4 peers)',
+      group: '4.6',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'PARTIAL',
+          conditions: [
+            {
+              id: uuid('mkt-tsr-peers-pharma'),
+              name: 'TSR vs panel pharma ≥ +5 pts',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_PEERS',
+              comparisonOperator: '>=',
+              targetValue: '5',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              peerGroup: [
+                { id: uuid('p-san'), name: 'Sanofi', ticker: 'SAN.PA' },
+                { id: uuid('p-roche'), name: 'Roche Holding', ticker: 'ROG.SW' },
+                { id: uuid('p-novartis'), name: 'Novartis', ticker: 'NOVN.SW' },
+                { id: uuid('p-pfizer'), name: 'Pfizer', ticker: 'PFE' },
+              ],
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.6 · TSR vs panel tech (3 peers US)',
+      group: '4.6',
+      apply: () =>
+        applyPreset({
+          planType: 'STOCK_OPTION',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('mkt-tsr-peers-tech'),
+              name: 'TSR vs FAANG ≥ médiane',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_PEERS',
+              comparisonOperator: '>=',
+              targetValue: '0',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2030-01-01',
+              peerGroup: [
+                { id: uuid('p-aapl'), name: 'Apple', ticker: 'AAPL' },
+                { id: uuid('p-msft'), name: 'Microsoft', ticker: 'MSFT' },
+                { id: uuid('p-googl'), name: 'Alphabet', ticker: 'GOOGL' },
+              ],
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.6 · KO · panel vide',
+      group: '4.6',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('mkt-tsr-peers-ko-empty'),
+              name: 'TSR_REL_PEERS sans peer',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_PEERS',
+              comparisonOperator: '>=',
+              targetValue: '5',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              peerGroup: [],
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.6 · KO · peer ticker manquant',
+      group: '4.6',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('mkt-tsr-peers-ko-ticker'),
+              name: 'TSR_REL_PEERS avec peer incomplet',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_PEERS',
+              comparisonOperator: '>=',
+              targetValue: '5',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              peerGroup: [
+                { id: uuid('p-ok'), name: 'Sanofi', ticker: 'SAN.PA' },
+                { id: uuid('p-noticker'), name: 'Société sans ticker', ticker: '' },
+              ],
+            },
+          ],
+        }),
+    },
+
     // ----- Groupe 4.1 — squelette / structure -----
     {
       label: 'Désactivé',
@@ -779,16 +913,17 @@ export function WizardStep4Sandbox() {
   const presets43 = presets.filter((p) => p.group === '4.3');
   const presets44 = presets.filter((p) => p.group === '4.4');
   const presets45 = presets.filter((p) => p.group === '4.5');
+  const presets46 = presets.filter((p) => p.group === '4.6');
 
   return (
     <div className="container mx-auto max-w-5xl space-y-6 px-4 py-8">
       <header className="space-y-1">
         <p className="text-muted-foreground font-mono text-xs uppercase">/dev — sandbox</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.5)</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.6)</h1>
         <p className="text-muted-foreground text-sm">
           Squelette (4.1) + NON_MARKET (4.2) + SERVICE (4.3) + MARKET basique (4.4 : SHARE_PRICE /
-          TSR_ABS) + MARKET TSR_REL_INDEX (4.5 : YahooIndexSearch mock). Le sous-type TSR_REL_PEERS
-          reste désactivé jusqu’aux commits 4.6/4.7. Un changement de type ou de marketMetricType
+          TSR_ABS) + TSR_REL_INDEX (4.5) + TSR_REL_PEERS mode flat (4.6 : PeerGroupEditor). Le mode
+          WEIGHTED hiérarchique arrive au commit 4.7. Un changement de type ou de marketMetricType
           purge automatiquement les champs orphelins (shouldUnregister + cleanConditionForType).
         </p>
       </header>
@@ -798,6 +933,7 @@ export function WizardStep4Sandbox() {
       <PresetGroup title="Branche SERVICE (4.3)" presets={presets43} />
       <PresetGroup title="Branche MARKET basique (4.4)" presets={presets44} />
       <PresetGroup title="Branche MARKET TSR_REL_INDEX (4.5)" presets={presets45} />
+      <PresetGroup title="Branche MARKET TSR_REL_PEERS flat (4.6)" presets={presets46} />
 
       <FormProvider {...methods}>
         <Step4Performance />

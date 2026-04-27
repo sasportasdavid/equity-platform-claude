@@ -16,6 +16,7 @@ import {
 } from '@equity/shared';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PeerGroupEditor } from './PeerGroupEditor';
 import { YahooIndexSearch } from './YahooIndexSearch';
 
 /**
@@ -141,7 +142,7 @@ export function MarketBranch({ index }: { index: number }) {
               return (
                 <option key={m} value={m} disabled={!available}>
                   {MARKET_METRIC_UI_LABELS[m]}
-                  {available ? '' : ' — à venir (4.6 / 4.7)'}
+                  {available ? '' : ' — à venir (4.7)'}
                 </option>
               );
             })}
@@ -229,6 +230,10 @@ export function MarketBranch({ index }: { index: number }) {
           référence via mock auto-fetch des top indices. */}
       {condition.marketMetricType === 'TSR_REL_INDEX' ? <IndexSelector index={index} /> : null}
 
+      {/* Branche TSR_REL_PEERS (commit 4.6, mode flat) : panel de peers
+          avec name + ticker. Le mode WEIGHTED arrive en 4.7. */}
+      {condition.marketMetricType === 'TSR_REL_PEERS' ? <PeerGroupEditor index={index} /> : null}
+
       {/* Auto-calc measurementPeriodYears (lecture seule). Hidden input
           synchronise le form state pour les Server Actions ; l'input
           visible reste read-only et n'est pas registered. */}
@@ -269,7 +274,7 @@ function targetValuePlaceholder(metric: MarketMetric | undefined): string {
     case 'TSR_REL_INDEX':
       return 'Ex : 5 (= +5 pts au-dessus de l’indice)';
     case 'TSR_REL_PEERS':
-      return 'Ex : 5 (à venir au commit 4.6)';
+      return 'Ex : 5 (= +5 pts au-dessus du panel)';
     case 'SHARE_PRICE':
     default:
       return 'Ex : 200 (= 200 € par action)';
@@ -283,7 +288,7 @@ function targetValueHelp(metric: MarketMetric | undefined): string {
     case 'TSR_REL_INDEX':
       return 'Spread vs indice en pourcentage. Le moteur Python convertira en Base 100.';
     case 'TSR_REL_PEERS':
-      return 'Spread vs panel en pourcentage (à venir au commit 4.6).';
+      return 'Spread vs panel en pourcentage. Le moteur Python convertira en Base 100.';
     case 'SHARE_PRICE':
     default:
       return 'Prix absolu en euros.';
