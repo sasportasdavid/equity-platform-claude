@@ -42,6 +42,14 @@ import { Label } from '@/components/ui/label';
  * thresholdMin ≤ thresholdMax) sont attachées au schéma global dans
  * `planWizardSchema.superRefine` — le composant se contente d'afficher
  * les messages d'erreur reçus via `formState.errors`.
+ *
+ * **Tous les `register` utilisent `{ shouldUnregister: true }`** : quand le
+ * composant unmount (l'utilisateur change le `conditionType` pour SERVICE
+ * ou MARKET), RHF purge automatiquement les valeurs metric / operator /
+ * targetValue / etc. de `formState`. Sans ça, les valeurs restent en
+ * "shadow state" RHF et reviennent quand l'utilisateur retourne au type
+ * NON_MARKET. La purge automatique est complétée par le helper
+ * {@link cleanConditionForType} pour les Server Actions / exports.
  */
 export function NonMarketBranch({ index }: { index: number }) {
   const { register, watch, setValue, formState } = useFormContext<PlanWizardData>();
@@ -96,7 +104,7 @@ export function NonMarketBranch({ index }: { index: number }) {
             id={`cond-${index}-metric`}
             className="border-input bg-background shadow-xs h-9 w-full rounded-md border px-3 text-sm"
             aria-invalid={!!conditionErrors?.metric}
-            {...register(`conditions.${index}.metric`)}
+            {...register(`conditions.${index}.metric`, { shouldUnregister: true })}
             defaultValue={condition.metric ?? ''}
           >
             <option value="">— Sélectionner une métrique —</option>
@@ -117,7 +125,7 @@ export function NonMarketBranch({ index }: { index: number }) {
             id={`cond-${index}-operator`}
             className="border-input bg-background shadow-xs h-9 w-full rounded-md border px-3 text-sm"
             aria-invalid={!!conditionErrors?.comparisonOperator}
-            {...register(`conditions.${index}.comparisonOperator`)}
+            {...register(`conditions.${index}.comparisonOperator`, { shouldUnregister: true })}
             defaultValue={condition.comparisonOperator ?? ''}
           >
             <option value="">— Sélectionner un opérateur —</option>
@@ -144,7 +152,7 @@ export function NonMarketBranch({ index }: { index: number }) {
             placeholder="Ex : 50000000 ou 50 M€ ou 60"
             maxLength={PLAN_WIZARD_LIMITS.MAX_TARGET_VALUE_LENGTH}
             aria-invalid={!!conditionErrors?.targetValue}
-            {...register(`conditions.${index}.targetValue`)}
+            {...register(`conditions.${index}.targetValue`, { shouldUnregister: true })}
           />
           {conditionErrors?.targetValue?.message ? (
             <p className="text-destructive text-xs">
@@ -166,7 +174,7 @@ export function NonMarketBranch({ index }: { index: number }) {
               condition.metric ? NON_MARKET_METRIC_DEFAULT_UNITS[condition.metric] || 'libre' : '—'
             }
             aria-invalid={!!conditionErrors?.targetUnit}
-            {...register(`conditions.${index}.targetUnit`)}
+            {...register(`conditions.${index}.targetUnit`, { shouldUnregister: true })}
           />
           {conditionErrors?.targetUnit?.message ? (
             <p className="text-destructive text-xs">{String(conditionErrors.targetUnit.message)}</p>
@@ -195,7 +203,7 @@ export function NonMarketBranch({ index }: { index: number }) {
             step="any"
             placeholder="Ex : 50"
             aria-invalid={!!conditionErrors?.thresholdMin}
-            {...register(`conditions.${index}.thresholdMin`)}
+            {...register(`conditions.${index}.thresholdMin`, { shouldUnregister: true })}
           />
           {conditionErrors?.thresholdMin?.message ? (
             <p className="text-destructive text-xs">
@@ -221,7 +229,7 @@ export function NonMarketBranch({ index }: { index: number }) {
             step="any"
             placeholder="Ex : 120"
             aria-invalid={!!conditionErrors?.thresholdMax}
-            {...register(`conditions.${index}.thresholdMax`)}
+            {...register(`conditions.${index}.thresholdMax`, { shouldUnregister: true })}
           />
           {conditionErrors?.thresholdMax?.message ? (
             <p className="text-destructive text-xs">

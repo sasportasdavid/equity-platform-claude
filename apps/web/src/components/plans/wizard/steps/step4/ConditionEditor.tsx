@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import {
   CategoryEnum,
+  cleanConditionForType,
   CONDITION_CATEGORY_UI_LABELS,
   CONDITION_TYPE_UI_LABELS,
   ConditionTypeEnum,
@@ -18,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { NonMarketBranch } from './NonMarketBranch';
+import { ServiceBranch } from './ServiceBranch';
 
 /**
  * MODULE_03A_PLANS Step 4 — éditeur d'une condition individuelle.
@@ -49,13 +51,37 @@ export function ConditionEditor({
   onRemove: () => void;
 }) {
   const [open, setOpen] = useState(true);
-  const { register, watch, formState } = useFormContext<PlanWizardData>();
+  const { register, watch, formState, getValues, setValue } = useFormContext<PlanWizardData>();
   const condition = watch(`conditions.${index}`) as PerformanceConditionInput | undefined;
   const errors = formState.errors;
   // Index errors are nested ; cast pour navigation simple
   const conditionErrors = (
     errors.conditions as Array<Record<string, { message?: string } | undefined>> | undefined
   )?.[index];
+
+  // Défense en profondeur : quand l'utilisateur change le type d'une
+  // condition existante, on rappelle `cleanConditionForType` pour purger
+  // tout champ qui aurait survécu au unmount (au cas où un préset injecte
+  // des données orphelines, ou si une future branche oublie d'utiliser
+  // `shouldUnregister`). En mode UI normal, NonMarketBranch / MarketBranch
+  // gèrent leur propre cleanup via `register({ shouldUnregister: true })`,
+  // donc cet effet est généralement no-op.
+  // On lit via `getValues` pour casser la dépendance circulaire avec
+  // `condition` (qui change après setValue).
+  const previousTypeRef = useRef<ConditionType | undefined>(condition?.conditionType);
+  useEffect(() => {
+    const currentType = condition?.conditionType;
+    const prev = previousTypeRef.current;
+    if (!currentType || currentType === prev) return;
+    if (prev) {
+      const current = getValues(`conditions.${index}`) as PerformanceConditionInput | undefined;
+      if (current) {
+        const cleaned = cleanConditionForType(current, currentType);
+        setValue(`conditions.${index}`, cleaned, { shouldValidate: true, shouldDirty: true });
+      }
+    }
+    previousTypeRef.current = currentType;
+  }, [condition?.conditionType, getValues, index, setValue]);
 
   if (!condition) return null;
 
@@ -215,9 +241,9 @@ export function ConditionEditor({
             </div>
           </div>
 
-          {/* Sous-formulaire spécifique au type. NON_MARKET est livré au
-              commit 4.2 ; SERVICE et MARKET restent des placeholders en
-              attendant les commits 4.3 → 4.10. */}
+          {/* Sous-formulaire spécifique au type. NON_MARKET (4.2) et
+              SERVICE (4.3) sont livrés ; MARKET reste un placeholder en
+              attendant les commits 4.4 → 4.10. */}
           <TypeBranch index={index} type={condition.conditionType} />
         </div>
       ) : null}
@@ -226,17 +252,12 @@ export function ConditionEditor({
 }
 
 function TypeBranch({ index, type }: { index: number; type: ConditionType }) {
-  if (type === 'NON_MARKET') {
-    return <NonMarketBranch index={index} />;
-  }
-  const placeholder: Record<Exclude<ConditionType, 'NON_MARKET'>, string> = {
-    SERVICE: 'Branche service — placeholder simple, livré au commit 4.3.',
-    MARKET:
-      'Branche marché (SHARE_PRICE / TSR_ABS / TSR_REL_INDEX / TSR_REL_PEERS) — livrés aux commits 4.4 → 4.10.',
-  };
+  if (type === 'NON_MARKET') return <NonMarketBranch index={index} />;
+  if (type === 'SERVICE') return <ServiceBranch index={index} />;
   return (
     <p className="text-muted-foreground rounded-md border border-dashed px-3 py-2 text-xs">
-      {placeholder[type]}
+      Branche marché (SHARE_PRICE / TSR_ABS / TSR_REL_INDEX / TSR_REL_PEERS) — livrés aux commits
+      4.4 → 4.10.
     </p>
   );
 }

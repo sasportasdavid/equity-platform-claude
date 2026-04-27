@@ -30,7 +30,7 @@ function uuid(suffix: string) {
   return `cond-${suffix}-${presetCounter}`;
 }
 
-type Preset = { label: string; group: '4.1' | '4.2'; apply: () => void };
+type Preset = { label: string; group: '4.1' | '4.2' | '4.3'; apply: () => void };
 
 export function WizardStep4Sandbox() {
   const methods = useForm<PlanWizardData>({
@@ -50,6 +50,90 @@ export function WizardStep4Sandbox() {
   }
 
   const presets: Preset[] = [
+    // ----- Groupe 4.3 — branche SERVICE -----
+    // Ces presets restent en haut du tableau pour qu'ils soient au-dessus
+    // du formulaire (les sections sont rendues dans l'ordre du tableau).
+    {
+      label: '4.3 · Présence (durée du plan)',
+      group: '4.3',
+      apply: () =>
+        applyPreset({
+          planType: 'AGA',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('svc-presence'),
+              name: 'Présence à la date d’acquisition',
+              conditionType: 'SERVICE',
+              category: 'STRATEGIC',
+              weight: 100,
+              enablePartialScoring: false,
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.3 · Présence + OPERATIONAL',
+      group: '4.3',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('svc-op'),
+              name: 'Présence opérationnelle continue',
+              conditionType: 'SERVICE',
+              category: 'OPERATIONAL',
+              weight: 100,
+              enablePartialScoring: false,
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.3 · Stress switch · NON_MARKET zombie',
+      group: '4.3',
+      apply: () =>
+        // Cas explicite pour stresser cleanConditionForType : on insère une
+        // condition SERVICE qui contient des champs NON_MARKET orphelins
+        // (metric, comparisonOperator, targetValue). Le cleanup au switch
+        // ne se déclenche qu'à un changement de type via l'UI ; ici on
+        // pose le préset tel quel pour vérifier que la validation Zod ne
+        // les exige pas pour SERVICE (et qu'on les voit dans les values
+        // debug AVANT le premier toggle de type dans l'UI).
+        applyPreset({
+          planType: 'AGA',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('svc-zombie'),
+              name: 'SERVICE avec orphelins',
+              conditionType: 'SERVICE',
+              category: 'STRATEGIC',
+              weight: 100,
+              enablePartialScoring: false,
+              metric: 'EBITDA', // orphelin, ne doit pas faire échouer la validation
+              comparisonOperator: '>=', // orphelin
+              targetValue: '50000000', // orphelin
+              targetUnit: '€', // orphelin
+            },
+          ],
+        }),
+    },
+
     // ----- Groupe 4.1 — squelette / structure -----
     {
       label: 'Désactivé',
@@ -417,21 +501,23 @@ export function WizardStep4Sandbox() {
 
   const presets41 = presets.filter((p) => p.group === '4.1');
   const presets42 = presets.filter((p) => p.group === '4.2');
+  const presets43 = presets.filter((p) => p.group === '4.3');
 
   return (
     <div className="container mx-auto max-w-5xl space-y-6 px-4 py-8">
       <header className="space-y-1">
         <p className="text-muted-foreground font-mono text-xs uppercase">/dev — sandbox</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.2)</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.3)</h1>
         <p className="text-muted-foreground text-sm">
-          Squelette (4.1) + branche NON_MARKET (4.2) : métrique, opérateur, valeur cible, unité
-          (auto-mappée), seuils min/max. Les autres types (SERVICE / MARKET) restent placeholders
-          jusqu’aux commits 4.3 → 4.10.
+          Squelette (4.1) + branche NON_MARKET (4.2) + branche SERVICE (4.3). La branche MARKET
+          reste un placeholder jusqu’aux commits 4.4 → 4.10. Note : un changement de type via l’UI
+          nettoie automatiquement les champs orphelins (cleanConditionForType).
         </p>
       </header>
 
       <PresetGroup title="Squelette (4.1)" presets={presets41} />
       <PresetGroup title="Branche NON_MARKET (4.2)" presets={presets42} />
+      <PresetGroup title="Branche SERVICE (4.3)" presets={presets43} />
 
       <FormProvider {...methods}>
         <Step4Performance />

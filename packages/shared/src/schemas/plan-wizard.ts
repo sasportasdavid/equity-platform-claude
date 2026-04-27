@@ -711,3 +711,82 @@ export const PERFORMANCE_THRESHOLD_LIMITS = {
   MAX_PCT_LOWER: 0,
   MAX_PCT_UPPER: 200,
 } as const;
+
+/**
+ * Champs spécifiques à chaque type de condition. Sert de source de vérité
+ * pour purger les champs orphelins au switch de type (cf.
+ * {@link cleanConditionForType}). Les champs partagés (id, name,
+ * conditionType, category, weight, enablePartialScoring,
+ * performanceStartDate, performanceEndDate, acquisitionScale) ne sont
+ * jamais nullifiés.
+ */
+const CONDITION_FIELDS_BY_TYPE: Record<
+  ConditionType,
+  ReadonlyArray<keyof PerformanceConditionInput>
+> = {
+  NON_MARKET: [
+    'metric',
+    'comparisonOperator',
+    'targetValue',
+    'targetUnit',
+    'thresholdMin',
+    'thresholdMax',
+  ],
+  MARKET: [
+    'marketMetricType',
+    'comparisonOperator',
+    'targetValue',
+    'targetUnit',
+    'thresholdMin',
+    'thresholdMax',
+    'referenceIndex',
+    'referenceIndexDisplayName',
+    'peerGroup',
+    'weightedPeerGroups',
+    'comparisonMethod',
+    'startPriceMethod',
+    'startFixedPrice',
+    'startAveragingDays',
+    'endPriceMethod',
+    'endFixedPrice',
+    'endAveragingDays',
+    'measurementPeriodYears',
+  ],
+  SERVICE: [],
+};
+
+/**
+ * Retourne une copie de la condition avec tous les champs étrangers au
+ * `nextType` nullifiés. Utilisé quand l'utilisateur change le type d'une
+ * condition existante : on évite de garder des données orphelines (un
+ * `marketMetricType` zombie sur une condition NON_MARKET, par exemple)
+ * qui contamineraient les Server Actions et les exports DocuSign / Yousign.
+ *
+ * Note : on remet `comparisonOperator` à undefined même quand il est
+ * partagé entre NON_MARKET et MARKET, parce que les opérateurs valides
+ * peuvent différer (= `=` n'a pas de sens pour TSR_REL_INDEX). Le
+ * formulaire force l'utilisateur à re-sélectionner.
+ *
+ * Pure function : ne mute pas l'input.
+ */
+export function cleanConditionForType(
+  condition: PerformanceConditionInput,
+  nextType: ConditionType,
+): PerformanceConditionInput {
+  // Union de tous les champs spécifiques à un type quelconque
+  const allTypeSpecificFields = new Set<keyof PerformanceConditionInput>([
+    ...CONDITION_FIELDS_BY_TYPE.NON_MARKET,
+    ...CONDITION_FIELDS_BY_TYPE.MARKET,
+    ...CONDITION_FIELDS_BY_TYPE.SERVICE,
+  ]);
+  // Champs autorisés pour le nouveau type
+  const allowed = new Set<keyof PerformanceConditionInput>(CONDITION_FIELDS_BY_TYPE[nextType]);
+  // Copie + nullifie tout ce qui est spécifique à un autre type
+  const next: PerformanceConditionInput = { ...condition, conditionType: nextType };
+  for (const field of allTypeSpecificFields) {
+    if (!allowed.has(field)) {
+      (next as Record<string, unknown>)[field] = undefined;
+    }
+  }
+  return next;
+}
