@@ -30,7 +30,7 @@ function uuid(suffix: string) {
   return `cond-${suffix}-${presetCounter}`;
 }
 
-type Preset = { label: string; group: '4.1' | '4.2' | '4.3'; apply: () => void };
+type Preset = { label: string; group: '4.1' | '4.2' | '4.3' | '4.4'; apply: () => void };
 
 export function WizardStep4Sandbox() {
   const methods = useForm<PlanWizardData>({
@@ -129,6 +129,152 @@ export function WizardStep4Sandbox() {
               comparisonOperator: '>=', // orphelin
               targetValue: '50000000', // orphelin
               targetUnit: '€', // orphelin
+            },
+          ],
+        }),
+    },
+
+    // ----- Groupe 4.4 — branche MARKET (SHARE_PRICE / TSR_ABS) -----
+    {
+      label: '4.4 · SHARE_PRICE ≥ 200 €',
+      group: '4.4',
+      apply: () =>
+        applyPreset({
+          planType: 'STOCK_OPTION',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('mkt-share-price'),
+              name: 'Cours ≥ 200 € à 3 ans',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'SHARE_PRICE',
+              comparisonOperator: '>=',
+              targetValue: '200',
+              targetUnit: '€',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.4 · TSR_ABS ≥ 30 % sur 3 ans',
+      group: '4.4',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'PARTIAL',
+          conditions: [
+            {
+              id: uuid('mkt-tsr-abs'),
+              name: 'TSR absolu ≥ 30 % à 3 ans',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_ABS',
+              comparisonOperator: '>=',
+              targetValue: '30',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.4 · KO · dates manquantes',
+      group: '4.4',
+      apply: () =>
+        applyPreset({
+          planType: 'STOCK_OPTION',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('mkt-ko-dates'),
+              name: 'SHARE_PRICE sans dates',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'SHARE_PRICE',
+              comparisonOperator: '>=',
+              targetValue: '200',
+              targetUnit: '€',
+              // dates volontairement absentes → 2 erreurs Zod
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.4 · KO · endDate ≤ startDate',
+      group: '4.4',
+      apply: () =>
+        applyPreset({
+          planType: 'STOCK_OPTION',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('mkt-ko-end-before'),
+              name: 'TSR avec end < start',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_ABS',
+              comparisonOperator: '>=',
+              targetValue: '30',
+              targetUnit: '%',
+              performanceStartDate: '2029-01-01',
+              performanceEndDate: '2026-01-01',
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.4 · KO · start < grantDate',
+      group: '4.4',
+      apply: () =>
+        applyPreset({
+          planType: 'STOCK_OPTION',
+          grantDate: '2026-06-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('mkt-ko-start-before-grant'),
+              name: 'Start avant grantDate',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_ABS',
+              comparisonOperator: '>=',
+              targetValue: '30',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01', // < grantDate 2026-06-01
+              performanceEndDate: '2029-01-01',
             },
           ],
         }),
@@ -502,22 +648,25 @@ export function WizardStep4Sandbox() {
   const presets41 = presets.filter((p) => p.group === '4.1');
   const presets42 = presets.filter((p) => p.group === '4.2');
   const presets43 = presets.filter((p) => p.group === '4.3');
+  const presets44 = presets.filter((p) => p.group === '4.4');
 
   return (
     <div className="container mx-auto max-w-5xl space-y-6 px-4 py-8">
       <header className="space-y-1">
         <p className="text-muted-foreground font-mono text-xs uppercase">/dev — sandbox</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.3)</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.4)</h1>
         <p className="text-muted-foreground text-sm">
-          Squelette (4.1) + branche NON_MARKET (4.2) + branche SERVICE (4.3). La branche MARKET
-          reste un placeholder jusqu’aux commits 4.4 → 4.10. Note : un changement de type via l’UI
-          nettoie automatiquement les champs orphelins (cleanConditionForType).
+          Squelette (4.1) + NON_MARKET (4.2) + SERVICE (4.3) + MARKET basique (4.4 : SHARE_PRICE /
+          TSR_ABS). Les sous-types TSR_REL_INDEX (4.5) et TSR_REL_PEERS (4.6/4.7) restent
+          désactivés. Un changement de type via l’UI purge automatiquement les champs orphelins
+          (shouldUnregister + cleanConditionForType).
         </p>
       </header>
 
       <PresetGroup title="Squelette (4.1)" presets={presets41} />
       <PresetGroup title="Branche NON_MARKET (4.2)" presets={presets42} />
       <PresetGroup title="Branche SERVICE (4.3)" presets={presets43} />
+      <PresetGroup title="Branche MARKET basique (4.4)" presets={presets44} />
 
       <FormProvider {...methods}>
         <Step4Performance />

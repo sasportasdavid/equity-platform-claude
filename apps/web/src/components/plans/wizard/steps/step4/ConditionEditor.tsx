@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { MarketBranch } from './MarketBranch';
 import { NonMarketBranch } from './NonMarketBranch';
 import { ServiceBranch } from './ServiceBranch';
 
@@ -221,23 +222,40 @@ export function ConditionEditor({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor={`cond-${index}-start`}>Début mesure</Label>
+              <Label htmlFor={`cond-${index}-start`}>
+                Début mesure {condition.conditionType === 'MARKET' ? '*' : ''}
+              </Label>
               <Input
                 id={`cond-${index}-start`}
                 type="date"
+                aria-invalid={!!conditionErrors?.performanceStartDate}
                 {...register(`conditions.${index}.performanceStartDate`)}
               />
+              {conditionErrors?.performanceStartDate?.message ? (
+                <p className="text-destructive text-xs">
+                  {String(conditionErrors.performanceStartDate.message)}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor={`cond-${index}-end`}>Fin mesure</Label>
+              <Label htmlFor={`cond-${index}-end`}>
+                Fin mesure {condition.conditionType === 'MARKET' ? '*' : ''}
+              </Label>
               <Input
                 id={`cond-${index}-end`}
                 type="date"
+                aria-invalid={!!conditionErrors?.performanceEndDate}
                 {...register(`conditions.${index}.performanceEndDate`)}
               />
-              <p className="text-muted-foreground text-xs">
-                Obligatoires pour les conditions de type Marché.
-              </p>
+              {conditionErrors?.performanceEndDate?.message ? (
+                <p className="text-destructive text-xs">
+                  {String(conditionErrors.performanceEndDate.message)}
+                </p>
+              ) : (
+                <p className="text-muted-foreground text-xs">
+                  Obligatoires pour les conditions de type Marché.
+                </p>
+              )}
             </div>
           </div>
 
@@ -254,10 +272,5 @@ export function ConditionEditor({
 function TypeBranch({ index, type }: { index: number; type: ConditionType }) {
   if (type === 'NON_MARKET') return <NonMarketBranch index={index} />;
   if (type === 'SERVICE') return <ServiceBranch index={index} />;
-  return (
-    <p className="text-muted-foreground rounded-md border border-dashed px-3 py-2 text-xs">
-      Branche marché (SHARE_PRICE / TSR_ABS / TSR_REL_INDEX / TSR_REL_PEERS) — livrés aux commits
-      4.4 → 4.10.
-    </p>
-  );
+  return <MarketBranch index={index} />;
 }

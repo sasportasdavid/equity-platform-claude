@@ -587,6 +587,74 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
         });
       }
     });
+
+    // ---- Step 4 — branche MARKET (commit 4.4 : SHARE_PRICE / TSR_ABS) ----
+    // Pour chaque condition de type MARKET, on exige marketMetricType +
+    // comparisonOperator + targetValue + dates de mesure (start + end).
+    // L'unité (`targetUnit`) est auto-mappée côté UI (€ pour SHARE_PRICE,
+    // % pour TSR_ABS) — donc optionnelle ici.
+    // Les sous-types TSR_REL_INDEX / TSR_REL_PEERS ne sont pas encore
+    // implémentés (commits 4.5 / 4.6) ; ils sont validés à minima ici
+    // pour ne pas casser quand les futurs commits poseront leurs champs.
+    data.conditions.forEach((cond, idx) => {
+      if (cond.conditionType !== 'MARKET') return;
+
+      if (!cond.marketMetricType) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'marketMetricType'],
+          message: 'Métrique marché obligatoire',
+        });
+      }
+      if (!cond.comparisonOperator) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'comparisonOperator'],
+          message: 'Opérateur de comparaison requis',
+        });
+      }
+      const trimmedTarget = (cond.targetValue ?? '').trim();
+      if (trimmedTarget.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'targetValue'],
+          message: 'Valeur cible requise',
+        });
+      }
+
+      // Dates de mesure obligatoires pour toutes les conditions MARKET.
+      const start = cond.performanceStartDate?.trim();
+      const end = cond.performanceEndDate?.trim();
+      if (!start) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'performanceStartDate'],
+          message: 'Date de début de mesure obligatoire pour une condition de marché',
+        });
+      }
+      if (!end) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'performanceEndDate'],
+          message: 'Date de fin de mesure obligatoire pour une condition de marché',
+        });
+      }
+      if (start && end && end <= start) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'performanceEndDate'],
+          message: 'La date de fin doit être strictement postérieure à la date de début',
+        });
+      }
+      // Cohérence avec grantDate au niveau du plan.
+      if (start && data.grantDate && start < data.grantDate) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'performanceStartDate'],
+          message: 'Doit être ≥ à la date d’attribution du plan',
+        });
+      }
+    });
   }
 });
 
@@ -651,6 +719,34 @@ export const MIN_ACQUISITION_MONTHS_BY_TYPE: Record<PlanWizardType, number> = {
  * vide : on laisse à l'utilisateur le soin de saisir l'unité (utilisateurs,
  * dossiers traités, équipes formées…).
  */
+/**
+ * Unité par défaut suggérée selon la métrique marché. SHARE_PRICE → €
+ * (prix absolu en euros) ; TSR_ABS / TSR_REL_INDEX / TSR_REL_PEERS → %
+ * (taux de rendement exprimé en pourcentage).
+ */
+export const MARKET_METRIC_DEFAULT_UNITS: Record<MarketMetric, string> = {
+  SHARE_PRICE: '€',
+  TSR_ABS: '%',
+  TSR_REL_INDEX: '%',
+  TSR_REL_PEERS: '%',
+};
+
+export const MARKET_METRIC_UI_LABELS: Record<MarketMetric, string> = {
+  SHARE_PRICE: 'Cours de bourse (prix absolu)',
+  TSR_ABS: 'TSR absolu',
+  TSR_REL_INDEX: 'TSR relatif vs indice',
+  TSR_REL_PEERS: 'TSR relatif vs panel',
+};
+
+/**
+ * Sous-ensemble de `MarketMetric` livré dans le commit 4.4 (les autres
+ * sont placeholder en attendant 4.5 / 4.6 / 4.7 — peers et index).
+ */
+export const MARKET_METRICS_AVAILABLE_4_4: ReadonlySet<MarketMetric> = new Set([
+  'SHARE_PRICE',
+  'TSR_ABS',
+]);
+
 export const NON_MARKET_METRIC_DEFAULT_UNITS: Record<NonMarketMetric, string> = {
   EBITDA: '€',
   REVENUE: '€',
