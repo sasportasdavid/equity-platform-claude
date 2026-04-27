@@ -59,6 +59,10 @@ export async function proxy(request: NextRequest) {
   if (!supabaseUrl || !supabaseAnonKey) return response;
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    // `flowType: 'pkce'` aligné avec server.ts et client.ts pour que la
+    // session restaurée par le proxy soit cohérente avec celle créée
+    // par /auth/callback (sinon désaccord sur le storage du verifier).
+    auth: { flowType: 'pkce' },
     cookies: {
       getAll() {
         return request.cookies.getAll();
