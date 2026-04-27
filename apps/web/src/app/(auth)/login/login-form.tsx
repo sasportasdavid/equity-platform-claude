@@ -1,52 +1,86 @@
 'use client';
 
-import { useTransition, useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { signInAction } from './actions';
+import { sendMagicLink } from '@/server/actions/auth';
 
+/**
+ * Magic-link login form (Module 2 §1.1, §5.2).
+ *
+ * UX :
+ *  1. L'utilisateur saisit son email, soumet
+ *  2. Server Action `sendMagicLink` répond toujours `success` (no email enumeration)
+ *  3. On affiche un état "Email envoyé" — l'utilisateur consulte sa boîte
+ *  4. Le lien magique le redirige vers `/auth/callback?next=...` puis dashboard
+ *
+ * Le `redirectTo` est lu dans `?redirectTo=/some/path` (proxy.ts l'ajoute
+ * automatiquement quand un user anon hit une route privée).
+ */
 export function LoginForm() {
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
 
   function onSubmit(formData: FormData) {
     setErrors({});
-    const redirectTo = params.get('redirectTo') ?? '/dashboard';
-    formData.set('redirectTo', redirectTo);
+    const email = String(formData.get('email') ?? '').trim();
+    const redirectTo = params.get('redirectTo') ?? undefined;
 
     startTransition(async () => {
-      const result = await signInAction(formData);
-      if (result && !result.ok) {
-        if (result.fieldErrors) setErrors(result.fieldErrors);
+      const result = await sendMagicLink({ email, redirectTo });
+      if (!result.success) {
         toast.error(result.error);
+        setErrors({ email: [result.error] });
+        return;
       }
-      // success: server action redirects, client never reaches here
+      setSentTo(email);
     });
   }
 
-  const signupSuccess = params.get('signup') === 'success';
+  if (sentTo) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="size-5" /> Email envoyé
+          </CardTitle>
+          <CardDescription>
+            Si un compte existe pour <strong>{sentTo}</strong>, un lien de connexion vient de
+            partir. Cliquez sur le bouton dans l’email pour vous connecter (le lien expire dans 15
+            minutes).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => setSentTo(null)}
+          >
+            Utiliser une autre adresse
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Se connecter</CardTitle>
-        <CardDescription>Accédez à votre espace Capiwise.</CardDescription>
+        <CardDescription>
+          Saisissez votre adresse email professionnelle. Nous vous enverrons un lien de connexion
+          sécurisé — pas de mot de passe à retenir.
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        {signupSuccess && (
-          <div
-            role="status"
-            className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-900/20 dark:text-emerald-200"
-          >
-            Compte créé. Vérifiez votre email pour confirmer, puis connectez-vous.
-          </div>
-        )}
         <form action={onSubmit} className="space-y-4" data-testid="login-form">
           <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>
@@ -59,31 +93,17 @@ export function LoginForm() {
               placeholder="vous@entreprise.fr"
               aria-invalid={!!errors.email}
             />
-            {errors.email?.[0] && <p className="text-destructive text-xs">{errors.email[0]}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="password">Mot de passe</Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              aria-invalid={!!errors.password}
-            />
-            {errors.password?.[0] && (
-              <p className="text-destructive text-xs">{errors.password[0]}</p>
-            )}
+            {errors.email?.[0] ? (
+              <p className="text-destructive text-xs">{errors.email[0]}</p>
+            ) : null}
           </div>
           <Button type="submit" disabled={pending} className="w-full">
-            {pending ? 'Connexion…' : 'Se connecter'}
+            {pending ? 'Envoi du lien…' : 'Recevoir un lien de connexion'}
           </Button>
         </form>
-        <p className="text-muted-foreground mt-6 text-center text-sm">
-          Pas encore de compte ?{' '}
-          <Link href="/signup" className="text-primary font-medium hover:underline">
-            Créer un compte
-          </Link>
+        <p className="text-muted-foreground mt-6 text-center text-xs">
+          Pas encore de compte ? L’inscription se fait uniquement par invitation. Demandez à votre
+          OWNER ou administrateur RH.
         </p>
       </CardContent>
     </Card>
