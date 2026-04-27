@@ -25,6 +25,49 @@ const MAGIC_LINK_EXPIRES_MINUTES = 15;
 //   3. Envoyer l'email via Resend (template magic_link_login)
 //   4. Logger audit `auth.magic_link_sent`
 //   5. Retourner toujours `{ success: true }` (no leak)
+//
+// ⚠️ LIMITATION CONNUE — flow OTP legacy (pas PKCE).
+//
+// `admin.auth.admin.generateLink({ type: 'magiclink' })` génère **toujours**
+// un lien OTP legacy de la forme :
+//   https://<project>.supabase.co/auth/v1/verify?token=xxx&type=magiclink&redirect_to=...
+//
+// Le `flowType: 'pkce'` configuré côté SDK browser/server (cf. client.ts,
+// server.ts, proxy.ts) ne s'applique qu'aux appels CÔTÉ CLIENT
+// (`signInWithOtp`, OAuth `signInWithOAuth`). L'admin API server-side reste
+// en OTP legacy.
+//
+// Conséquence pratique : les magic links sont vulnérables au pre-fetching
+// par Gmail / Apple Mail qui consume le token avant que l'utilisateur ne
+// clique → l'utilisateur reçoit `?error_code=otp_expired` au callback.
+// Le fallback `verifyOtp` dans /auth/callback ne se déclenche pas car
+// Supabase a déjà invalidé le token côté serveur.
+//
+// **Solutions possibles (à arbitrer selon priorité)** :
+//
+//   A. **Auth Hook "Send Email"** côté Dashboard Supabase :
+//      Configure Supabase pour appeler une URL custom (notre webhook
+//      Resend) au lieu du SMTP natif Supabase. Garde le flow PKCE natif
+//      Supabase + le template Resend. C'est la solution propre prod.
+//      Doc : https://supabase.com/docs/guides/auth/auth-hooks/send-email-hook
+//
+//   B. **Bascule vers `signInWithOtp` côté client** :
+//      Au lieu de générer le link côté server + envoyer via Resend, on
+//      appelle `supabase.auth.signInWithOtp({ email, options: {
+//      emailRedirectTo: callbackUrl } })` côté client. Avec flowType:
+//      'pkce', le verifier est posé en cookie au moment du click submit
+//      → pre-fetching ne peut pas finaliser. Mais on perd le custom
+//      template Resend (Supabase envoie son propre email).
+//
+//   C. **Ajouter un code OTP 6 digits** en complément du link :
+//      `linkData.properties.email_otp` est exposé par generateLink.
+//      L'utilisateur peut soit cliquer le link (vulnérable pre-fetch),
+//      soit saisir le code manuellement (anti pre-fetch). Plus complexe
+//      côté UX mais robuste.
+//
+// Pour l'instant on garde l'OTP legacy + fallback callback `verifyOtp`.
+// Le bug pre-fetching est documenté dans le bandeau d'erreur de /login
+// pour aider l'utilisateur à comprendre et essayer un autre client mail.
 
 const SendMagicLinkSchema = z.object({
   email: emailSchema,
