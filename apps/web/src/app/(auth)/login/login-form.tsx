@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { checkEmailExistsForLogin } from '@/server/actions/auth';
 
 /**
  * Magic-link login form — flow PKCE côté CLIENT (Module 2 §1.1, §5.2).
@@ -131,28 +132,36 @@ export function LoginForm() {
     )}`;
 
     startTransition(async () => {
+      // Pre-check d'existence côté server (Server Action) — nécessaire
+      // pour bloquer le signup public sans tomber sur le 422
+      // `otp_disabled` que Supabase renvoie quand on combine
+      // `shouldCreateUser: false` + Signups disabled côté Dashboard.
+      const exists = await checkEmailExistsForLogin(email);
+      if (!exists) {
+        // Anti email enumeration : on simule le succès même si l'email
+        // n'existe pas. Le seul side-effect distinguable serait la
+        // latence — qu'on pourrait aussi smoother ici via setTimeout.
+        setSentTo(email);
+        return;
+      }
+
+      // L'email existe → on peut appeler signInWithOtp en sécurité avec
+      // `shouldCreateUser: true` (Supabase ne créera rien car le user
+      // existe déjà). Le PKCE verifier est posé en cookie au moment de
+      // cet appel, anti pre-fetching Gmail/Apple Mail.
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
           emailRedirectTo: callbackUrl,
-          // Pas de signup public — l'inscription se fait par invitation
-          // admin (cf. Server Action `sendMagicLink` qui reste utilisée
-          // pour les invites avec template Resend).
-          shouldCreateUser: false,
+          shouldCreateUser: true,
         },
       });
-      // Anti email enumeration : on affiche toujours « Email envoyé »
-      // sauf en cas de network error purement technique. Supabase ne
-      // leak pas l'existence du compte tant que le code de retour n'est
-      // pas explicitement décodable côté client.
       if (error && error.status && error.status >= 500) {
-        // Erreur serveur réelle → afficher
         setErrors({ email: [`Erreur serveur (${error.status}). Réessayez dans un instant.`] });
         return;
       }
-      // 4xx Supabase (email inexistant, rate limit, etc.) → fake success
-      // pour ne pas leak.
+      // 4xx Supabase (rate limit, etc.) → fake success malgré tout
       setSentTo(email);
     });
   }

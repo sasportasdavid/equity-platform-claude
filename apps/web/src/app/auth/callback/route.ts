@@ -32,12 +32,25 @@ export async function GET(request: NextRequest) {
   const nextRaw = searchParams.get('next') ?? '/dashboard';
   const next = nextRaw.startsWith('/') ? nextRaw : '/dashboard';
 
+  // Diagnostic cookies — utile pour PKCE qui dépend du verifier en cookie.
+  // Filtre uniquement les noms (pas les valeurs) pour éviter de leak des
+  // tokens dans les logs. Cherche en particulier `sb-*-auth-token-code-verifier`
+  // qui est le cookie posé par signInWithOtp côté browser.
+  const cookieHeader = request.headers.get('cookie') ?? '';
+  const cookieNames = cookieHeader
+    .split(';')
+    .map((c) => c.trim().split('=')[0] ?? '')
+    .filter((n): n is string => n.length > 0);
+  const supabaseCookies = cookieNames.filter((n) => n.startsWith('sb-') || n.includes('supabase'));
+
   console.info('[auth/callback] received', {
     hasCode: !!code,
     hasTokenHash: !!tokenHash,
     type,
     next,
     queryKeys: [...searchParams.keys()],
+    cookieCount: cookieNames.length,
+    supabaseCookies,
   });
 
   const supabase = await createSupabaseServerClient();

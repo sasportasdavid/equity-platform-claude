@@ -15,6 +15,43 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 const MAGIC_LINK_EXPIRES_MINUTES = 15;
 
 // ===========================================================================
+// checkEmailExistsForLogin
+// ===========================================================================
+//
+// Server Action utilitaire pour le login self-service via signInWithOtp
+// côté browser (Option C). Le pré-check d'existence est nécessaire parce
+// que :
+//
+//   - On veut bloquer le signup public (l'inscription se fait par
+//     invitation admin uniquement).
+//   - Si on appelle `signInWithOtp({ shouldCreateUser: false })` côté
+//     client + Supabase Dashboard a "Signups disabled", Supabase répond
+//     422 `otp_disabled` même pour un email valide (cf. diagnostic
+//     dans le commit précédent).
+//   - Donc on appelle `signInWithOtp({ shouldCreateUser: true })` SEULEMENT
+//     si l'email existe en DB. Si l'email n'existe pas, on retourne
+//     fake success côté client (anti email enumeration préservé).
+//
+// Cette fonction renvoie un boolean — pas l'identifiant du user, pour
+// limiter la surface d'attaque en cas d'abus (rate limit côté Supabase
+// + Vercel + this server).
+//
+// **Rate limiting recommandé** : à ajouter côté webhook Vercel ou via
+// upstash en future itération si le bot scraping devient un problème.
+
+export async function checkEmailExistsForLogin(rawEmail: string): Promise<boolean> {
+  const parsed = emailSchema.safeParse(rawEmail);
+  if (!parsed.success) return false;
+  const admin = getSupabaseAdminClient();
+  const { data: profile } = await admin
+    .from('user_profiles')
+    .select('id')
+    .eq('email', parsed.data)
+    .maybeSingle();
+  return !!profile;
+}
+
+// ===========================================================================
 // sendMagicLink — RÉSERVÉ AUX INVITATIONS ADMIN (n'est plus utilisé pour
 // le login self-service depuis la refonte Option B — cf. login-form.tsx)
 // ===========================================================================
