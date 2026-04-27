@@ -381,55 +381,74 @@ export const step5Schema = z.object({
 export type Step5Data = z.infer<typeof step5Schema>;
 
 // ---------------------------------------------------------------------------
-// Step 6 — Valuation (squelette)
+// Step 6 — Valuation
 // ---------------------------------------------------------------------------
+// Helper : transforme NaN / '' / null en undefined avant la validation.
+// RHF avec `valueAsNumber: true` renvoie NaN sur input vide, ce qui fait
+// fail Zod (« expected number, received NaN ») et empêche le superRefine
+// de s'exécuter. Pattern partagé avec leavers (cf. optionalCount).
+const nanToUndef = (v: unknown) =>
+  v === '' || v == null || (typeof v === 'number' && Number.isNaN(v)) ? undefined : v;
+
 export const step6Schema = z.object({
   ticker: z.string().optional(),
   companyTicker: z.string().optional(),
-  underlyingPrice: z.number().min(0.01),
+  underlyingPrice: z.preprocess(nanToUndef, z.number().min(0.01)),
   currency: CurrencyEnum.default('EUR'),
   volMethod: VolMethodEnum.default('MANUAL'),
-  volatility: z
-    .number()
-    .min(PLAN_WIZARD_LIMITS.MIN_VOLATILITY)
-    .max(PLAN_WIZARD_LIMITS.MAX_VOLATILITY),
+  volatility: z.preprocess(
+    nanToUndef,
+    z.number().min(PLAN_WIZARD_LIMITS.MIN_VOLATILITY).max(PLAN_WIZARD_LIMITS.MAX_VOLATILITY),
+  ),
   volatilityPriceType: z.enum(['CLOSE', 'OPEN']).default('CLOSE'),
-  volatilityWinsorizingPct: z.number().min(0).max(20).default(0),
-  riskFreeRate: z
-    .number()
-    .min(PLAN_WIZARD_LIMITS.MIN_RISK_FREE_RATE)
-    .max(PLAN_WIZARD_LIMITS.MAX_RISK_FREE_RATE),
-  dividendYield: z.number().min(0).max(PLAN_WIZARD_LIMITS.MAX_DIVIDEND_YIELD),
+  volatilityWinsorizingPct: z.preprocess(nanToUndef, z.number().min(0).max(20).default(0)),
+  riskFreeRate: z.preprocess(
+    nanToUndef,
+    z
+      .number()
+      .min(PLAN_WIZARD_LIMITS.MIN_RISK_FREE_RATE)
+      .max(PLAN_WIZARD_LIMITS.MAX_RISK_FREE_RATE),
+  ),
+  dividendYield: z.preprocess(
+    nanToUndef,
+    z.number().min(0).max(PLAN_WIZARD_LIMITS.MAX_DIVIDEND_YIELD),
+  ),
   dividendInputMode: z.enum(['percent', 'amount']).default('percent'),
-  dividendAmount: z.number().optional(),
-  lookbackDays: z.number().int().min(180).max(3650).default(1095),
-  correlationOverride: z.number().min(-1).max(1).optional(),
+  dividendAmount: z.preprocess(nanToUndef, z.number().optional()),
+  lookbackDays: z.preprocess(nanToUndef, z.number().int().min(180).max(3650).default(1095)),
+  correlationOverride: z.preprocess(nanToUndef, z.number().min(-1).max(1).optional()),
   modelChoice: ModelChoiceEnum.default('auto'),
   underlyingModel: UnderlyingModelEnum.default('GBM'),
-  numPaths: z
-    .number()
-    .int()
-    .min(PLAN_WIZARD_LIMITS.MIN_NUM_PATHS)
-    .max(PLAN_WIZARD_LIMITS.MAX_NUM_PATHS)
-    .default(50000),
-  stepsPerYear: z
-    .number()
-    .int()
-    .refine((n) => [12, 52, 252].includes(n))
-    .default(12),
+  numPaths: z.preprocess(
+    nanToUndef,
+    z
+      .number()
+      .int()
+      .min(PLAN_WIZARD_LIMITS.MIN_NUM_PATHS)
+      .max(PLAN_WIZARD_LIMITS.MAX_NUM_PATHS)
+      .default(50000),
+  ),
+  stepsPerYear: z.preprocess(
+    nanToUndef,
+    z
+      .number()
+      .int()
+      .refine((n) => [12, 52, 252].includes(n))
+      .default(12),
+  ),
   useAntithetic: z.boolean().default(true),
-  timeHorizonYears: z
-    .number()
-    .min(PLAN_WIZARD_LIMITS.MIN_TIME_HORIZON)
-    .max(PLAN_WIZARD_LIMITS.MAX_TIME_HORIZON),
-  hestonV0: z.number().optional(),
-  hestonKappa: z.number().optional(),
-  hestonTheta: z.number().optional(),
-  hestonXi: z.number().optional(),
-  hestonRho: z.number().optional(),
-  jumpLambda: z.number().optional(),
-  jumpMuJ: z.number().optional(),
-  jumpSigmaJ: z.number().optional(),
+  timeHorizonYears: z.preprocess(
+    nanToUndef,
+    z.number().min(PLAN_WIZARD_LIMITS.MIN_TIME_HORIZON).max(PLAN_WIZARD_LIMITS.MAX_TIME_HORIZON),
+  ),
+  hestonV0: z.preprocess(nanToUndef, z.number().optional()),
+  hestonKappa: z.preprocess(nanToUndef, z.number().optional()),
+  hestonTheta: z.preprocess(nanToUndef, z.number().optional()),
+  hestonXi: z.preprocess(nanToUndef, z.number().optional()),
+  hestonRho: z.preprocess(nanToUndef, z.number().optional()),
+  jumpLambda: z.preprocess(nanToUndef, z.number().optional()),
+  jumpMuJ: z.preprocess(nanToUndef, z.number().optional()),
+  jumpSigmaJ: z.preprocess(nanToUndef, z.number().optional()),
 });
 export type Step6Data = z.infer<typeof step6Schema>;
 
@@ -884,6 +903,54 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
     });
   }
 
+  // ---- Step 6 — Valuation ----
+  if (
+    data.dividendInputMode === 'amount' &&
+    (data.dividendAmount == null || data.dividendAmount < 0)
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['dividendAmount'],
+      message: 'Montant de dividende requis (≥ 0) en mode « amount »',
+    });
+  }
+  if (data.underlyingModel === 'HESTON') {
+    const hestonFields: Array<
+      ['hestonV0' | 'hestonKappa' | 'hestonTheta' | 'hestonXi' | 'hestonRho', string]
+    > = [
+      ['hestonV0', 'V₀ (variance initiale)'],
+      ['hestonKappa', 'Kappa (vitesse de retour à la moyenne)'],
+      ['hestonTheta', 'Theta (variance long-terme)'],
+      ['hestonXi', 'Xi (vol-of-vol)'],
+      ['hestonRho', 'Rho (corrélation prix/vol)'],
+    ];
+    for (const [field, label] of hestonFields) {
+      if (data[field] == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: `${label} requis pour le modèle HESTON`,
+        });
+      }
+    }
+  }
+  if (data.underlyingModel === 'JUMP_DIFFUSION') {
+    const jumpFields: Array<['jumpLambda' | 'jumpMuJ' | 'jumpSigmaJ', string]> = [
+      ['jumpLambda', 'Lambda (intensité des sauts)'],
+      ['jumpMuJ', 'Mu_J (taille moyenne des sauts)'],
+      ['jumpSigmaJ', 'Sigma_J (volatilité des sauts)'],
+    ];
+    for (const [field, label] of jumpFields) {
+      if (data[field] == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: `${label} requis pour le modèle JUMP_DIFFUSION`,
+        });
+      }
+    }
+  }
+
   // ---- Step 5 — Leavers ----
   // Validation cross-field : si le treatment est `accelerate`, on attend
   // `accelerationMonths > 0` (sinon c'est `full_accelerate`). Pour les
@@ -1208,6 +1275,42 @@ const CONDITION_FIELDS_BY_TYPE: Record<
     'measurementPeriodYears',
   ],
   SERVICE: [],
+};
+
+// ---------------------------------------------------------------------------
+// Step 6 — Métadonnées UI : valuation Monte Carlo
+// ---------------------------------------------------------------------------
+
+export const CURRENCY_UI_LABELS: Record<WizardCurrency, string> = {
+  EUR: 'Euro (EUR)',
+  USD: 'Dollar US (USD)',
+  GBP: 'Livre Sterling (GBP)',
+  CHF: 'Franc Suisse (CHF)',
+};
+
+export const VOL_METHOD_UI_LABELS: Record<VolMethod, string> = {
+  MANUAL: 'Saisie manuelle',
+  HISTORICAL: 'Historique (lookback)',
+  IMPLIED: 'Implicite (options)',
+  MIXED: 'Mixte (historique + implicite)',
+};
+
+export const MODEL_CHOICE_UI_LABELS: Record<ModelChoice, string> = {
+  auto: 'Auto (le moteur décide)',
+  black_scholes: 'Black-Scholes (formule fermée)',
+  monte_carlo: 'Monte Carlo (simulation)',
+};
+
+export const UNDERLYING_MODEL_UI_LABELS: Record<UnderlyingModel, string> = {
+  GBM: 'GBM — Mouvement brownien géométrique (standard)',
+  HESTON: 'HESTON — Volatilité stochastique',
+  JUMP_DIFFUSION: 'JUMP_DIFFUSION — Sauts de Merton',
+};
+
+export const STEPS_PER_YEAR_UI_LABELS: Record<12 | 52 | 252, string> = {
+  12: 'Mensuel (12 / an)',
+  52: 'Hebdomadaire (52 / an)',
+  252: 'Quotidien (252 jours ouvrés / an)',
 };
 
 // ---------------------------------------------------------------------------
