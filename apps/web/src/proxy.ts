@@ -33,7 +33,7 @@ const PUBLIC_ROUTES = new Set([
   '/no-access',
 ]);
 
-const PUBLIC_PREFIXES = ['/api/webhooks/', '/_next/', '/favicon', '/static/'];
+const PUBLIC_PREFIXES = ['/api/webhooks/', '/_next/', '/favicon', '/static/', '/dev/'];
 
 /** Routes accessibles à un user authentifié SANS active_org_id. */
 const NO_ORG_ALLOWED_PREFIXES = ['/onboarding', '/select-org'];

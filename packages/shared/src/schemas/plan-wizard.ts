@@ -381,7 +381,7 @@ export type Step6Data = z.infer<typeof step6Schema>;
 // ---------------------------------------------------------------------------
 // Wizard complet — type unifié pour le state RHF + payload Server Action
 // ---------------------------------------------------------------------------
-export const planWizardSchema = step1Schema
+const planWizardBase = step1Schema
   .merge(step2Schema.partial())
   .merge(step4Schema.partial())
   .merge(step5Schema.partial())
@@ -389,13 +389,78 @@ export const planWizardSchema = step1Schema
   // Step 3 utilise discriminated union → on étend manuellement avec partial
   .extend({
     vestingType: VestingTypeEnum.optional(),
-    singleVestingDate: z.string().optional(),
+    singleVestingDate: z.string().regex(isoDateRegex).optional(),
     vestingTranches: z.array(vestingTrancheSchema).optional(),
     cliffMonths: z.number().int().optional(),
     cliffPercentage: z.number().optional(),
     totalMonths: z.number().int().optional(),
     frequency: FrequencyEnum.optional(),
   });
+
+/**
+ * Schéma complet du wizard avec validations cross-step :
+ *  - `singleVestingDate > grantDate` (Step 3 single + Step 2 grantDate)
+ *  - mode `tranches` : somme des % = 100 (déjà appliqué dans step3Schema
+ *    discriminated union, mais on dépend ici de l'array partial)
+ *  - mode `cliff_linear` : cliffMonths < totalMonths
+ *
+ * Tous les checks sont attachés au schéma global parce qu'ils croisent des
+ * champs de plusieurs étapes ; les step-schemas individuels restent
+ * réutilisables pour `methods.trigger(stepFields)`.
+ */
+export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
+  // single — date de vesting > date de grant
+  if (
+    data.vestingType === 'single' &&
+    data.singleVestingDate &&
+    data.grantDate &&
+    data.singleVestingDate <= data.grantDate
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['singleVestingDate'],
+      message: 'La date de vesting doit être strictement postérieure à la date d’attribution',
+    });
+  }
+
+  // tranches — somme des pourcentages = 100 (tolérance 0.01)
+  if (data.vestingType === 'tranches' && data.vestingTranches) {
+    const total = data.vestingTranches.reduce((s, t) => s + t.percentage, 0);
+    if (Math.abs(total - 100) >= 0.01) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['vestingTranches'],
+        message: `La somme des pourcentages doit valoir 100 % (actuellement ${total.toFixed(2)} %).`,
+      });
+    }
+    // Toutes les dates de tranches doivent être > grantDate
+    if (data.grantDate) {
+      data.vestingTranches.forEach((tranche, idx) => {
+        if (tranche.vestingDate <= data.grantDate!) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['vestingTranches', idx, 'vestingDate'],
+            message: 'Doit être postérieure à la date d’attribution',
+          });
+        }
+      });
+    }
+  }
+
+  // cliff_linear — cliffMonths < totalMonths
+  if (
+    data.vestingType === 'cliff_linear' &&
+    data.cliffMonths != null &&
+    data.totalMonths != null &&
+    data.cliffMonths >= data.totalMonths
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['cliffMonths'],
+      message: 'Le cliff doit être strictement inférieur à la durée totale du vesting',
+    });
+  }
+});
 
 export type PlanWizardData = z.infer<typeof planWizardSchema>;
 
