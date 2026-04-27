@@ -32,7 +32,7 @@ function uuid(suffix: string) {
 
 type Preset = {
   label: string;
-  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5' | '4.6' | '4.7' | '4.8' | '4.9' | '4.10';
+  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5' | '4.6' | '4.7' | '4.8' | '4.9' | '4.10' | 'stress';
   apply: () => void;
 };
 
@@ -1247,6 +1247,182 @@ export function WizardStep4Sandbox() {
         }),
     },
 
+    // ----- Groupe STRESS — tests d'intégration cross-features -----
+    {
+      label: 'STRESS A · IFRS 2 complet (4 conditions WEIGHTED)',
+      group: 'stress',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'WEIGHTED',
+          evaluationMoment: 'END',
+          failureAction: 'PARTIAL',
+          conditions: [
+            // 30% — NON_MARKET EBITDA + acquisitionScale CURVE
+            {
+              id: uuid('s-nm-ebitda'),
+              name: 'EBITDA ≥ 50 M€ (courbe progressive)',
+              conditionType: 'NON_MARKET',
+              category: 'FINANCIAL',
+              weight: 30,
+              enablePartialScoring: true,
+              metric: 'EBITDA',
+              comparisonOperator: '>=',
+              targetValue: '50000000',
+              targetUnit: '€',
+              acquisitionScale: {
+                mode: 'CURVE',
+                points: [
+                  { threshold: 0, acquisition: 0, label: 'Plancher' },
+                  { threshold: 80, acquisition: 50 },
+                  { threshold: 100, acquisition: 100, label: 'Cible' },
+                  { threshold: 120, acquisition: 130 },
+                ],
+              },
+            },
+            // 30% — MARKET TSR_REL_PEERS WEIGHTED + acquisitionScale TIERS
+            {
+              id: uuid('s-mkt-peers-w'),
+              name: 'TSR vs panel pondéré (Pharma EU/US)',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 30,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_PEERS',
+              comparisonOperator: '>=',
+              targetValue: '5',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
+              weightedPeerGroups: [
+                {
+                  id: uuid('s-g-eu'),
+                  name: 'Pharma Europe',
+                  weight: 60,
+                  peers: [
+                    { id: uuid('s-p-san'), name: 'Sanofi', ticker: 'SAN.PA' },
+                    { id: uuid('s-p-roche'), name: 'Roche', ticker: 'ROG.SW' },
+                    { id: uuid('s-p-novartis'), name: 'Novartis', ticker: 'NOVN.SW' },
+                  ],
+                },
+                {
+                  id: uuid('s-g-us'),
+                  name: 'Pharma US',
+                  weight: 40,
+                  peers: [
+                    { id: uuid('s-p-pfe'), name: 'Pfizer', ticker: 'PFE' },
+                    { id: uuid('s-p-mrk'), name: 'Merck', ticker: 'MRK' },
+                    { id: uuid('s-p-jnj'), name: 'Johnson & Johnson', ticker: 'JNJ' },
+                  ],
+                },
+              ],
+              acquisitionScale: {
+                mode: 'TIERS',
+                tiers: [
+                  { min: 0, max: 60, acquisition: 0 },
+                  { min: 60, max: 100, acquisition: 50, label: 'Médiane' },
+                  { min: 100, max: 200, acquisition: 100, label: 'Cible+' },
+                ],
+              },
+            },
+            // 30% — MARKET TSR_REL_INDEX (CAC 40) + V5 AVERAGE/AVERAGE
+            {
+              id: uuid('s-mkt-cac-avg'),
+              name: 'TSR vs CAC 40 (moyennes 20j)',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 30,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_INDEX',
+              comparisonOperator: '>=',
+              targetValue: '5',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              startPriceMethod: 'AVERAGE',
+              startAveragingDays: '20',
+              endPriceMethod: 'AVERAGE',
+              endAveragingDays: '20',
+              referenceIndex: '^FCHI',
+              referenceIndexDisplayName: 'CAC 40',
+            },
+            // 10% — SERVICE
+            {
+              id: uuid('s-svc'),
+              name: 'Présence à la date d’acquisition',
+              conditionType: 'SERVICE',
+              category: 'STRATEGIC',
+              weight: 10,
+              enablePartialScoring: false,
+            },
+          ],
+        }),
+    },
+    {
+      label: 'STRESS C · Limites max (10 cond × 30 peers × 20 pts)',
+      group: 'stress',
+      apply: () => {
+        // Génération programmatique : 10 conditions, chacune avec
+        // weightedPeerGroups (10 × 30 = 300 peers), acquisitionScale CURVE
+        // (20 points). Cela stresse le rendu RHF + superRefine + chart SVG.
+        const buildPeers = (count: number, prefix: string) =>
+          Array.from({ length: count }, (_, i) => ({
+            id: uuid(`${prefix}-${i}`),
+            name: `Peer ${prefix}-${i + 1}`,
+            ticker: `T${prefix.toUpperCase()}${i}`,
+          }));
+        const buildGroups = (groupCount: number, peersPerGroup: number, prefix: string) => {
+          const weightPerGroup = 100 / groupCount;
+          return Array.from({ length: groupCount }, (_, gi) => ({
+            id: uuid(`${prefix}-g${gi}`),
+            name: `Groupe ${gi + 1}`,
+            weight: weightPerGroup,
+            peers: buildPeers(peersPerGroup, `${prefix}g${gi}`),
+          }));
+        };
+        const buildCurve = (points: number) =>
+          Array.from({ length: points }, (_, i) => ({
+            threshold: (i / (points - 1)) * 200,
+            acquisition: (i / (points - 1)) * 150,
+            label: i === 0 ? 'Min' : i === points - 1 ? 'Max' : '',
+          }));
+        const conditions = Array.from({ length: 10 }, (_, ci) => ({
+          id: uuid(`stress-${ci}`),
+          name: `Condition stress ${ci + 1}`,
+          conditionType: 'MARKET' as const,
+          category: 'FINANCIAL' as const,
+          weight: 100,
+          enablePartialScoring: true,
+          marketMetricType: 'TSR_REL_PEERS' as const,
+          comparisonOperator: '>=' as const,
+          targetValue: '5',
+          targetUnit: '%',
+          performanceStartDate: '2026-01-01',
+          performanceEndDate: '2029-01-01',
+          startPriceMethod: 'SPOT' as const,
+          endPriceMethod: 'SPOT' as const,
+          weightedPeerGroups: buildGroups(10, 30, `c${ci}`),
+          acquisitionScale: {
+            mode: 'CURVE' as const,
+            points: buildCurve(20),
+          },
+        }));
+        return applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions,
+        });
+      },
+    },
+
     // ----- Groupe 4.1 — squelette / structure -----
     {
       label: 'Désactivé',
@@ -1622,6 +1798,7 @@ export function WizardStep4Sandbox() {
   const presets48 = presets.filter((p) => p.group === '4.8');
   const presets49 = presets.filter((p) => p.group === '4.9');
   const presets410 = presets.filter((p) => p.group === '4.10');
+  const presetsStress = presets.filter((p) => p.group === 'stress');
 
   return (
     <div className="container mx-auto max-w-5xl space-y-6 px-4 py-8">
@@ -1647,6 +1824,7 @@ export function WizardStep4Sandbox() {
       <PresetGroup title="ReferencePriceConfig V5 (4.8)" presets={presets48} />
       <PresetGroup title="AcquisitionScale CURVE (4.9)" presets={presets49} />
       <PresetGroup title="AcquisitionScale TIERS + chart (4.10)" presets={presets410} />
+      <PresetGroup title="Tests STRESS (intégration)" presets={presetsStress} />
 
       <FormProvider {...methods}>
         <Step4Performance />

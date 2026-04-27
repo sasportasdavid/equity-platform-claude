@@ -1140,16 +1140,36 @@ const CONDITION_FIELDS_BY_TYPE: Record<
 };
 
 /**
+ * Champs partagés entre NON_MARKET et MARKET (mêmes noms de champs) mais
+ * dont la sémantique diffère (% TSR vs € EBITDA, opérateurs valides
+ * différents…). À purger explicitement au switch UI entre ces deux
+ * types — sinon ils survivraient avec une valeur orpheline du type
+ * précédent (ex : `targetUnit: '%'` qui reste après un switch
+ * MARKET TSR_ABS → NON_MARKET).
+ *
+ * Exporté pour réutilisation côté UI (cf. ConditionEditor.tsx).
+ */
+export const SHARED_PER_TYPE_CONDITION_FIELDS: ReadonlyArray<keyof PerformanceConditionInput> = [
+  'comparisonOperator',
+  'targetValue',
+  'targetUnit',
+  'thresholdMin',
+  'thresholdMax',
+];
+
+/**
  * Retourne une copie de la condition avec tous les champs étrangers au
  * `nextType` nullifiés. Utilisé quand l'utilisateur change le type d'une
  * condition existante : on évite de garder des données orphelines (un
  * `marketMetricType` zombie sur une condition NON_MARKET, par exemple)
  * qui contamineraient les Server Actions et les exports DocuSign / Yousign.
  *
- * Note : on remet `comparisonOperator` à undefined même quand il est
- * partagé entre NON_MARKET et MARKET, parce que les opérateurs valides
- * peuvent différer (= `=` n'a pas de sens pour TSR_REL_INDEX). Le
- * formulaire force l'utilisateur à re-sélectionner.
+ * Note : pour les champs partagés entre NON_MARKET et MARKET dont la
+ * sémantique diffère (`comparisonOperator`, `targetValue`, `targetUnit`,
+ * etc.), on les nullifie aussi automatiquement quand le type d'origine
+ * de la condition est différent du `nextType` (= vrai switch UI). Si
+ * `condition.conditionType === nextType` (appel de "nettoyage" côté
+ * Server Action sans switch), ces champs sont préservés.
  *
  * Pure function : ne mute pas l'input.
  */
@@ -1157,6 +1177,7 @@ export function cleanConditionForType(
   condition: PerformanceConditionInput,
   nextType: ConditionType,
 ): PerformanceConditionInput {
+  const isSwitch = condition.conditionType !== nextType;
   // Union de tous les champs spécifiques à un type quelconque
   const allTypeSpecificFields = new Set<keyof PerformanceConditionInput>([
     ...CONDITION_FIELDS_BY_TYPE.NON_MARKET,
@@ -1169,6 +1190,13 @@ export function cleanConditionForType(
   const next: PerformanceConditionInput = { ...condition, conditionType: nextType };
   for (const field of allTypeSpecificFields) {
     if (!allowed.has(field)) {
+      (next as Record<string, unknown>)[field] = undefined;
+    }
+  }
+  // Sur un VRAI switch de type, purge aussi les champs sémantiquement
+  // type-spécifiques (cf. SHARED_PER_TYPE_CONDITION_FIELDS).
+  if (isSwitch) {
+    for (const field of SHARED_PER_TYPE_CONDITION_FIELDS) {
       (next as Record<string, unknown>)[field] = undefined;
     }
   }

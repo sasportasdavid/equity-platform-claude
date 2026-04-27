@@ -65,9 +65,13 @@ export function ConditionEditor({
   // condition existante, on rappelle `cleanConditionForType` pour purger
   // tout champ qui aurait survécu au unmount (au cas où un préset injecte
   // des données orphelines, ou si une future branche oublie d'utiliser
-  // `shouldUnregister`). En mode UI normal, NonMarketBranch / MarketBranch
-  // gèrent leur propre cleanup via `register({ shouldUnregister: true })`,
-  // donc cet effet est généralement no-op.
+  // `shouldUnregister`).
+  //
+  // Au moment de cet effet, RHF a déjà écrit conditionType = currentType
+  // dans le form state. Pour que `cleanConditionForType` voie un VRAI
+  // switch (et purge les SHARED_PER_TYPE_CONDITION_FIELDS dont la
+  // sémantique diffère entre NON_MARKET et MARKET), on lui passe une
+  // condition avec `conditionType` forcé à l'ancien type via `prev`.
   // On lit via `getValues` pour casser la dépendance circulaire avec
   // `condition` (qui change après setValue).
   const previousTypeRef = useRef<ConditionType | undefined>(condition?.conditionType);
@@ -78,7 +82,8 @@ export function ConditionEditor({
     if (prev) {
       const current = getValues(`conditions.${index}`) as PerformanceConditionInput | undefined;
       if (current) {
-        const cleaned = cleanConditionForType(current, currentType);
+        const withPrevType: PerformanceConditionInput = { ...current, conditionType: prev };
+        const cleaned = cleanConditionForType(withPrevType, currentType);
         setValue(`conditions.${index}`, cleaned, { shouldValidate: true, shouldDirty: true });
       }
     }
