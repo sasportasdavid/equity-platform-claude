@@ -281,7 +281,10 @@ export const performanceConditionSchema = z.object({
   marketMetricType: MarketMetricEnum.optional(),
   referenceIndex: z
     .string()
-    .regex(/^[A-Z0-9\s.-]{1,30}$/)
+    // Tickers Yahoo Finance : prefixe `^` pour les indices (^FCHI, ^GSPC,
+    // ^NDX), points pour les classes d'actions (BRK.B), tirets et chiffres
+    // pour certains markets. On garde la majuscule + caractères usuels.
+    .regex(/^[A-Z0-9\s.\-^_]{1,30}$/)
     .optional(),
   referenceIndexDisplayName: z.string().optional(),
   peerGroup: z.array(peerCompanySchema).max(PLAN_WIZARD_LIMITS.MAX_PEER_GROUP).optional(),
@@ -654,6 +657,18 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
           message: 'Doit être ≥ à la date d’attribution du plan',
         });
       }
+
+      // Validations spécifiques au sous-type MARKET.
+      if (cond.marketMetricType === 'TSR_REL_INDEX') {
+        const idx_index = (cond.referenceIndex ?? '').trim();
+        if (idx_index.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['conditions', idx, 'referenceIndex'],
+            message: 'Indice de référence requis pour TSR relatif vs indice',
+          });
+        }
+      }
     });
   }
 });
@@ -739,13 +754,22 @@ export const MARKET_METRIC_UI_LABELS: Record<MarketMetric, string> = {
 };
 
 /**
- * Sous-ensemble de `MarketMetric` livré dans le commit 4.4 (les autres
- * sont placeholder en attendant 4.5 / 4.6 / 4.7 — peers et index).
+ * Sous-ensemble de `MarketMetric` livré jusqu'au commit courant. Mis à
+ * jour à chaque commit qui ouvre un nouveau sous-type :
+ *  - 4.4 : SHARE_PRICE, TSR_ABS
+ *  - 4.5 : + TSR_REL_INDEX (avec YahooIndexSearch)
+ *  - 4.6 : + TSR_REL_PEERS (avec PeerGroupEditor flat)
+ *  - 4.7 : + WeightedPeerGroupsEditor (extension de TSR_REL_PEERS)
  */
-export const MARKET_METRICS_AVAILABLE_4_4: ReadonlySet<MarketMetric> = new Set([
+export const MARKET_METRICS_AVAILABLE: ReadonlySet<MarketMetric> = new Set([
   'SHARE_PRICE',
   'TSR_ABS',
+  'TSR_REL_INDEX',
 ]);
+
+/** Référence de compatibilité pour les imports antérieurs (à supprimer
+ *  quand toutes les branches MARKET seront livrées). */
+export const MARKET_METRICS_AVAILABLE_4_4 = MARKET_METRICS_AVAILABLE;
 
 export const NON_MARKET_METRIC_DEFAULT_UNITS: Record<NonMarketMetric, string> = {
   EBITDA: '€',

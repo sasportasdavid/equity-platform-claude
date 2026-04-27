@@ -30,7 +30,11 @@ function uuid(suffix: string) {
   return `cond-${suffix}-${presetCounter}`;
 }
 
-type Preset = { label: string; group: '4.1' | '4.2' | '4.3' | '4.4'; apply: () => void };
+type Preset = {
+  label: string;
+  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5';
+  apply: () => void;
+};
 
 export function WizardStep4Sandbox() {
   const methods = useForm<PlanWizardData>({
@@ -274,6 +278,131 @@ export function WizardStep4Sandbox() {
               targetValue: '30',
               targetUnit: '%',
               performanceStartDate: '2026-01-01', // < grantDate 2026-06-01
+              performanceEndDate: '2029-01-01',
+            },
+          ],
+        }),
+    },
+
+    // ----- Groupe 4.5 — branche MARKET TSR_REL_INDEX -----
+    {
+      label: '4.5 · TSR vs CAC 40 (+5 pts)',
+      group: '4.5',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'PARTIAL',
+          conditions: [
+            {
+              id: uuid('mkt-tsr-rel-cac'),
+              name: 'TSR vs CAC 40 ≥ +5 pts à 3 ans',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_INDEX',
+              comparisonOperator: '>=',
+              targetValue: '5',
+              targetUnit: '%',
+              referenceIndex: '^FCHI',
+              referenceIndexDisplayName: 'CAC 40',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.5 · TSR vs S&P 500 (+10 pts)',
+      group: '4.5',
+      apply: () =>
+        applyPreset({
+          planType: 'STOCK_OPTION',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('mkt-tsr-rel-sp500'),
+              name: 'TSR vs S&P 500 ≥ +10 pts à 4 ans',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_INDEX',
+              comparisonOperator: '>=',
+              targetValue: '10',
+              targetUnit: '%',
+              referenceIndex: '^GSPC',
+              referenceIndexDisplayName: 'S&P 500',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2030-01-01',
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.5 · TSR vs ticker libre (^TEST)',
+      group: '4.5',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'PARTIAL',
+          conditions: [
+            {
+              id: uuid('mkt-tsr-rel-libre'),
+              name: 'TSR vs indice libre',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_INDEX',
+              comparisonOperator: '>',
+              targetValue: '0',
+              targetUnit: '%',
+              referenceIndex: '^TEST',
+              referenceIndexDisplayName: '',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.5 · KO · indice manquant',
+      group: '4.5',
+      apply: () =>
+        applyPreset({
+          planType: 'STOCK_OPTION',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('mkt-tsr-rel-ko'),
+              name: 'TSR_REL_INDEX sans indice',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_INDEX',
+              comparisonOperator: '>=',
+              targetValue: '5',
+              targetUnit: '%',
+              // referenceIndex absent → erreur Zod attendue
+              performanceStartDate: '2026-01-01',
               performanceEndDate: '2029-01-01',
             },
           ],
@@ -649,17 +778,18 @@ export function WizardStep4Sandbox() {
   const presets42 = presets.filter((p) => p.group === '4.2');
   const presets43 = presets.filter((p) => p.group === '4.3');
   const presets44 = presets.filter((p) => p.group === '4.4');
+  const presets45 = presets.filter((p) => p.group === '4.5');
 
   return (
     <div className="container mx-auto max-w-5xl space-y-6 px-4 py-8">
       <header className="space-y-1">
         <p className="text-muted-foreground font-mono text-xs uppercase">/dev — sandbox</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.4)</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.5)</h1>
         <p className="text-muted-foreground text-sm">
           Squelette (4.1) + NON_MARKET (4.2) + SERVICE (4.3) + MARKET basique (4.4 : SHARE_PRICE /
-          TSR_ABS). Les sous-types TSR_REL_INDEX (4.5) et TSR_REL_PEERS (4.6/4.7) restent
-          désactivés. Un changement de type via l’UI purge automatiquement les champs orphelins
-          (shouldUnregister + cleanConditionForType).
+          TSR_ABS) + MARKET TSR_REL_INDEX (4.5 : YahooIndexSearch mock). Le sous-type TSR_REL_PEERS
+          reste désactivé jusqu’aux commits 4.6/4.7. Un changement de type ou de marketMetricType
+          purge automatiquement les champs orphelins (shouldUnregister + cleanConditionForType).
         </p>
       </header>
 
@@ -667,6 +797,7 @@ export function WizardStep4Sandbox() {
       <PresetGroup title="Branche NON_MARKET (4.2)" presets={presets42} />
       <PresetGroup title="Branche SERVICE (4.3)" presets={presets43} />
       <PresetGroup title="Branche MARKET basique (4.4)" presets={presets44} />
+      <PresetGroup title="Branche MARKET TSR_REL_INDEX (4.5)" presets={presets45} />
 
       <FormProvider {...methods}>
         <Step4Performance />

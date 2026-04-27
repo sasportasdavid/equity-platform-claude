@@ -7,7 +7,7 @@ import {
   ComparisonOperatorEnum,
   MARKET_METRIC_DEFAULT_UNITS,
   MARKET_METRIC_UI_LABELS,
-  MARKET_METRICS_AVAILABLE_4_4,
+  MARKET_METRICS_AVAILABLE,
   MarketMetricEnum,
   PLAN_WIZARD_LIMITS,
   type MarketMetric,
@@ -16,6 +16,7 @@ import {
 } from '@equity/shared';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { YahooIndexSearch } from './YahooIndexSearch';
 
 /**
  * MODULE_03A_PLANS Step 4.4 — branche MARKET (sous-types SHARE_PRICE +
@@ -136,11 +137,11 @@ export function MarketBranch({ index }: { index: number }) {
           >
             <option value="">— Sélectionner une métrique —</option>
             {MarketMetricEnum.options.map((m) => {
-              const available = MARKET_METRICS_AVAILABLE_4_4.has(m);
+              const available = MARKET_METRICS_AVAILABLE.has(m);
               return (
                 <option key={m} value={m} disabled={!available}>
                   {MARKET_METRIC_UI_LABELS[m]}
-                  {available ? '' : ' — à venir (4.5 / 4.6)'}
+                  {available ? '' : ' — à venir (4.6 / 4.7)'}
                 </option>
               );
             })}
@@ -193,11 +194,7 @@ export function MarketBranch({ index }: { index: number }) {
           <Input
             id={`cond-${index}-market-target-value`}
             type="text"
-            placeholder={
-              condition.marketMetricType === 'TSR_ABS'
-                ? 'Ex : 30 (= 30 % sur la période)'
-                : 'Ex : 200 (= 200 € par action)'
-            }
+            placeholder={targetValuePlaceholder(condition.marketMetricType)}
             maxLength={PLAN_WIZARD_LIMITS.MAX_TARGET_VALUE_LENGTH}
             aria-invalid={!!conditionErrors?.targetValue}
             {...register(`conditions.${index}.targetValue`, { shouldUnregister: true })}
@@ -208,9 +205,7 @@ export function MarketBranch({ index }: { index: number }) {
             </p>
           ) : (
             <p className="text-muted-foreground text-xs">
-              {condition.marketMetricType === 'TSR_ABS'
-                ? 'TSR exprimé en pourcentage (sans le « % »).'
-                : 'Prix absolu en euros.'}
+              {targetValueHelp(condition.marketMetricType)}
             </p>
           )}
         </div>
@@ -229,6 +224,10 @@ export function MarketBranch({ index }: { index: number }) {
           </p>
         </div>
       </div>
+
+      {/* Branche TSR_REL_INDEX (commit 4.5) : sélection d'un indice de
+          référence via mock auto-fetch des top indices. */}
+      {condition.marketMetricType === 'TSR_REL_INDEX' ? <IndexSelector index={index} /> : null}
 
       {/* Auto-calc measurementPeriodYears (lecture seule). Hidden input
           synchronise le form state pour les Server Actions ; l'input
@@ -255,6 +254,86 @@ export function MarketBranch({ index }: { index: number }) {
         ⚠️ Les dates de mesure (« Début mesure » et « Fin mesure » au-dessus) sont obligatoires pour
         les conditions de marché. Elles définissent la fenêtre Monte Carlo.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Placeholder + aide contextuels pour `targetValue` selon le sous-type
+ * MARKET sélectionné. Sortis en helpers pour que le JSX reste lisible.
+ */
+function targetValuePlaceholder(metric: MarketMetric | undefined): string {
+  switch (metric) {
+    case 'TSR_ABS':
+      return 'Ex : 30 (= 30 % sur la période)';
+    case 'TSR_REL_INDEX':
+      return 'Ex : 5 (= +5 pts au-dessus de l’indice)';
+    case 'TSR_REL_PEERS':
+      return 'Ex : 5 (à venir au commit 4.6)';
+    case 'SHARE_PRICE':
+    default:
+      return 'Ex : 200 (= 200 € par action)';
+  }
+}
+
+function targetValueHelp(metric: MarketMetric | undefined): string {
+  switch (metric) {
+    case 'TSR_ABS':
+      return 'TSR exprimé en pourcentage (sans le « % »).';
+    case 'TSR_REL_INDEX':
+      return 'Spread vs indice en pourcentage. Le moteur Python convertira en Base 100.';
+    case 'TSR_REL_PEERS':
+      return 'Spread vs panel en pourcentage (à venir au commit 4.6).';
+    case 'SHARE_PRICE':
+    default:
+      return 'Prix absolu en euros.';
+  }
+}
+
+/**
+ * Wrapper RHF autour de `YahooIndexSearch`. Branche les 2 champs
+ * `referenceIndex` (ticker) et `referenceIndexDisplayName` (nom
+ * affichable) ; les deux sont déclarés avec `shouldUnregister: true`
+ * pour la même raison que les autres champs MARKET — purge automatique
+ * au switch de type ou de marketMetricType.
+ */
+function IndexSelector({ index }: { index: number }) {
+  const { register, watch, setValue, formState } = useFormContext<PlanWizardData>();
+  // Register déclaratifs (sans rendre l'input) — RHF a besoin du register
+  // pour suivre le champ et le purger via shouldUnregister au unmount.
+  // On rend l'UI custom via YahooIndexSearch et on synchronise via setValue.
+  register(`conditions.${index}.referenceIndex`, { shouldUnregister: true });
+  register(`conditions.${index}.referenceIndexDisplayName`, { shouldUnregister: true });
+
+  const value = (watch(`conditions.${index}.referenceIndex`) as string | undefined) ?? '';
+  const displayName =
+    (watch(`conditions.${index}.referenceIndexDisplayName`) as string | undefined) ?? '';
+
+  const errors = formState.errors;
+  const conditionErrors = (
+    errors.conditions as Array<Record<string, { message?: string } | undefined>> | undefined
+  )?.[index];
+
+  return (
+    <div className="space-y-2">
+      <YahooIndexSearch
+        value={value}
+        displayName={displayName}
+        ariaInvalid={!!conditionErrors?.referenceIndex}
+        onChange={(ticker, name) => {
+          setValue(`conditions.${index}.referenceIndex`, ticker, {
+            shouldValidate: true,
+            shouldDirty: true,
+          });
+          setValue(`conditions.${index}.referenceIndexDisplayName`, name, {
+            shouldValidate: false,
+            shouldDirty: true,
+          });
+        }}
+      />
+      {conditionErrors?.referenceIndex?.message ? (
+        <p className="text-destructive text-xs">{String(conditionErrors.referenceIndex.message)}</p>
+      ) : null}
     </div>
   );
 }
