@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { AcquisitionScaleEditor } from './AcquisitionScaleEditor';
 import { MarketBranch } from './MarketBranch';
 import { NonMarketBranch } from './NonMarketBranch';
 import { ServiceBranch } from './ServiceBranch';
@@ -263,6 +264,11 @@ export function ConditionEditor({
               SERVICE (4.3) sont livrés ; MARKET reste un placeholder en
               attendant les commits 4.4 → 4.10. */}
           <TypeBranch index={index} type={condition.conditionType} />
+
+          {/* Échelle d'acquisition (commits 4.9 + 4.10) — applicable
+              uniquement aux types MARKET et NON_MARKET (SERVICE = présence
+              binaire, pas de scoring partiel). */}
+          {condition.conditionType !== 'SERVICE' ? <AcquisitionScaleEditor index={index} /> : null}
         </div>
       ) : null}
     </div>

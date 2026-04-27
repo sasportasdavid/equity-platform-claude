@@ -32,7 +32,7 @@ function uuid(suffix: string) {
 
 type Preset = {
   label: string;
-  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5' | '4.6' | '4.7' | '4.8';
+  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5' | '4.6' | '4.7' | '4.8' | '4.9';
   apply: () => void;
 };
 
@@ -50,6 +50,14 @@ export function WizardStep4Sandbox() {
   const reset = methods.reset as UseFormReset<PlanWizardData>;
   async function applyPreset(values: Partial<PlanWizardData>) {
     reset(values as PlanWizardData);
+    // Laisser React re-monter les sous-composants (AcquisitionScaleEditor,
+    // PeerGroupEditor…) qui font du `register({ shouldUnregister: true })`
+    // — sinon `trigger()` valide la condition AVANT que ces fields ne
+    // soient registered et le superRefine sur acquisitionScale / peerGroups
+    // ne s'applique pas. En prod, la validation finale passe par la Server
+    // Action qui parse directement `planWizardSchema` (pas de RHF), donc
+    // le bug n'a d'impact qu'en sandbox.
+    await new Promise((r) => setTimeout(r, 0));
     await methods.trigger();
   }
 
@@ -920,6 +928,148 @@ export function WizardStep4Sandbox() {
         }),
     },
 
+    // ----- Groupe 4.9 — AcquisitionScale mode CURVE -----
+    {
+      label: '4.9 · NON_MARKET EBITDA + courbe 0/50/100/120',
+      group: '4.9',
+      apply: () =>
+        applyPreset({
+          planType: 'BSPCE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'PARTIAL',
+          conditions: [
+            {
+              id: uuid('as-curve-ebitda'),
+              name: 'EBITDA ≥ 50 M€ avec courbe',
+              conditionType: 'NON_MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              metric: 'EBITDA',
+              comparisonOperator: '>=',
+              targetValue: '50000000',
+              targetUnit: '€',
+              acquisitionScale: {
+                mode: 'CURVE',
+                points: [
+                  { threshold: 0, acquisition: 0, label: 'Plancher' },
+                  { threshold: 50, acquisition: 50, label: 'Mi-cible' },
+                  { threshold: 100, acquisition: 100, label: 'Cible' },
+                  { threshold: 120, acquisition: 120, label: 'Sur-performance' },
+                ],
+              },
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.9 · MARKET TSR_ABS + courbe 80/100/130',
+      group: '4.9',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'PARTIAL',
+          conditions: [
+            {
+              id: uuid('as-curve-tsr'),
+              name: 'TSR_ABS avec courbe progressive',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_ABS',
+              comparisonOperator: '>=',
+              targetValue: '30',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
+              acquisitionScale: {
+                mode: 'CURVE',
+                points: [
+                  { threshold: 80, acquisition: 50 },
+                  { threshold: 100, acquisition: 100 },
+                  { threshold: 130, acquisition: 150 },
+                ],
+              },
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.9 · KO · courbe 1 seul point',
+      group: '4.9',
+      apply: () =>
+        applyPreset({
+          planType: 'BSPCE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('as-ko-1-point'),
+              name: 'Courbe avec 1 seul point',
+              conditionType: 'NON_MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              metric: 'REVENUE',
+              comparisonOperator: '>=',
+              targetValue: '10000000',
+              targetUnit: '€',
+              acquisitionScale: {
+                mode: 'CURVE',
+                points: [{ threshold: 100, acquisition: 100 }],
+              },
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.9 · KO · thresholds non croissants',
+      group: '4.9',
+      apply: () =>
+        applyPreset({
+          planType: 'BSPCE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('as-ko-decroissant'),
+              name: 'Courbe avec thresholds décroissants',
+              conditionType: 'NON_MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              metric: 'EBITDA',
+              comparisonOperator: '>=',
+              targetValue: '50000000',
+              targetUnit: '€',
+              acquisitionScale: {
+                mode: 'CURVE',
+                points: [
+                  { threshold: 100, acquisition: 100 },
+                  { threshold: 50, acquisition: 50 },
+                ],
+              },
+            },
+          ],
+        }),
+    },
+
     // ----- Groupe 4.1 — squelette / structure -----
     {
       label: 'Désactivé',
@@ -1293,12 +1443,13 @@ export function WizardStep4Sandbox() {
   const presets46 = presets.filter((p) => p.group === '4.6');
   const presets47 = presets.filter((p) => p.group === '4.7');
   const presets48 = presets.filter((p) => p.group === '4.8');
+  const presets49 = presets.filter((p) => p.group === '4.9');
 
   return (
     <div className="container mx-auto max-w-5xl space-y-6 px-4 py-8">
       <header className="space-y-1">
         <p className="text-muted-foreground font-mono text-xs uppercase">/dev — sandbox</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.8)</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.9)</h1>
         <p className="text-muted-foreground text-sm">
           Squelette (4.1) + NON_MARKET (4.2) + SERVICE (4.3) + MARKET basique (4.4) + TSR_REL_INDEX
           (4.5) + TSR_REL_PEERS flat (4.6) + TSR_REL_PEERS WEIGHTED (4.7 : groupes hiérarchiques
@@ -1316,6 +1467,7 @@ export function WizardStep4Sandbox() {
       <PresetGroup title="Branche MARKET TSR_REL_PEERS flat (4.6)" presets={presets46} />
       <PresetGroup title="Branche MARKET TSR_REL_PEERS WEIGHTED (4.7)" presets={presets47} />
       <PresetGroup title="ReferencePriceConfig V5 (4.8)" presets={presets48} />
+      <PresetGroup title="AcquisitionScale CURVE (4.9)" presets={presets49} />
 
       <FormProvider {...methods}>
         <Step4Performance />

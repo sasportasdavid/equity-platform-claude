@@ -262,14 +262,18 @@ export const acquisitionTierSchema = z.object({
   label: z.string().optional(),
 });
 
+// Tolère les arrays vides ; les minimums (2 points / 2 tiers) sont validés
+// dans le superRefine global avec messages FR explicites (pattern partagé
+// avec peerGroup / weightedPeerGroups). Le `.max(...)` reste car son
+// dépassement est exceptionnel (UI bloque le bouton add à la limite).
 export const acquisitionScaleSchema = z.discriminatedUnion('mode', [
   z.object({
     mode: z.literal('CURVE'),
-    points: z.array(acquisitionCurvePointSchema).min(2).max(PLAN_WIZARD_LIMITS.MAX_CURVE_POINTS),
+    points: z.array(acquisitionCurvePointSchema).max(PLAN_WIZARD_LIMITS.MAX_CURVE_POINTS),
   }),
   z.object({
     mode: z.literal('TIERS'),
-    tiers: z.array(acquisitionTierSchema).min(2).max(10),
+    tiers: z.array(acquisitionTierSchema).max(10),
   }),
 ]);
 export type AcquisitionScale = z.infer<typeof acquisitionScaleSchema>;
@@ -779,6 +783,36 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
         cond.endFixedPrice,
         cond.endAveragingDays,
       );
+    });
+
+    // ---- Step 4.9 — AcquisitionScale mode CURVE ----
+    // Validé pour TOUTES les conditions (MARKET + NON_MARKET) où une
+    // échelle est définie ; SERVICE n'expose pas le composant côté UI
+    // donc en pratique l'échelle restera undefined pour ce type. Bloc
+    // séparé du forEach MARKET (qui early-return) pour ne pas être
+    // limité au seul type MARKET.
+    data.conditions.forEach((cond, idx) => {
+      const scale = cond.acquisitionScale;
+      if (scale && scale.mode === 'CURVE') {
+        if (scale.points.length < 2) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['conditions', idx, 'acquisitionScale', 'points'],
+            message: 'Au moins 2 points requis pour définir une courbe',
+          });
+        }
+        for (let i = 1; i < scale.points.length; i++) {
+          const prev = scale.points[i - 1];
+          const curr = scale.points[i];
+          if (prev && curr && curr.threshold <= prev.threshold) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['conditions', idx, 'acquisitionScale', 'points', i, 'threshold'],
+              message: 'Le threshold doit être strictement supérieur au précédent',
+            });
+          }
+        }
+      }
     });
   }
 });
