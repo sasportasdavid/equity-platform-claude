@@ -21,6 +21,7 @@ import { z } from 'zod';
 export const PLAN_WIZARD_LIMITS = {
   MAX_VESTING_TRANCHES: 60,
   MAX_PEER_GROUP: 30,
+  MAX_PEER_GROUPS: 10,
   MAX_CONDITIONS: 10,
   MAX_CURVE_POINTS: 20,
   MIN_VOLATILITY: 1,
@@ -239,7 +240,9 @@ export const peerGroupSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   weight: z.number().min(0).max(100),
-  peers: z.array(peerCompanySchema).min(1),
+  // Tolère array vide pour que le superRefine émette son message FR
+  // « Au moins un peer requis dans ce groupe » (cf. validation TSR_REL_PEERS).
+  peers: z.array(peerCompanySchema),
 });
 export type PeerGroupInput = z.infer<typeof peerGroupSchema>;
 
@@ -676,33 +679,79 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
       }
 
       if (cond.marketMetricType === 'TSR_REL_PEERS') {
-        // Mode flat (4.6) : on attend au moins un peer dans `peerGroup`.
-        // Mode weighted (4.7) : on validera `weightedPeerGroups` à la place.
-        const peers = cond.peerGroup ?? [];
-        if (peers.length === 0) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['conditions', idx, 'peerGroup'],
-            message: 'Au moins un peer est requis pour TSR relatif vs panel',
+        // Mode WEIGHTED (4.7) : si `weightedPeerGroups` est non vide, on
+        // ignore `peerGroup` et on valide les groupes hiérarchiques.
+        // Mode flat (4.6) sinon : on valide la liste plate `peerGroup`.
+        const wpgs = cond.weightedPeerGroups ?? [];
+        if (wpgs.length > 0) {
+          // Somme des weights = 100 % (tolérance 0.01)
+          const totalWeight = wpgs.reduce((s, g) => s + (g.weight ?? 0), 0);
+          if (Math.abs(totalWeight - 100) >= 0.01) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['conditions', idx, 'weightedPeerGroups'],
+              message: `La somme des poids des groupes doit valoir 100 % (actuellement ${totalWeight.toFixed(2)} %)`,
+            });
+          }
+          wpgs.forEach((group, gIdx) => {
+            if (!group.name || group.name.trim().length === 0) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['conditions', idx, 'weightedPeerGroups', gIdx, 'name'],
+                message: 'Nom du groupe requis',
+              });
+            }
+            if (!group.peers || group.peers.length === 0) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['conditions', idx, 'weightedPeerGroups', gIdx, 'peers'],
+                message: 'Au moins un peer requis dans ce groupe',
+              });
+            }
+            (group.peers ?? []).forEach((peer, peerIdx) => {
+              if (!peer.ticker || peer.ticker.trim().length === 0) {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  path: ['conditions', idx, 'weightedPeerGroups', gIdx, 'peers', peerIdx, 'ticker'],
+                  message: 'Ticker requis',
+                });
+              }
+              if (!peer.name || peer.name.trim().length === 0) {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  path: ['conditions', idx, 'weightedPeerGroups', gIdx, 'peers', peerIdx, 'name'],
+                  message: 'Nom requis',
+                });
+              }
+            });
+          });
+        } else {
+          // Mode flat
+          const peers = cond.peerGroup ?? [];
+          if (peers.length === 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['conditions', idx, 'peerGroup'],
+              message: 'Au moins un peer est requis pour TSR relatif vs panel',
+            });
+          }
+          peers.forEach((peer, peerIdx) => {
+            if (!peer.ticker || peer.ticker.trim().length === 0) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['conditions', idx, 'peerGroup', peerIdx, 'ticker'],
+                message: 'Ticker requis',
+              });
+            }
+            if (!peer.name || peer.name.trim().length === 0) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['conditions', idx, 'peerGroup', peerIdx, 'name'],
+                message: 'Nom requis',
+              });
+            }
           });
         }
-        // Validation de chaque peer : ticker non-vide + format
-        peers.forEach((peer, peerIdx) => {
-          if (!peer.ticker || peer.ticker.trim().length === 0) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              path: ['conditions', idx, 'peerGroup', peerIdx, 'ticker'],
-              message: 'Ticker requis',
-            });
-          }
-          if (!peer.name || peer.name.trim().length === 0) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              path: ['conditions', idx, 'peerGroup', peerIdx, 'name'],
-              message: 'Nom requis',
-            });
-          }
-        });
       }
     });
   }

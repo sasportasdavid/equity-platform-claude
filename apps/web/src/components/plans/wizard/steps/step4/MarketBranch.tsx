@@ -11,12 +11,15 @@ import {
   MarketMetricEnum,
   PLAN_WIZARD_LIMITS,
   type MarketMetric,
+  type PeerGroupInput,
   type PerformanceConditionInput,
   type PlanWizardData,
 } from '@equity/shared';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 import { PeerGroupEditor } from './PeerGroupEditor';
+import { WeightedPeerGroupsEditor } from './WeightedPeerGroupsEditor';
 import { YahooIndexSearch } from './YahooIndexSearch';
 
 /**
@@ -230,9 +233,9 @@ export function MarketBranch({ index }: { index: number }) {
           référence via mock auto-fetch des top indices. */}
       {condition.marketMetricType === 'TSR_REL_INDEX' ? <IndexSelector index={index} /> : null}
 
-      {/* Branche TSR_REL_PEERS (commit 4.6, mode flat) : panel de peers
-          avec name + ticker. Le mode WEIGHTED arrive en 4.7. */}
-      {condition.marketMetricType === 'TSR_REL_PEERS' ? <PeerGroupEditor index={index} /> : null}
+      {/* Branche TSR_REL_PEERS (commits 4.6 + 4.7) : toggle Mode flat
+          (PeerGroupEditor) vs Mode WEIGHTED (WeightedPeerGroupsEditor). */}
+      {condition.marketMetricType === 'TSR_REL_PEERS' ? <PeersBranch index={index} /> : null}
 
       {/* Auto-calc measurementPeriodYears (lecture seule). Hidden input
           synchronise le form state pour les Server Actions ; l'input
@@ -293,6 +296,105 @@ function targetValueHelp(metric: MarketMetric | undefined): string {
     default:
       return 'Prix absolu en euros.';
   }
+}
+
+/**
+ * Wrapper de la branche TSR_REL_PEERS qui propose un toggle UI entre
+ * mode flat (PeerGroupEditor, commit 4.6) et mode WEIGHTED
+ * (WeightedPeerGroupsEditor, commit 4.7). Le mode actif est dérivé du
+ * form state (heuristique : WEIGHTED si `weightedPeerGroups.length > 0`)
+ * — switcher de mode purge l'autre champ via setValue.
+ */
+function PeersBranch({ index }: { index: number }) {
+  const { watch, setValue } = useFormContext<PlanWizardData>();
+  const condition = watch(`conditions.${index}`) as PerformanceConditionInput | undefined;
+  const wpgs = condition?.weightedPeerGroups ?? [];
+  const peers = condition?.peerGroup ?? [];
+  // Mode dérivé : WEIGHTED si on a au moins un groupe ; sinon flat.
+  const mode: 'flat' | 'weighted' = wpgs.length > 0 ? 'weighted' : 'flat';
+
+  function switchMode(next: 'flat' | 'weighted') {
+    if (next === mode) return;
+    if (next === 'weighted') {
+      // On bascule en WEIGHTED : on initialise un groupe par défaut qui
+      // contient les peers actuels (s'il y en avait). Le mode flat sera
+      // automatiquement "désactivé" par la heuristique (et le superRefine
+      // ignorera peerGroup quand wpgs.length > 0).
+      const initialGroup: PeerGroupInput = {
+        id:
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : 'group-1',
+        name: 'Groupe 1',
+        weight: 100,
+        peers: peers.length > 0 ? peers : [{ id: undefined, name: '', ticker: '' }],
+      };
+      setValue(`conditions.${index}.weightedPeerGroups`, [initialGroup], {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+      setValue(`conditions.${index}.peerGroup`, [], {
+        shouldValidate: false,
+        shouldDirty: true,
+      });
+    } else {
+      // Bascule vers flat : on aplatit le contenu des groupes (si
+      // l'utilisateur en avait défini) en une liste plate de peers, et
+      // on vide weightedPeerGroups.
+      const flattened = wpgs.flatMap((g) => g.peers);
+      setValue(`conditions.${index}.peerGroup`, flattened, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+      setValue(`conditions.${index}.weightedPeerGroups`, [], {
+        shouldValidate: false,
+        shouldDirty: true,
+      });
+    }
+  }
+
+  return (
+    <div className="space-y-3" data-testid={`peers-branch-${index}`}>
+      <div className="flex items-center gap-2">
+        <Label className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+          Mode du panel :
+        </Label>
+        <div className="flex gap-1 rounded-md border p-0.5 text-sm">
+          <button
+            type="button"
+            onClick={() => switchMode('flat')}
+            className={cn(
+              'rounded px-3 py-1',
+              mode === 'flat'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-muted',
+            )}
+            data-testid={`peers-mode-flat-${index}`}
+            data-active={mode === 'flat'}
+          >
+            Flat
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode('weighted')}
+            className={cn(
+              'rounded px-3 py-1',
+              mode === 'weighted'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-muted',
+            )}
+            data-testid={`peers-mode-weighted-${index}`}
+            data-active={mode === 'weighted'}
+          >
+            Pondéré (groupes)
+          </button>
+        </div>
+      </div>
+      {mode === 'flat' ? (
+        <PeerGroupEditor index={index} />
+      ) : (
+        <WeightedPeerGroupsEditor index={index} />
+      )}
+    </div>
+  );
 }
 
 /**

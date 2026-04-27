@@ -32,7 +32,7 @@ function uuid(suffix: string) {
 
 type Preset = {
   label: string;
-  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5' | '4.6';
+  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5' | '4.6' | '4.7';
   apply: () => void;
 };
 
@@ -543,6 +543,189 @@ export function WizardStep4Sandbox() {
         }),
     },
 
+    // ----- Groupe 4.7 — branche MARKET TSR_REL_PEERS mode WEIGHTED -----
+    {
+      label: '4.7 · Pharma Europe 60 / US 40 (OK)',
+      group: '4.7',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'PARTIAL',
+          conditions: [
+            {
+              id: uuid('mkt-wpg-pharma'),
+              name: 'TSR vs panel pharma pondéré',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_PEERS',
+              comparisonOperator: '>=',
+              targetValue: '5',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              weightedPeerGroups: [
+                {
+                  id: uuid('g-eu'),
+                  name: 'Pharma Europe',
+                  weight: 60,
+                  peers: [
+                    { id: uuid('p-san'), name: 'Sanofi', ticker: 'SAN.PA' },
+                    { id: uuid('p-roche'), name: 'Roche Holding', ticker: 'ROG.SW' },
+                  ],
+                },
+                {
+                  id: uuid('g-us'),
+                  name: 'Pharma US',
+                  weight: 40,
+                  peers: [
+                    { id: uuid('p-pfe'), name: 'Pfizer', ticker: 'PFE' },
+                    { id: uuid('p-mrk'), name: 'Merck', ticker: 'MRK' },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.7 · Tech 50 / Finance 30 / ESG 20 (OK)',
+      group: '4.7',
+      apply: () =>
+        applyPreset({
+          planType: 'STOCK_OPTION',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('mkt-wpg-mixte'),
+              name: 'TSR vs panel multi-secteurs',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_PEERS',
+              comparisonOperator: '>=',
+              targetValue: '0',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2030-01-01',
+              weightedPeerGroups: [
+                {
+                  id: uuid('g-tech'),
+                  name: 'Tech',
+                  weight: 50,
+                  peers: [
+                    { id: uuid('p-aapl'), name: 'Apple', ticker: 'AAPL' },
+                    { id: uuid('p-msft'), name: 'Microsoft', ticker: 'MSFT' },
+                  ],
+                },
+                {
+                  id: uuid('g-fin'),
+                  name: 'Finance',
+                  weight: 30,
+                  peers: [{ id: uuid('p-jpm'), name: 'JPMorgan', ticker: 'JPM' }],
+                },
+                {
+                  id: uuid('g-esg'),
+                  name: 'ESG leaders',
+                  weight: 20,
+                  peers: [{ id: uuid('p-nee'), name: 'NextEra Energy', ticker: 'NEE' }],
+                },
+              ],
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.7 · KO · somme 40+30 = 70 %',
+      group: '4.7',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('mkt-wpg-ko-sum'),
+              name: 'WEIGHTED somme ≠ 100',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_PEERS',
+              comparisonOperator: '>=',
+              targetValue: '5',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              weightedPeerGroups: [
+                {
+                  id: uuid('g-bad-1'),
+                  name: 'Groupe A',
+                  weight: 40,
+                  peers: [{ id: uuid('p-bad-1'), name: 'Sanofi', ticker: 'SAN.PA' }],
+                },
+                {
+                  id: uuid('g-bad-2'),
+                  name: 'Groupe B',
+                  weight: 30,
+                  peers: [{ id: uuid('p-bad-2'), name: 'Pfizer', ticker: 'PFE' }],
+                },
+              ],
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.7 · KO · groupe sans peer',
+      group: '4.7',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('mkt-wpg-ko-empty-group'),
+              name: 'WEIGHTED groupe vide',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_REL_PEERS',
+              comparisonOperator: '>=',
+              targetValue: '5',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              weightedPeerGroups: [
+                {
+                  id: uuid('g-empty'),
+                  name: 'Groupe vide',
+                  weight: 100,
+                  peers: [],
+                },
+              ],
+            },
+          ],
+        }),
+    },
+
     // ----- Groupe 4.1 — squelette / structure -----
     {
       label: 'Désactivé',
@@ -914,17 +1097,19 @@ export function WizardStep4Sandbox() {
   const presets44 = presets.filter((p) => p.group === '4.4');
   const presets45 = presets.filter((p) => p.group === '4.5');
   const presets46 = presets.filter((p) => p.group === '4.6');
+  const presets47 = presets.filter((p) => p.group === '4.7');
 
   return (
     <div className="container mx-auto max-w-5xl space-y-6 px-4 py-8">
       <header className="space-y-1">
         <p className="text-muted-foreground font-mono text-xs uppercase">/dev — sandbox</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.6)</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.7)</h1>
         <p className="text-muted-foreground text-sm">
-          Squelette (4.1) + NON_MARKET (4.2) + SERVICE (4.3) + MARKET basique (4.4 : SHARE_PRICE /
-          TSR_ABS) + TSR_REL_INDEX (4.5) + TSR_REL_PEERS mode flat (4.6 : PeerGroupEditor). Le mode
-          WEIGHTED hiérarchique arrive au commit 4.7. Un changement de type ou de marketMetricType
-          purge automatiquement les champs orphelins (shouldUnregister + cleanConditionForType).
+          Squelette (4.1) + NON_MARKET (4.2) + SERVICE (4.3) + MARKET basique (4.4) + TSR_REL_INDEX
+          (4.5) + TSR_REL_PEERS flat (4.6) + TSR_REL_PEERS WEIGHTED (4.7 : groupes hiérarchiques
+          pondérés). Toggle Mode flat / Pondéré dans la branche TSR_REL_PEERS ; un switch purge
+          l’autre champ. Toutes les validations cross-field (somme = 100 %, peer requis, etc.) dans
+          le superRefine.
         </p>
       </header>
 
@@ -934,6 +1119,7 @@ export function WizardStep4Sandbox() {
       <PresetGroup title="Branche MARKET basique (4.4)" presets={presets44} />
       <PresetGroup title="Branche MARKET TSR_REL_INDEX (4.5)" presets={presets45} />
       <PresetGroup title="Branche MARKET TSR_REL_PEERS flat (4.6)" presets={presets46} />
+      <PresetGroup title="Branche MARKET TSR_REL_PEERS WEIGHTED (4.7)" presets={presets47} />
 
       <FormProvider {...methods}>
         <Step4Performance />
