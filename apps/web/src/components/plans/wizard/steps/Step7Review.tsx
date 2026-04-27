@@ -1,0 +1,421 @@
+'use client';
+
+import { useFormContext } from 'react-hook-form';
+import { CalendarDays, Clock, FileText, Layers, Sigma, TrendingUp, UserMinus } from 'lucide-react';
+import {
+  PLAN_TYPE_UI_LABELS,
+  PLAN_TYPES_REQUIRING_STRIKE,
+  ROLE_LABELS,
+  type PlanWizardData,
+  type WizardLeaverType,
+  type WizardLeaverTreatment,
+} from '@equity/shared';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+/**
+ * Step 7 — Récapitulatif (Module 3a §2.5).
+ *
+ * Affiche 6 cartes thématiques synthétisant les 6 étapes précédentes.
+ * Chaque carte est défensive : si la donnée n'est pas encore renseignée
+ * (par ex. parce que les Steps 3-6 ne sont pas encore implémentés ou
+ * parce que l'utilisateur a laissé des champs vides), on affiche un
+ * placeholder « À configurer dans l'étape … » plutôt qu'une erreur runtime.
+ *
+ * Le Step 7 est **lecture seule** — pour modifier, l'utilisateur clique
+ * sur une étape dans la sidebar du wizard.
+ */
+export function Step7Review() {
+  const { watch } = useFormContext<PlanWizardData>();
+  const data = watch();
+
+  return (
+    <section className="space-y-5" data-testid="step-7-review">
+      <p className="text-muted-foreground text-sm">
+        Vérifiez votre plan avant création. Chaque section reste modifiable depuis la sidebar.
+      </p>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PlanTypeCard data={data} />
+        <GeneralInfoCard data={data} />
+        <VestingCard data={data} />
+        <PerformanceCard data={data} />
+        <LeaversCard data={data} />
+        <ValuationCard data={data} />
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card 1 — Type de plan
+// ---------------------------------------------------------------------------
+function PlanTypeCard({ data }: { data: Partial<PlanWizardData> }) {
+  return (
+    <Card data-testid="review-plan-type">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Layers className="size-4" /> Type de plan
+        </CardTitle>
+        <CardDescription>Étape 1</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {data.planType ? (
+          <div className="space-y-1">
+            <p className="text-lg font-semibold tracking-tight">
+              {PLAN_TYPE_UI_LABELS[data.planType]}
+            </p>
+            <p className="text-muted-foreground font-mono text-xs">{data.planType}</p>
+          </div>
+        ) : (
+          <Placeholder>Sélectionnez un type de plan à l’étape 1.</Placeholder>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card 2 — Informations générales
+// ---------------------------------------------------------------------------
+function GeneralInfoCard({ data }: { data: Partial<PlanWizardData> }) {
+  const requiresStrike = data.planType ? PLAN_TYPES_REQUIRING_STRIKE.has(data.planType) : false;
+
+  return (
+    <Card data-testid="review-general-info">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FileText className="size-4" /> Informations générales
+        </CardTitle>
+        <CardDescription>Étape 2</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        {data.name ? (
+          <KeyValue label="Nom" value={data.name} />
+        ) : (
+          <Placeholder>Renseignez au moins le nom à l’étape 2.</Placeholder>
+        )}
+        {data.poolSize != null ? (
+          <KeyValue
+            label="Pool"
+            value={
+              <span className="font-mono">
+                {new Intl.NumberFormat('fr-FR').format(data.poolSize)} instruments
+              </span>
+            }
+          />
+        ) : null}
+        {requiresStrike && data.exercisePrice != null ? (
+          <KeyValue
+            label="Prix d’exercice"
+            value={<span className="font-mono">{formatEuro(data.exercisePrice)} / instrument</span>}
+          />
+        ) : null}
+        {data.boardDate ? (
+          <KeyValue label="Date du conseil" value={formatDateFr(data.boardDate)} />
+        ) : null}
+        {data.grantDate ? (
+          <KeyValue label="Date d’attribution" value={formatDateFr(data.grantDate)} />
+        ) : null}
+        {data.shareholderMeetingDate ? (
+          <KeyValue label="Date AGE" value={formatDateFr(data.shareholderMeetingDate)} />
+        ) : null}
+        {data.shareholderAuthorizationExpiresAt ? (
+          <KeyValue
+            label="Validité AGE"
+            value={formatDateFr(data.shareholderAuthorizationExpiresAt)}
+          />
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card 3 — Vesting (squelette défensif tant que Step 3 n'est pas livré)
+// ---------------------------------------------------------------------------
+function VestingCard({ data }: { data: Partial<PlanWizardData> }) {
+  return (
+    <Card data-testid="review-vesting">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CalendarDays className="size-4" /> Vesting
+        </CardTitle>
+        <CardDescription>Étape 3</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        {!data.vestingType ? (
+          <Placeholder>À configurer dans l’étape Vesting.</Placeholder>
+        ) : data.vestingType === 'single' ? (
+          <KeyValue
+            label="Type"
+            value={
+              <span>
+                <Badge variant="secondary" className="font-normal">
+                  Single
+                </Badge>{' '}
+                {data.singleVestingDate ? `· ${formatDateFr(data.singleVestingDate)}` : null}
+              </span>
+            }
+          />
+        ) : data.vestingType === 'tranches' ? (
+          <>
+            <KeyValue label="Type" value={<Badge variant="secondary">Tranches</Badge>} />
+            <KeyValue
+              label="Nombre de tranches"
+              value={(data.vestingTranches ?? []).length.toString()}
+            />
+            <KeyValue
+              label="Total %"
+              value={`${(data.vestingTranches ?? []).reduce((s, t) => s + t.percentage, 0).toFixed(1)} %`}
+            />
+          </>
+        ) : (
+          <>
+            <KeyValue label="Type" value={<Badge variant="secondary">Cliff + linéaire</Badge>} />
+            {data.cliffMonths != null ? (
+              <KeyValue label="Cliff" value={`${data.cliffMonths} mois`} />
+            ) : null}
+            {data.cliffPercentage != null ? (
+              <KeyValue label="% au cliff" value={`${data.cliffPercentage} %`} />
+            ) : null}
+            {data.totalMonths != null ? (
+              <KeyValue label="Durée totale" value={`${data.totalMonths} mois`} />
+            ) : null}
+            {data.frequency ? (
+              <KeyValue label="Fréquence" value={FREQUENCY_LABELS[data.frequency]} />
+            ) : null}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card 4 — Performance
+// ---------------------------------------------------------------------------
+function PerformanceCard({ data }: { data: Partial<PlanWizardData> }) {
+  return (
+    <Card data-testid="review-performance">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <TrendingUp className="size-4" /> Conditions de performance
+        </CardTitle>
+        <CardDescription>Étape 4</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        {data.hasPerformanceConditions == null ? (
+          <Placeholder>À configurer dans l’étape Performance.</Placeholder>
+        ) : !data.hasPerformanceConditions ? (
+          <KeyValue label="Activées" value={<Badge variant="outline">Non</Badge>} />
+        ) : (
+          <>
+            <KeyValue label="Activées" value={<Badge>Oui</Badge>} />
+            <KeyValue
+              label="Nombre de conditions"
+              value={(data.conditions ?? []).length.toString()}
+            />
+            {data.combinationType ? (
+              <KeyValue label="Combinaison" value={data.combinationType} />
+            ) : null}
+            {data.evaluationMoment ? (
+              <KeyValue label="Évaluation" value={EVAL_LABELS[data.evaluationMoment]} />
+            ) : null}
+            {data.failureAction ? (
+              <KeyValue label="Échec" value={FAILURE_LABELS[data.failureAction]} />
+            ) : null}
+            {data.combinationType === 'WEIGHTED' && data.conditions?.length ? (
+              <KeyValue
+                label="Total des poids"
+                value={`${data.conditions.reduce((s, c) => s + c.weight, 0).toFixed(0)} %`}
+              />
+            ) : null}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card 5 — Leavers
+// ---------------------------------------------------------------------------
+function LeaversCard({ data }: { data: Partial<PlanWizardData> }) {
+  const leaverEntries = data.leaverRules ? Object.entries(data.leaverRules) : [];
+
+  return (
+    <Card data-testid="review-leavers">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <UserMinus className="size-4" /> Règles de départ
+        </CardTitle>
+        <CardDescription>Étape 5</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        {leaverEntries.length === 0 ? (
+          <Placeholder>À configurer dans l’étape Départs.</Placeholder>
+        ) : (
+          <ul className="space-y-1.5">
+            {leaverEntries.map(([leaverType, rule]) => {
+              if (!rule) return null;
+              return (
+                <li
+                  key={leaverType}
+                  className="flex items-center justify-between gap-2 border-b pb-1.5 last:border-0 last:pb-0"
+                >
+                  <span className="text-muted-foreground text-xs">
+                    {LEAVER_LABELS[leaverType as WizardLeaverType] ?? leaverType}
+                  </span>
+                  <Badge variant="secondary" className="font-normal">
+                    {LEAVER_TREATMENT_LABELS[rule.treatment]}
+                  </Badge>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card 6 — Valuation
+// ---------------------------------------------------------------------------
+function ValuationCard({ data }: { data: Partial<PlanWizardData> }) {
+  return (
+    <Card data-testid="review-valuation">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Sigma className="size-4" /> Valorisation
+        </CardTitle>
+        <CardDescription>Étape 6</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        {data.underlyingPrice == null ? (
+          <Placeholder>À configurer dans l’étape Valorisation.</Placeholder>
+        ) : (
+          <>
+            <KeyValue
+              label="Sous-jacent S₀"
+              value={
+                <span className="font-mono">
+                  {formatEuro(data.underlyingPrice)} {data.currency ?? 'EUR'}
+                </span>
+              }
+            />
+            {data.volatility != null ? (
+              <KeyValue label="Volatilité" value={`${data.volatility} %`} />
+            ) : null}
+            {data.riskFreeRate != null ? (
+              <KeyValue label="Taux sans risque" value={`${data.riskFreeRate} %`} />
+            ) : null}
+            {data.dividendYield != null ? (
+              <KeyValue label="Dividende" value={`${data.dividendYield} %`} />
+            ) : null}
+            {data.modelChoice ? (
+              <KeyValue label="Modèle" value={MODEL_LABELS[data.modelChoice]} />
+            ) : null}
+            {data.timeHorizonYears != null ? (
+              <KeyValue label="Horizon" value={`${data.timeHorizonYears} ans`} />
+            ) : null}
+            {data.modelChoice && data.modelChoice !== 'black_scholes' && data.numPaths != null ? (
+              <KeyValue
+                label="Trajectoires MC"
+                value={
+                  <span className="font-mono">
+                    <Clock className="mr-1 inline size-3" />
+                    {new Intl.NumberFormat('fr-FR').format(data.numPaths)}
+                  </span>
+                }
+              />
+            ) : null}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers d'affichage
+// ---------------------------------------------------------------------------
+function KeyValue({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className="text-right text-sm">{value}</span>
+    </div>
+  );
+}
+
+function Placeholder({ children }: { children: React.ReactNode }) {
+  return <p className="text-muted-foreground text-xs italic">{children}</p>;
+}
+
+function formatDateFr(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat('fr-FR', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
+function formatEuro(n: number): string {
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 4,
+  }).format(n);
+}
+
+const FREQUENCY_LABELS: Record<NonNullable<PlanWizardData['frequency']>, string> = {
+  monthly: 'Mensuelle',
+  quarterly: 'Trimestrielle',
+  annually: 'Annuelle',
+};
+
+const EVAL_LABELS: Record<NonNullable<PlanWizardData['evaluationMoment']>, string> = {
+  END: 'À l’échéance',
+  CONTINUOUS: 'Continue',
+  ANNUAL: 'Annuelle',
+};
+
+const FAILURE_LABELS: Record<NonNullable<PlanWizardData['failureAction']>, string> = {
+  FORFEIT: 'Forfait',
+  PARTIAL: 'Partiel',
+  DEFER: 'Report',
+};
+
+const MODEL_LABELS: Record<NonNullable<PlanWizardData['modelChoice']>, string> = {
+  auto: 'Auto (BS si pas de condition marché)',
+  black_scholes: 'Black-Scholes',
+  monte_carlo: 'Monte Carlo',
+};
+
+const LEAVER_LABELS: Record<WizardLeaverType, string> = {
+  resignation: 'Démission',
+  termination_cause: 'Licenciement (faute)',
+  termination_no_cause: 'Licenciement (sans faute)',
+  death: 'Décès',
+  retirement: 'Retraite',
+  company_sale: 'Cession de société',
+  mutual_agreement: 'Rupture conventionnelle',
+  end_of_contract: 'Fin de contrat',
+};
+
+const LEAVER_TREATMENT_LABELS: Record<WizardLeaverTreatment, string> = {
+  forfeit_all: 'Tout perdre',
+  keep_vested: 'Conserver acquis',
+  pro_rata: 'Pro rata',
+  accelerate: 'Accélération',
+  full_accelerate: 'Accélération totale',
+};
+
+// Suppress unused-import warning — ROLE_LABELS is exported for downstream forms
+void ROLE_LABELS;
