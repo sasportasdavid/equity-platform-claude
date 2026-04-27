@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { PeerGroupEditor } from './PeerGroupEditor';
+import { ReferencePriceConfig } from './ReferencePriceConfig';
 import { WeightedPeerGroupsEditor } from './WeightedPeerGroupsEditor';
 import { YahooIndexSearch } from './YahooIndexSearch';
 
@@ -236,6 +237,11 @@ export function MarketBranch({ index }: { index: number }) {
       {/* Branche TSR_REL_PEERS (commits 4.6 + 4.7) : toggle Mode flat
           (PeerGroupEditor) vs Mode WEIGHTED (WeightedPeerGroupsEditor). */}
       {condition.marketMetricType === 'TSR_REL_PEERS' ? <PeersBranch index={index} /> : null}
+
+      {/* Configuration des prix de référence Start/End (commit 4.8).
+          Affichée pour toutes les conditions MARKET dès qu'un sous-type
+          est sélectionné — chaque sous-type en a besoin pour le moteur. */}
+      {condition.marketMetricType ? <ReferencePriceConfig index={index} /> : null}
 
       {/* Auto-calc measurementPeriodYears (lecture seule). Hidden input
           synchronise le form state pour les Server Actions ; l'input

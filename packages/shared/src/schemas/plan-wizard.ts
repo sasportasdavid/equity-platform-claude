@@ -22,6 +22,9 @@ export const PLAN_WIZARD_LIMITS = {
   MAX_VESTING_TRANCHES: 60,
   MAX_PEER_GROUP: 30,
   MAX_PEER_GROUPS: 10,
+  MIN_AVERAGING_DAYS: 1,
+  MAX_AVERAGING_DAYS: 90,
+  MAX_REFERENCE_PRICE: 1_000_000,
   MAX_CONDITIONS: 10,
   MAX_CURVE_POINTS: 20,
   MIN_VOLATILITY: 1,
@@ -753,9 +756,108 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
           });
         }
       }
+
+      // ---- Step 4.8 — ReferencePriceConfig V5 ----
+      // Pour toute condition MARKET, les méthodes de prix Start et End
+      // sont obligatoires. Selon la méthode :
+      //   FIXED   → fixedPrice obligatoire (positif, ≤ 1 000 000)
+      //   AVERAGE → averagingDays obligatoire (entier 1–90)
+      //   SPOT    → pas de champ supplémentaire
+      validateReferencePrice(
+        ctx,
+        idx,
+        'start',
+        cond.startPriceMethod,
+        cond.startFixedPrice,
+        cond.startAveragingDays,
+      );
+      validateReferencePrice(
+        ctx,
+        idx,
+        'end',
+        cond.endPriceMethod,
+        cond.endFixedPrice,
+        cond.endAveragingDays,
+      );
     });
   }
 });
+
+function validateReferencePrice(
+  ctx: z.RefinementCtx,
+  conditionIdx: number,
+  side: 'start' | 'end',
+  method: ReferencePriceMethod | undefined,
+  fixedPrice: string | undefined,
+  averagingDays: string | undefined,
+) {
+  const sideLabel = side === 'start' ? 'début' : 'fin';
+  const methodPath = side === 'start' ? 'startPriceMethod' : 'endPriceMethod';
+  const fixedPath = side === 'start' ? 'startFixedPrice' : 'endFixedPrice';
+  const daysPath = side === 'start' ? 'startAveragingDays' : 'endAveragingDays';
+
+  if (!method) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['conditions', conditionIdx, methodPath],
+      message: `Méthode de prix de référence ${sideLabel} requise`,
+    });
+    return;
+  }
+  if (method === 'FIXED') {
+    const trimmed = (fixedPrice ?? '').trim();
+    if (trimmed.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['conditions', conditionIdx, fixedPath],
+        message: 'Prix fixé requis',
+      });
+      return;
+    }
+    const value = Number(trimmed);
+    if (!Number.isFinite(value) || value <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['conditions', conditionIdx, fixedPath],
+        message: 'Prix fixé invalide (nombre > 0)',
+      });
+    } else if (value > PLAN_WIZARD_LIMITS.MAX_REFERENCE_PRICE) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['conditions', conditionIdx, fixedPath],
+        message: `Prix fixé trop élevé (max ${PLAN_WIZARD_LIMITS.MAX_REFERENCE_PRICE.toLocaleString('fr-FR')})`,
+      });
+    }
+  }
+  if (method === 'AVERAGE') {
+    const trimmed = (averagingDays ?? '').trim();
+    if (trimmed.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['conditions', conditionIdx, daysPath],
+        message: 'Nombre de jours requis',
+      });
+      return;
+    }
+    const value = Number(trimmed);
+    if (!Number.isInteger(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['conditions', conditionIdx, daysPath],
+        message: 'Doit être un entier',
+      });
+    } else if (
+      value < PLAN_WIZARD_LIMITS.MIN_AVERAGING_DAYS ||
+      value > PLAN_WIZARD_LIMITS.MAX_AVERAGING_DAYS
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['conditions', conditionIdx, daysPath],
+        message: `Doit être entre ${PLAN_WIZARD_LIMITS.MIN_AVERAGING_DAYS} et ${PLAN_WIZARD_LIMITS.MAX_AVERAGING_DAYS} jours`,
+      });
+    }
+  }
+}
 
 export type PlanWizardData = z.infer<typeof planWizardSchema>;
 
@@ -916,6 +1018,18 @@ export const PERFORMANCE_THRESHOLD_LIMITS = {
   MAX_PCT_LOWER: 0,
   MAX_PCT_UPPER: 200,
 } as const;
+
+/**
+ * Labels FR pour les méthodes de prix de référence (commit 4.8).
+ * SPOT     = cours instantané à la date
+ * FIXED    = prix fixé manuellement (override)
+ * AVERAGE  = moyenne sur N jours précédant la date
+ */
+export const REFERENCE_PRICE_METHOD_UI_LABELS: Record<ReferencePriceMethod, string> = {
+  SPOT: 'Cours instantané (à la date)',
+  FIXED: 'Prix fixé manuellement',
+  AVERAGE: 'Moyenne sur N jours précédents',
+};
 
 /**
  * Champs spécifiques à chaque type de condition. Sert de source de vérité

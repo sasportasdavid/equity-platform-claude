@@ -32,7 +32,7 @@ function uuid(suffix: string) {
 
 type Preset = {
   label: string;
-  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5' | '4.6' | '4.7';
+  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5' | '4.6' | '4.7' | '4.8';
   apply: () => void;
 };
 
@@ -159,6 +159,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'SHARE_PRICE',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '200',
               targetUnit: '€',
@@ -188,6 +190,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_ABS',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '30',
               targetUnit: '%',
@@ -217,6 +221,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'SHARE_PRICE',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '200',
               targetUnit: '€',
@@ -245,6 +251,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_ABS',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '30',
               targetUnit: '%',
@@ -274,6 +282,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_ABS',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '30',
               targetUnit: '%',
@@ -305,6 +315,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_REL_INDEX',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '5',
               targetUnit: '%',
@@ -336,6 +348,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_REL_INDEX',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '10',
               targetUnit: '%',
@@ -367,6 +381,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_REL_INDEX',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>',
               targetValue: '0',
               targetUnit: '%',
@@ -398,6 +414,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_REL_INDEX',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '5',
               targetUnit: '%',
@@ -430,6 +448,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_REL_PEERS',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '5',
               targetUnit: '%',
@@ -465,6 +485,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_REL_PEERS',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '0',
               targetUnit: '%',
@@ -499,6 +521,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_REL_PEERS',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '5',
               targetUnit: '%',
@@ -529,6 +553,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_REL_PEERS',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '5',
               targetUnit: '%',
@@ -564,6 +590,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_REL_PEERS',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '5',
               targetUnit: '%',
@@ -613,6 +641,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_REL_PEERS',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '0',
               targetUnit: '%',
@@ -665,6 +695,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_REL_PEERS',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '5',
               targetUnit: '%',
@@ -708,6 +740,8 @@ export function WizardStep4Sandbox() {
               weight: 100,
               enablePartialScoring: true,
               marketMetricType: 'TSR_REL_PEERS',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
               comparisonOperator: '>=',
               targetValue: '5',
               targetUnit: '%',
@@ -721,6 +755,166 @@ export function WizardStep4Sandbox() {
                   peers: [],
                 },
               ],
+            },
+          ],
+        }),
+    },
+
+    // ----- Groupe 4.8 — ReferencePriceConfig V5 -----
+    {
+      label: '4.8 · SHARE_PRICE FIXED 100 / SPOT',
+      group: '4.8',
+      apply: () =>
+        applyPreset({
+          planType: 'STOCK_OPTION',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('rp-fixed-spot'),
+              name: 'Cours ≥ 200 € (start fixé 100, end SPOT)',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'SHARE_PRICE',
+              comparisonOperator: '>=',
+              targetValue: '200',
+              targetUnit: '€',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              startPriceMethod: 'FIXED',
+              startFixedPrice: '100',
+              endPriceMethod: 'SPOT',
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.8 · TSR_ABS AVERAGE 20 / AVERAGE 20',
+      group: '4.8',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'PARTIAL',
+          conditions: [
+            {
+              id: uuid('rp-avg-avg'),
+              name: 'TSR_ABS avec moyennes 20 jours',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_ABS',
+              comparisonOperator: '>=',
+              targetValue: '30',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              startPriceMethod: 'AVERAGE',
+              startAveragingDays: '20',
+              endPriceMethod: 'AVERAGE',
+              endAveragingDays: '20',
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.8 · KO · FIXED sans prix',
+      group: '4.8',
+      apply: () =>
+        applyPreset({
+          planType: 'STOCK_OPTION',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('rp-ko-fixed-noprice'),
+              name: 'FIXED sans valeur',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'SHARE_PRICE',
+              comparisonOperator: '>=',
+              targetValue: '200',
+              targetUnit: '€',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              startPriceMethod: 'FIXED',
+              endPriceMethod: 'SPOT',
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.8 · KO · AVERAGE 200 jours',
+      group: '4.8',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('rp-ko-avg-toolong'),
+              name: 'AVERAGE hors bornes',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_ABS',
+              comparisonOperator: '>=',
+              targetValue: '30',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              startPriceMethod: 'AVERAGE',
+              startAveragingDays: '200',
+              endPriceMethod: 'SPOT',
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.8 · KO · méthode start manquante',
+      group: '4.8',
+      apply: () =>
+        applyPreset({
+          planType: 'STOCK_OPTION',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('rp-ko-no-method'),
+              name: 'Méthode start absente',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'SHARE_PRICE',
+              comparisonOperator: '>=',
+              targetValue: '200',
+              targetUnit: '€',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              endPriceMethod: 'SPOT',
             },
           ],
         }),
@@ -1098,12 +1292,13 @@ export function WizardStep4Sandbox() {
   const presets45 = presets.filter((p) => p.group === '4.5');
   const presets46 = presets.filter((p) => p.group === '4.6');
   const presets47 = presets.filter((p) => p.group === '4.7');
+  const presets48 = presets.filter((p) => p.group === '4.8');
 
   return (
     <div className="container mx-auto max-w-5xl space-y-6 px-4 py-8">
       <header className="space-y-1">
         <p className="text-muted-foreground font-mono text-xs uppercase">/dev — sandbox</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.7)</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.8)</h1>
         <p className="text-muted-foreground text-sm">
           Squelette (4.1) + NON_MARKET (4.2) + SERVICE (4.3) + MARKET basique (4.4) + TSR_REL_INDEX
           (4.5) + TSR_REL_PEERS flat (4.6) + TSR_REL_PEERS WEIGHTED (4.7 : groupes hiérarchiques
@@ -1120,6 +1315,7 @@ export function WizardStep4Sandbox() {
       <PresetGroup title="Branche MARKET TSR_REL_INDEX (4.5)" presets={presets45} />
       <PresetGroup title="Branche MARKET TSR_REL_PEERS flat (4.6)" presets={presets46} />
       <PresetGroup title="Branche MARKET TSR_REL_PEERS WEIGHTED (4.7)" presets={presets47} />
+      <PresetGroup title="ReferencePriceConfig V5 (4.8)" presets={presets48} />
 
       <FormProvider {...methods}>
         <Step4Performance />
