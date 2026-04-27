@@ -326,16 +326,53 @@ export const step4Schema = z.object({
 export type Step4Data = z.infer<typeof step4Schema>;
 
 // ---------------------------------------------------------------------------
-// Step 5 — Leavers (squelette)
+// Step 5 — Leavers
 // ---------------------------------------------------------------------------
-export const leaverRulesSchema = z.record(
-  LeaverTypeEnum,
-  z.object({
-    treatment: LeaverTreatmentEnum,
-    accelerationMonths: z.number().int().min(0).optional(),
-    exerciseWindowDays: z.number().int().min(0).optional(),
-  }),
+// Une règle par leaver type — chaque entrée est optionnelle (les types
+// non définis sont traités comme `forfeit_all` par défaut côté Server
+// Action / moteur Monte Carlo).
+//
+// `accelerationMonths` et `exerciseWindowDays` utilisent `z.preprocess`
+// pour tolérer le NaN renvoyé par RHF quand l'input number est vide
+// (`valueAsNumber: true`). Sans ça, l'erreur Zod par défaut « Invalid
+// input: expected number, received NaN » masquerait le message FR
+// émis par le superRefine.
+const optionalCount = (max: number) =>
+  z.preprocess(
+    (v) => (v === '' || v == null || (typeof v === 'number' && Number.isNaN(v)) ? undefined : v),
+    z.number().int().min(0).max(max).optional(),
+  );
+
+// Le composant Step5Leavers rend `<select value={treatment ?? ''}>` ce
+// qui fait que RHF stocke `{ treatment: '' }` pour les types non
+// renseignés. On preprocess pour traiter ces objets comme `undefined`
+// (= "pas de règle, défaut forfeit_all côté Server Action").
+const leaverRuleSchema = z.preprocess(
+  (v) => {
+    if (!v || typeof v !== 'object') return v;
+    const obj = v as Record<string, unknown>;
+    if (obj.treatment === '' || obj.treatment == null) return undefined;
+    return v;
+  },
+  z
+    .object({
+      treatment: LeaverTreatmentEnum,
+      accelerationMonths: optionalCount(60),
+      exerciseWindowDays: optionalCount(3650),
+    })
+    .optional(),
 );
+
+export const leaverRulesSchema = z.object({
+  resignation: leaverRuleSchema,
+  termination_cause: leaverRuleSchema,
+  termination_no_cause: leaverRuleSchema,
+  death: leaverRuleSchema,
+  retirement: leaverRuleSchema,
+  company_sale: leaverRuleSchema,
+  mutual_agreement: leaverRuleSchema,
+  end_of_contract: leaverRuleSchema,
+});
 export type LeaverRulesInput = z.infer<typeof leaverRulesSchema>;
 
 export const step5Schema = z.object({
@@ -846,6 +883,40 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
       }
     });
   }
+
+  // ---- Step 5 — Leavers ----
+  // Validation cross-field : si le treatment est `accelerate`, on attend
+  // `accelerationMonths > 0` (sinon c'est `full_accelerate`). Pour les
+  // autres traitements, accelerationMonths n'a pas de sens.
+  // exerciseWindowDays : optionnel sauf cohérence (≥ 0 déjà validé par Zod).
+  if (data.leaverRules) {
+    for (const [leaverType, rule] of Object.entries(data.leaverRules)) {
+      if (!rule) continue;
+      if (rule.treatment === 'accelerate') {
+        if (rule.accelerationMonths == null || rule.accelerationMonths <= 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['leaverRules', leaverType, 'accelerationMonths'],
+            message: 'Mois d’accélération requis (> 0) pour ce traitement',
+          });
+        }
+      }
+      if (
+        (rule.treatment === 'forfeit_all' ||
+          rule.treatment === 'keep_vested' ||
+          rule.treatment === 'pro_rata' ||
+          rule.treatment === 'full_accelerate') &&
+        rule.accelerationMonths != null &&
+        rule.accelerationMonths > 0
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['leaverRules', leaverType, 'accelerationMonths'],
+          message: 'Mois d’accélération non applicables à ce traitement',
+        });
+      }
+    }
+  }
 });
 
 function validateReferencePrice(
@@ -1138,6 +1209,57 @@ const CONDITION_FIELDS_BY_TYPE: Record<
   ],
   SERVICE: [],
 };
+
+// ---------------------------------------------------------------------------
+// Step 5 — Métadonnées UI : leavers
+// ---------------------------------------------------------------------------
+
+export const LEAVER_TYPE_UI_LABELS: Record<WizardLeaverType, string> = {
+  resignation: 'Démission',
+  termination_cause: 'Licenciement pour faute',
+  termination_no_cause: 'Licenciement sans faute (économique)',
+  death: 'Décès',
+  retirement: 'Départ à la retraite',
+  company_sale: 'Cession de la société (change-of-control)',
+  mutual_agreement: 'Rupture conventionnelle',
+  end_of_contract: 'Fin de contrat (CDD, mission)',
+};
+
+/**
+ * Description courte du sens "business" de chaque leaver type, affichée
+ * sous le titre de chaque carte pour aider à choisir le traitement.
+ */
+export const LEAVER_TYPE_UI_DESCRIPTIONS: Record<WizardLeaverType, string> = {
+  resignation: 'Le bénéficiaire quitte volontairement l’entreprise.',
+  termination_cause: 'Faute grave ou lourde — généralement perte totale.',
+  termination_no_cause: 'Initiative employeur sans faute (motif économique, etc.).',
+  death: 'Décès du bénéficiaire — droits transférés aux ayants droit.',
+  retirement: 'Départ légal à la retraite.',
+  company_sale: 'Vente / fusion / IPO — souvent accélération automatique.',
+  mutual_agreement: 'Rupture conventionnelle négociée.',
+  end_of_contract: 'Fin naturelle de CDD / contrat de mission.',
+};
+
+export const LEAVER_TREATMENT_UI_LABELS: Record<WizardLeaverTreatment, string> = {
+  forfeit_all: 'Forfait total — tous les droits sont perdus',
+  keep_vested: 'Garde les droits acquis (vested) ; perte des non-acquis',
+  pro_rata: 'Pro-rata temporis — calcul au jour de départ',
+  accelerate: 'Accélération partielle (X mois supplémentaires)',
+  full_accelerate: 'Accélération totale — 100 % des droits acquis',
+};
+
+/**
+ * Heuristique : pour quels `planType` doit-on demander une fenêtre
+ * d'exercice (`exerciseWindowDays`) après le départ ? Les plans à
+ * exercice ont besoin de cette fenêtre pour que le bénéficiaire puisse
+ * encore exercer ses droits (lever ses options) après son départ.
+ */
+export const PLAN_TYPES_REQUIRING_EXERCISE_WINDOW: ReadonlySet<PlanWizardType> = new Set([
+  'BSPCE',
+  'STOCK_OPTION',
+  'BSA',
+  'SAR',
+]);
 
 /**
  * Champs partagés entre NON_MARKET et MARKET (mêmes noms de champs) mais
