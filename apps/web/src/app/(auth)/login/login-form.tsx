@@ -3,21 +3,38 @@
 import { useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AlertTriangle, Mail } from 'lucide-react';
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { sendMagicLink } from '@/server/actions/auth';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 /**
- * Magic-link login form (Module 2 §1.1, §5.2).
+ * Magic-link login form — flow PKCE côté CLIENT (Module 2 §1.1, §5.2).
  *
- * UX :
- *  1. L'utilisateur saisit son email, soumet
- *  2. Server Action `sendMagicLink` répond toujours `success` (no email enumeration)
- *  3. On affiche un état "Email envoyé" — l'utilisateur consulte sa boîte
- *  4. Le lien magique le redirige vers `/auth/callback?next=...` puis dashboard
+ * **Architecture (refacto Option B)** :
+ *  - L'envoi du magic link est fait DIRECTEMENT par le browser via
+ *    `supabase.auth.signInWithOtp(...)` — au lieu de passer par une
+ *    Server Action `sendMagicLink` qui utilisait `admin.generateLink`.
+ *  - Avec `flowType: 'pkce'` configuré sur `createSupabaseBrowserClient`,
+ *    Supabase pose un PKCE verifier en cookie au moment du submit. Le
+ *    pre-fetching Gmail / Apple Mail ne peut donc plus consommer le
+ *    code car il manque ce verifier côté serveur de mail.
+ *  - **`shouldCreateUser: false`** : pas de signup public — si l'email
+ *    n'existe pas, Supabase ne crée PAS de compte (l'inscription se
+ *    fait uniquement par invitation admin).
+ *
+ * **Trade-off accepté** : on perd le custom template Resend
+ * (template_magic_link_login). Supabase envoie son propre template
+ * configuré dans Dashboard > Authentication > Email Templates. Le
+ * template par défaut Supabase reste correct pour MVP. La Server Action
+ * `sendMagicLink` reste utilisée pour les invitations admin (template
+ * Resend custom préservé pour ce cas).
+ *
+ * **Anti email enumeration** : on affiche toujours "Email envoyé" peu
+ * importe le retour de Supabase (sauf network error pure). Si l'email
+ * n'existe pas, Supabase répond silencieusement (avec `shouldCreateUser:
+ * false`) — pas de leak.
  *
  * Le `redirectTo` est lu dans `?redirectTo=/some/path` (proxy.ts l'ajoute
  * automatiquement quand un user anon hit une route privée).
@@ -103,15 +120,39 @@ export function LoginForm() {
   function onSubmit(formData: FormData) {
     setErrors({});
     const email = String(formData.get('email') ?? '').trim();
-    const redirectTo = params.get('redirectTo') ?? undefined;
+    if (!email || !email.includes('@')) {
+      setErrors({ email: ['Adresse email invalide'] });
+      return;
+    }
+    const redirectToQuery = params.get('redirectTo');
+    const redirectTo = redirectToQuery?.startsWith('/') ? redirectToQuery : '/dashboard';
+    const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
+      redirectTo,
+    )}`;
 
     startTransition(async () => {
-      const result = await sendMagicLink({ email, redirectTo });
-      if (!result.success) {
-        toast.error(result.error);
-        setErrors({ email: [result.error] });
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: callbackUrl,
+          // Pas de signup public — l'inscription se fait par invitation
+          // admin (cf. Server Action `sendMagicLink` qui reste utilisée
+          // pour les invites avec template Resend).
+          shouldCreateUser: false,
+        },
+      });
+      // Anti email enumeration : on affiche toujours « Email envoyé »
+      // sauf en cas de network error purement technique. Supabase ne
+      // leak pas l'existence du compte tant que le code de retour n'est
+      // pas explicitement décodable côté client.
+      if (error && error.status && error.status >= 500) {
+        // Erreur serveur réelle → afficher
+        setErrors({ email: [`Erreur serveur (${error.status}). Réessayez dans un instant.`] });
         return;
       }
+      // 4xx Supabase (email inexistant, rate limit, etc.) → fake success
+      // pour ne pas leak.
       setSentTo(email);
     });
   }
