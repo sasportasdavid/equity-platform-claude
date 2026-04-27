@@ -72,6 +72,14 @@ export function MarketBranch({ index }: { index: number }) {
 
   // Auto-calc measurementPeriodYears depuis dates start/end (lecture seule
   // pour l'utilisateur — il agit sur les dates, pas sur la durée).
+  //
+  // Convention : Julian year (365.25 jours) — standard astronomique aussi
+  // utilisé en pratique IFRS 2 / Black-Scholes. La Banker's year (365)
+  // donne ~0.07 % de divergence sur 3 ans, négligeable pour le scoring
+  // mais peut décaler les Greeks de vol sur les Monte Carlo longs.
+  // FIXME(3a-server-action) : à aligner avec la convention exacte
+  // attendue par https://equity-gem-quant.fly.dev/compute/multi-tranche.
+  // Voir memory/module_3a_todos.md (section convention).
   const measurementYears = useMemo(() => {
     const start = condition?.performanceStartDate;
     const end = condition?.performanceEndDate;
@@ -85,10 +93,12 @@ export function MarketBranch({ index }: { index: number }) {
   // Persist en form state pour que les futures Server Actions / le moteur
   // Monte Carlo n'aient pas à recalculer. On écrit en string pour rester
   // homogène avec le typage Zod du champ (`string().optional()`).
+  // Précision : 6 décimales en form state pour le moteur Monte Carlo,
+  // l'UI affichera 2 décimales (3.00) pour la lisibilité.
   useEffect(() => {
     const target =
       measurementYears != null && Number.isFinite(measurementYears)
-        ? measurementYears.toFixed(4)
+        ? measurementYears.toFixed(6)
         : '';
     const current = condition?.measurementPeriodYears ?? '';
     if (target !== current) {
@@ -173,6 +183,13 @@ export function MarketBranch({ index }: { index: number }) {
       <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
         <div className="space-y-1.5">
           <Label htmlFor={`cond-${index}-market-target-value`}>Valeur cible *</Label>
+          {/* targetValue convention par marketMetricType :
+              - SHARE_PRICE       : prix absolu en EUR (ex : 200 = 200 €)
+              - TSR_ABS           : pourcentage absolu sans le « % » (ex : 30 = 30 %)
+              - TSR_REL_INDEX     : pourcentage absolu, sera converti en spread Base 100
+                (commit 4.5)        par le moteur Python (cf. handover V4.2 du moteur)
+              - TSR_REL_PEERS     : idem TSR_REL_INDEX
+                (commits 4.6/4.7) */}
           <Input
             id={`cond-${index}-market-target-value`}
             type="text"
