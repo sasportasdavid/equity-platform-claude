@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { LogOut } from 'lucide-react';
+import { LogOut, Settings } from 'lucide-react';
 import { OrgSwitcher } from '@/components/shared/org-switcher';
 import { ThemeToggle } from '@/components/shared/theme-toggle';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { requireUser } from '@/lib/auth/rbac';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { logout } from '@/server/actions/auth';
+import { cn } from '@/lib/utils';
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
@@ -41,6 +42,13 @@ export default async function DashboardLayout({ children }: { children: ReactNod
           <span className="text-muted-foreground hidden text-sm sm:inline" data-testid="user-email">
             {user.email}
           </span>
+          <Link
+            href="/dashboard/settings"
+            className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }))}
+            aria-label="Paramètres"
+          >
+            <Settings className="size-4" />
+          </Link>
           <ThemeToggle />
           <form action={logout}>
             <Button type="submit" variant="ghost" size="sm" data-testid="sign-out">

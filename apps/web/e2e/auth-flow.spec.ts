@@ -47,4 +47,17 @@ test.describe('Module 2 / Phase 3 — auth flow smoke', () => {
     await expect(page.getByText('Aucune organisation', { exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: /Créer une organisation/i })).toBeVisible();
   });
+
+  test('settings sub-routes redirect anon to /login', async ({ page }) => {
+    for (const path of [
+      '/dashboard/settings',
+      '/dashboard/settings/profile',
+      '/dashboard/settings/members',
+      '/dashboard/settings/organization',
+    ]) {
+      const response = await page.goto(path);
+      expect(response?.status(), `${path} response status`).toBeLessThan(400);
+      await expect(page).toHaveURL(/\/login(\?|$)/);
+    }
+  });
 });
