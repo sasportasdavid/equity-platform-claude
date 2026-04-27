@@ -5,8 +5,9 @@ import { useFormContext } from 'react-hook-form';
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import {
   CategoryEnum,
+  CONDITION_CATEGORY_UI_LABELS,
+  CONDITION_TYPE_UI_LABELS,
   ConditionTypeEnum,
-  type ConditionCategory,
   type ConditionType,
   type PerformanceConditionInput,
   type PlanWizardData,
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { NonMarketBranch } from './NonMarketBranch';
 
 /**
  * MODULE_03A_PLANS Step 4 — éditeur d'une condition individuelle.
@@ -33,19 +35,9 @@ import { cn } from '@/lib/utils';
  * complexité du fieldArray pour un cas où l'ordre n'a pas d'importance.
  */
 
-const CONDITION_TYPE_LABELS: Record<ConditionType, string> = {
-  MARKET: 'Marché',
-  NON_MARKET: 'Non-marché',
-  SERVICE: 'Service (présence)',
-};
-
-const CATEGORY_LABELS: Record<ConditionCategory, string> = {
-  FINANCIAL: 'Financière',
-  PRODUCT: 'Produit',
-  OPERATIONAL: 'Opérationnelle',
-  STRATEGIC: 'Stratégique',
-  ESG: 'ESG',
-};
+// Labels FR centralisés dans `@equity/shared` (réutilisés par sandbox + Step 7).
+const CONDITION_TYPE_LABELS = CONDITION_TYPE_UI_LABELS;
+const CATEGORY_LABELS = CONDITION_CATEGORY_UI_LABELS;
 
 export function ConditionEditor({
   index,
@@ -223,26 +215,28 @@ export function ConditionEditor({
             </div>
           </div>
 
-          {/* Sous-formulaire spécifique au type — placeholder commit 4.1.
-              Sera remplacé par les vraies branches dans les commits 4.2 → 4.10. */}
-          <PlaceholderTypeBranch type={condition.conditionType} />
+          {/* Sous-formulaire spécifique au type. NON_MARKET est livré au
+              commit 4.2 ; SERVICE et MARKET restent des placeholders en
+              attendant les commits 4.3 → 4.10. */}
+          <TypeBranch index={index} type={condition.conditionType} />
         </div>
       ) : null}
     </div>
   );
 }
 
-function PlaceholderTypeBranch({ type }: { type: ConditionType }) {
-  const message: Record<ConditionType, string> = {
-    NON_MARKET:
-      'Branche non-marché — métrique, valeur cible et seuils seront livrés au commit 4.2.',
+function TypeBranch({ index, type }: { index: number; type: ConditionType }) {
+  if (type === 'NON_MARKET') {
+    return <NonMarketBranch index={index} />;
+  }
+  const placeholder: Record<Exclude<ConditionType, 'NON_MARKET'>, string> = {
     SERVICE: 'Branche service — placeholder simple, livré au commit 4.3.',
     MARKET:
       'Branche marché (SHARE_PRICE / TSR_ABS / TSR_REL_INDEX / TSR_REL_PEERS) — livrés aux commits 4.4 → 4.10.',
   };
   return (
     <p className="text-muted-foreground rounded-md border border-dashed px-3 py-2 text-xs">
-      {message[type]}
+      {placeholder[type]}
     </p>
   );
 }

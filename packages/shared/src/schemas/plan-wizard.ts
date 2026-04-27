@@ -480,6 +480,114 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
       message: 'Le cliff ne peut pas dépasser la durée totale du vesting',
     });
   }
+
+  // ---- Step 4 — branche NON_MARKET ----
+  // Pour chaque condition de type NON_MARKET, on exige metric +
+  // comparisonOperator + targetValue (non vide). Le targetUnit reste
+  // optionnel : il sera auto-rempli côté UI à partir de
+  // NON_MARKET_METRIC_DEFAULT_UNITS, sauf pour USERS / CUSTOM où l'on
+  // demande à l'utilisateur de saisir explicitement (vérification ci-dessous).
+  // Les seuils thresholdMin / thresholdMax sont parsés en number et
+  // contraints aux bornes [0, 100] / [0, 200] avec la garantie min ≤ max.
+  if (data.hasPerformanceConditions && data.conditions) {
+    data.conditions.forEach((cond, idx) => {
+      if (cond.conditionType !== 'NON_MARKET') return;
+
+      if (!cond.metric) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'metric'],
+          message: 'Métrique obligatoire pour une condition non-marché',
+        });
+      }
+      if (!cond.comparisonOperator) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'comparisonOperator'],
+          message: 'Opérateur de comparaison requis',
+        });
+      }
+      const trimmedTarget = (cond.targetValue ?? '').trim();
+      if (trimmedTarget.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'targetValue'],
+          message: 'Valeur cible requise',
+        });
+      }
+
+      // Pour USERS et CUSTOM on n'a pas de défaut → exiger une unité.
+      if (cond.metric === 'USERS' || cond.metric === 'CUSTOM') {
+        const trimmedUnit = (cond.targetUnit ?? '').trim();
+        if (trimmedUnit.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['conditions', idx, 'targetUnit'],
+            message: 'Unité requise pour cette métrique (pas de défaut)',
+          });
+        }
+      }
+
+      // Seuils — on parse manuellement parce qu'ils sont stockés en string
+      // (input HTML number = string non-vide). On laisse passer null/empty.
+      const minRaw = cond.thresholdMin?.trim();
+      const maxRaw = cond.thresholdMax?.trim();
+      const minNum = minRaw ? Number(minRaw) : null;
+      const maxNum = maxRaw ? Number(maxRaw) : null;
+
+      if (minNum !== null && Number.isFinite(minNum)) {
+        if (
+          minNum < PERFORMANCE_THRESHOLD_LIMITS.MIN_PCT_LOWER ||
+          minNum > PERFORMANCE_THRESHOLD_LIMITS.MIN_PCT_UPPER
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['conditions', idx, 'thresholdMin'],
+            message: `Le seuil min doit être entre ${PERFORMANCE_THRESHOLD_LIMITS.MIN_PCT_LOWER} et ${PERFORMANCE_THRESHOLD_LIMITS.MIN_PCT_UPPER} %`,
+          });
+        }
+      } else if (minRaw) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'thresholdMin'],
+          message: 'Seuil min : nombre invalide',
+        });
+      }
+
+      if (maxNum !== null && Number.isFinite(maxNum)) {
+        if (
+          maxNum < PERFORMANCE_THRESHOLD_LIMITS.MAX_PCT_LOWER ||
+          maxNum > PERFORMANCE_THRESHOLD_LIMITS.MAX_PCT_UPPER
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['conditions', idx, 'thresholdMax'],
+            message: `Le seuil max doit être entre ${PERFORMANCE_THRESHOLD_LIMITS.MAX_PCT_LOWER} et ${PERFORMANCE_THRESHOLD_LIMITS.MAX_PCT_UPPER} %`,
+          });
+        }
+      } else if (maxRaw) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'thresholdMax'],
+          message: 'Seuil max : nombre invalide',
+        });
+      }
+
+      if (
+        minNum !== null &&
+        maxNum !== null &&
+        Number.isFinite(minNum) &&
+        Number.isFinite(maxNum) &&
+        minNum > maxNum
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', idx, 'thresholdMax'],
+          message: 'Le seuil max doit être ≥ au seuil min',
+        });
+      }
+    });
+  }
 });
 
 export type PlanWizardData = z.infer<typeof planWizardSchema>;
@@ -531,3 +639,75 @@ export const MIN_ACQUISITION_MONTHS_BY_TYPE: Record<PlanWizardType, number> = {
   ESOP: 12,
   SAR: 12,
 };
+
+// ---------------------------------------------------------------------------
+// Step 4 — Métadonnées UI : conditions de performance
+// ---------------------------------------------------------------------------
+
+/**
+ * Unité par défaut suggérée selon la métrique non-marché. Pré-remplit
+ * `targetUnit` quand l'utilisateur sélectionne une métrique. L'utilisateur
+ * peut écraser librement (champ texte). USERS et CUSTOM ont une chaîne
+ * vide : on laisse à l'utilisateur le soin de saisir l'unité (utilisateurs,
+ * dossiers traités, équipes formées…).
+ */
+export const NON_MARKET_METRIC_DEFAULT_UNITS: Record<NonMarketMetric, string> = {
+  EBITDA: '€',
+  REVENUE: '€',
+  NET_INCOME: '€',
+  USERS: '',
+  ARR: '€',
+  NPS: 'pts',
+  ESG_SCORE: 'pts',
+  CARBON: 'tCO2',
+  CUSTOM: '',
+};
+
+export const NON_MARKET_METRIC_UI_LABELS: Record<NonMarketMetric, string> = {
+  EBITDA: 'EBITDA',
+  REVENUE: 'Chiffre d’affaires',
+  NET_INCOME: 'Résultat net',
+  USERS: 'Utilisateurs',
+  ARR: 'ARR (revenu récurrent)',
+  NPS: 'NPS',
+  ESG_SCORE: 'Score ESG',
+  CARBON: 'Empreinte carbone',
+  CUSTOM: 'Métrique libre',
+};
+
+export const COMPARISON_OPERATOR_UI_LABELS: Record<ComparisonOperator, string> = {
+  '>=': '≥ (supérieur ou égal)',
+  '<=': '≤ (inférieur ou égal)',
+  '>': '> (strictement supérieur)',
+  '<': '< (strictement inférieur)',
+  '=': '= (égal à)',
+  '!=': '≠ (différent de)',
+};
+
+export const CONDITION_CATEGORY_UI_LABELS: Record<ConditionCategory, string> = {
+  FINANCIAL: 'Financière',
+  PRODUCT: 'Produit',
+  OPERATIONAL: 'Opérationnelle',
+  STRATEGIC: 'Stratégique',
+  ESG: 'ESG',
+};
+
+export const CONDITION_TYPE_UI_LABELS: Record<ConditionType, string> = {
+  MARKET: 'Marché',
+  NON_MARKET: 'Non-marché',
+  SERVICE: 'Service (présence)',
+};
+
+/**
+ * Bornes des seuils min/max d'une condition non-marché. Le seuil min
+ * représente le pourcentage de la cible à partir duquel le scoring
+ * commence (ex : 50 % → on commence à acquérir à mi-cible) ; le seuil
+ * max représente le pourcentage à partir duquel on est plafonné (ex :
+ * 120 % → tout dépassement au-delà n'augmente plus le scoring).
+ */
+export const PERFORMANCE_THRESHOLD_LIMITS = {
+  MIN_PCT_LOWER: 0,
+  MIN_PCT_UPPER: 100,
+  MAX_PCT_LOWER: 0,
+  MAX_PCT_UPPER: 200,
+} as const;
