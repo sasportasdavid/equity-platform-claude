@@ -12,16 +12,18 @@ import { Step4Performance } from '@/components/plans/wizard/steps/Step4Performan
  * (AND / OR / WEIGHTED) et le nombre de conditions.
  */
 
-// Module-scope counter pour générer des ids stables sans dépendre de
-// Date.now()/Math.random() pendant le render (lint impure-function).
-let __presetCounter = 0;
+// Fallback compteur pour environnements où crypto.randomUUID()
+// n'est pas dispo (très rare). Date.now() est exclu car Next 16
+// le détecte comme impur en render component.
+let presetCounter = 0;
 function uuid(suffix: string) {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
   }
-  __presetCounter += 1;
-  return `cond-${suffix}-${__presetCounter}`;
+  presetCounter += 1;
+  return `cond-${suffix}-${presetCounter}`;
 }
+
 export function WizardStep4Sandbox() {
   const methods = useForm<PlanWizardData>({
     resolver: zodResolver(planWizardSchema) as unknown as Resolver<PlanWizardData>,

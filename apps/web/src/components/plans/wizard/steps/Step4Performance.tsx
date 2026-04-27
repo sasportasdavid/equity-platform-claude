@@ -51,15 +51,17 @@ const FAILURE_LABELS: Record<FailureAction, string> = {
   DEFER: 'Report — Différer l’évaluation à la période suivante',
 };
 
-// Counter au scope module : fallback uuid sans appel impure dans le render.
-let __conditionCounter = 0;
+// Fallback compteur pour environnements où crypto.randomUUID()
+// n'est pas dispo (très rare). Date.now() est exclu car Next 16
+// le détecte comme impur en render component.
+let conditionCounter = 0;
 function blankCondition(): PerformanceConditionInput {
   let id: string;
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     id = crypto.randomUUID();
   } else {
-    __conditionCounter += 1;
-    id = `cond-fallback-${__conditionCounter}`;
+    conditionCounter += 1;
+    id = `cond-fallback-${conditionCounter}`;
   }
   return {
     id,
