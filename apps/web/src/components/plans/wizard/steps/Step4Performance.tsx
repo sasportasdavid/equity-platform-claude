@@ -238,16 +238,28 @@ export function Step4Performance() {
                 </div>
               )}
 
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addCondition}
-                disabled={conditions.length >= PLAN_WIZARD_LIMITS.MAX_CONDITIONS}
-                data-testid="add-condition"
-              >
-                <Plus className="size-4" /> Ajouter une condition
-              </Button>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addCondition}
+                  disabled={conditions.length >= PLAN_WIZARD_LIMITS.MAX_CONDITIONS}
+                  data-testid="add-condition"
+                >
+                  <Plus className="size-4" /> Ajouter une condition
+                </Button>
+                {conditions.length >= PLAN_WIZARD_LIMITS.MAX_CONDITIONS ? (
+                  <p
+                    className="text-muted-foreground text-xs"
+                    data-testid="add-condition-limit-message"
+                  >
+                    Limite atteinte ({PLAN_WIZARD_LIMITS.MAX_CONDITIONS} /{' '}
+                    {PLAN_WIZARD_LIMITS.MAX_CONDITIONS}). Supprimez une condition pour en ajouter
+                    une nouvelle.
+                  </p>
+                ) : null}
+              </div>
             </CardContent>
           </Card>
         </>
