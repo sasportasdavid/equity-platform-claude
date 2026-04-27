@@ -785,15 +785,14 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
       );
     });
 
-    // ---- Step 4.9 — AcquisitionScale mode CURVE ----
+    // ---- Step 4.9 + 4.10 — AcquisitionScale (CURVE et TIERS) ----
     // Validé pour TOUTES les conditions (MARKET + NON_MARKET) où une
-    // échelle est définie ; SERVICE n'expose pas le composant côté UI
-    // donc en pratique l'échelle restera undefined pour ce type. Bloc
-    // séparé du forEach MARKET (qui early-return) pour ne pas être
-    // limité au seul type MARKET.
+    // échelle est définie ; SERVICE n'expose pas le composant côté UI.
     data.conditions.forEach((cond, idx) => {
       const scale = cond.acquisitionScale;
-      if (scale && scale.mode === 'CURVE') {
+      if (!scale) return;
+
+      if (scale.mode === 'CURVE') {
         if (scale.points.length < 2) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -809,6 +808,38 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
               code: z.ZodIssueCode.custom,
               path: ['conditions', idx, 'acquisitionScale', 'points', i, 'threshold'],
               message: 'Le threshold doit être strictement supérieur au précédent',
+            });
+          }
+        }
+      }
+
+      if (scale.mode === 'TIERS') {
+        if (scale.tiers.length < 2) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['conditions', idx, 'acquisitionScale', 'tiers'],
+            message: 'Au moins 2 paliers requis pour définir une échelle TIERS',
+          });
+        }
+        scale.tiers.forEach((tier, tIdx) => {
+          if (tier.min >= tier.max) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['conditions', idx, 'acquisitionScale', 'tiers', tIdx, 'max'],
+              message: 'Le max doit être strictement supérieur au min',
+            });
+          }
+        });
+        // Vérifier que les tiers sont triés par `min` croissant et non
+        // chevauchants. On compare tier[i].min ≥ tier[i-1].max.
+        for (let i = 1; i < scale.tiers.length; i++) {
+          const prev = scale.tiers[i - 1];
+          const curr = scale.tiers[i];
+          if (prev && curr && curr.min < prev.max) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['conditions', idx, 'acquisitionScale', 'tiers', i, 'min'],
+              message: 'Les paliers ne doivent pas se chevaucher (min ≥ max du palier précédent)',
             });
           }
         }

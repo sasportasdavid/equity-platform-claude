@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { AcquisitionScaleChart } from './AcquisitionScaleChart';
 
 /**
  * MODULE_03A_PLANS Step 4.9 — éditeur d'échelle d'acquisition (mode CURVE).
@@ -21,8 +22,13 @@ import { cn } from '@/lib/utils';
  * correspondante quand la performance atteint le threshold. Entre 2
  * points consécutifs, l'acquisition est interpolée linéairement.
  *
- * Mode TIERS (paliers discrets) sera livré au commit 4.10 — pour l'instant
- * le toggle TIERS est désactivé avec mention « à venir ».
+ * Mode TIERS (paliers discrets, livré au commit 4.10) : chaque palier
+ * `[min, max]` mappe sur une `acquisition` constante. Aux frontières,
+ * l'acquisition saute (pas d'interpolation). Les tiers doivent être
+ * triés par `min` croissant et non chevauchants.
+ *
+ * Aperçu live via {@link AcquisitionScaleChart} (Recharts) : ligne
+ * linéaire pour CURVE, escalier `stepAfter` pour TIERS.
  *
  * Validations cross-field dans `planWizardSchema.superRefine` :
  *  - Mode CURVE : ≥ 2 points
@@ -60,6 +66,7 @@ export function AcquisitionScaleEditor({ index }: { index: number }) {
     | {
         message?: string;
         points?: { message?: string; [k: number]: PointError | undefined };
+        tiers?: { message?: string; [k: number]: TierError | undefined };
       }
     | undefined;
 
@@ -127,12 +134,13 @@ export function AcquisitionScaleEditor({ index }: { index: number }) {
         </Button>
       </div>
 
-      {/* Toggle Mode (CURVE / TIERS) — TIERS désactivé en 4.9 */}
+      {/* Toggle Mode (CURVE / TIERS) */}
       <div className="flex items-center gap-2">
         <Label className="text-muted-foreground text-xs">Mode :</Label>
         <div className="flex gap-1 rounded-md border p-0.5 text-sm">
           <button
             type="button"
+            onClick={() => switchMode('CURVE')}
             className={cn(
               'rounded px-3 py-1',
               scale.mode === 'CURVE'
@@ -146,12 +154,17 @@ export function AcquisitionScaleEditor({ index }: { index: number }) {
           </button>
           <button
             type="button"
-            disabled
-            title="Le mode TIERS sera livré au commit 4.10"
-            className="text-muted-foreground/60 cursor-not-allowed rounded px-3 py-1"
+            onClick={() => switchMode('TIERS')}
+            className={cn(
+              'rounded px-3 py-1',
+              scale.mode === 'TIERS'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-muted',
+            )}
             data-testid={`acquisition-mode-tiers-${index}`}
+            data-active={scale.mode === 'TIERS'}
           >
-            Paliers (TIERS) — à venir 4.10
+            Paliers (TIERS)
           </button>
         </div>
       </div>
@@ -169,13 +182,78 @@ export function AcquisitionScaleEditor({ index }: { index: number }) {
             )
           }
         />
-      ) : null}
+      ) : (
+        <TiersTable
+          index={index}
+          scale={scale}
+          error={scaleError?.tiers}
+          onChange={(nextTiers) =>
+            setValue(
+              `conditions.${index}.acquisitionScale`,
+              { mode: 'TIERS', tiers: nextTiers },
+              { shouldValidate: true, shouldDirty: true },
+            )
+          }
+        />
+      )}
 
       {scaleError?.message ? (
         <p className="text-destructive text-xs">{String(scaleError.message)}</p>
       ) : null}
+
+      <AcquisitionScaleChart scale={scale} />
     </div>
   );
+
+  function switchMode(next: 'CURVE' | 'TIERS') {
+    const current = scale;
+    if (!current || next === current.mode) return;
+    setValue(`conditions.${index}.acquisitionScale`, convertScaleMode(current, next), {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+  }
+}
+
+/**
+ * Conversion entre modes en préservant au mieux les données.
+ * CURVE → TIERS : crée un palier par paire de points consécutifs.
+ * TIERS → CURVE : crée 2 points par palier (début + fin).
+ * Si la conversion ne donne pas assez de points/paliers (< 2), on
+ * tombe sur un défaut sain (0/0 → 100/100 ou [0-100]/[100-200]).
+ */
+function convertScaleMode(scale: AcquisitionScale, next: 'CURVE' | 'TIERS'): AcquisitionScale {
+  if (next === 'CURVE' && scale.mode === 'TIERS') {
+    const points = scale.tiers.flatMap((t) => [
+      { threshold: t.min, acquisition: t.acquisition },
+      { threshold: t.max, acquisition: t.acquisition },
+    ]);
+    return {
+      mode: 'CURVE',
+      points: points.length >= 2 ? points : [blankPoint(0, 0), blankPoint(100, 100)],
+    };
+  }
+  if (next === 'TIERS' && scale.mode === 'CURVE') {
+    const tiers: Array<{ min: number; max: number; acquisition: number; label?: string }> = [];
+    for (let i = 0; i < scale.points.length - 1; i++) {
+      const p = scale.points[i];
+      const n = scale.points[i + 1];
+      if (p && n) {
+        tiers.push({ min: p.threshold, max: n.threshold, acquisition: p.acquisition });
+      }
+    }
+    return {
+      mode: 'TIERS',
+      tiers:
+        tiers.length >= 2
+          ? tiers
+          : [
+              { min: 0, max: 100, acquisition: 0 },
+              { min: 100, max: 200, acquisition: 100 },
+            ],
+    };
+  }
+  return scale;
 }
 
 type PointError = {
@@ -333,6 +411,174 @@ function CurvePointsTable({
         ) : (
           <p className="text-muted-foreground text-xs">
             Entre 2 points : interpolation linéaire. Threshold strictement croissant.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type TierError = {
+  min?: { message?: string };
+  max?: { message?: string };
+  acquisition?: { message?: string };
+};
+
+const MAX_TIERS = 10;
+
+function TiersTable({
+  index,
+  scale,
+  error,
+  onChange,
+}: {
+  index: number;
+  scale: Extract<AcquisitionScale, { mode: 'TIERS' }>;
+  error: { message?: string; [k: number]: TierError | undefined } | undefined;
+  onChange: (nextTiers: Extract<AcquisitionScale, { mode: 'TIERS' }>['tiers']) => void;
+}) {
+  const tiers = scale.tiers;
+  const atLimit = tiers.length >= MAX_TIERS;
+
+  function addTier() {
+    if (atLimit) return;
+    const last = tiers[tiers.length - 1];
+    const minNext = last ? last.max : 0;
+    const maxNext = Math.min(minNext + 25, 300);
+    onChange([...tiers, { min: minNext, max: maxNext, acquisition: 100, label: '' }]);
+  }
+
+  function removeTier(tIdx: number) {
+    onChange(tiers.filter((_, i) => i !== tIdx));
+  }
+
+  function updateTier(
+    tIdx: number,
+    patch: Partial<{ min: number; max: number; acquisition: number; label: string }>,
+  ) {
+    onChange(tiers.map((t, i) => (i === tIdx ? { ...t, ...patch } : t)));
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline justify-between">
+        <Label className="text-sm font-medium">
+          Paliers ({tiers.length} / {MAX_TIERS})
+        </Label>
+        {error?.message ? (
+          <p className="text-destructive text-xs">{String(error.message)}</p>
+        ) : null}
+      </div>
+      <div className="overflow-hidden rounded-md border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-muted-foreground text-xs uppercase">
+            <tr>
+              <th className="w-10 px-2 py-1.5 text-left font-medium">#</th>
+              <th className="px-2 py-1.5 text-left font-medium">Min (%)</th>
+              <th className="px-2 py-1.5 text-left font-medium">Max (%)</th>
+              <th className="px-2 py-1.5 text-left font-medium">Acquisition (%)</th>
+              <th className="px-2 py-1.5 text-left font-medium">Label</th>
+              <th className="w-10 px-2 py-1.5"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {tiers.map((t, tIdx) => {
+              const tErr = error?.[tIdx];
+              return (
+                <tr key={tIdx} className="border-t">
+                  <td className="text-muted-foreground px-2 py-1.5 font-mono text-xs">
+                    {tIdx + 1}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={200}
+                      step="any"
+                      value={t.min}
+                      onChange={(e) => updateTier(tIdx, { min: Number(e.target.value) })}
+                      aria-invalid={!!tErr?.min?.message}
+                      aria-label={`Min du palier ${tIdx + 1}`}
+                      className="h-7 font-mono"
+                    />
+                    {tErr?.min?.message ? (
+                      <p className="text-destructive mt-0.5 text-xs">{String(tErr.min.message)}</p>
+                    ) : null}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={300}
+                      step="any"
+                      value={t.max}
+                      onChange={(e) => updateTier(tIdx, { max: Number(e.target.value) })}
+                      aria-invalid={!!tErr?.max?.message}
+                      aria-label={`Max du palier ${tIdx + 1}`}
+                      className="h-7 font-mono"
+                    />
+                    {tErr?.max?.message ? (
+                      <p className="text-destructive mt-0.5 text-xs">{String(tErr.max.message)}</p>
+                    ) : null}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={200}
+                      step="any"
+                      value={t.acquisition}
+                      onChange={(e) => updateTier(tIdx, { acquisition: Number(e.target.value) })}
+                      aria-invalid={!!tErr?.acquisition?.message}
+                      aria-label={`Acquisition du palier ${tIdx + 1}`}
+                      className="h-7 font-mono"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="text"
+                      value={t.label ?? ''}
+                      onChange={(e) => updateTier(tIdx, { label: e.target.value })}
+                      placeholder="Ex : Cible"
+                      aria-label={`Label du palier ${tIdx + 1}`}
+                      className="h-7"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => removeTier(tIdx)}
+                      aria-label={`Supprimer le palier ${tIdx + 1}`}
+                    >
+                      <Trash2 className="text-destructive size-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex items-center gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addTier}
+          disabled={atLimit}
+          data-testid={`acquisition-tiers-add-${index}`}
+        >
+          <Plus className="size-4" /> Ajouter un palier
+        </Button>
+        {atLimit ? (
+          <p className="text-muted-foreground text-xs">
+            Limite atteinte ({MAX_TIERS} paliers max).
+          </p>
+        ) : (
+          <p className="text-muted-foreground text-xs">
+            Paliers contigus (min ≥ max précédent), pas d&apos;interpolation entre paliers.
           </p>
         )}
       </div>

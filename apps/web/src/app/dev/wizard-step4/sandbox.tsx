@@ -32,7 +32,7 @@ function uuid(suffix: string) {
 
 type Preset = {
   label: string;
-  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5' | '4.6' | '4.7' | '4.8' | '4.9';
+  group: '4.1' | '4.2' | '4.3' | '4.4' | '4.5' | '4.6' | '4.7' | '4.8' | '4.9' | '4.10';
   apply: () => void;
 };
 
@@ -1070,6 +1070,183 @@ export function WizardStep4Sandbox() {
         }),
     },
 
+    // ----- Groupe 4.10 — AcquisitionScale mode TIERS + chart -----
+    {
+      label: '4.10 · TIERS 3 paliers (0/50/100)',
+      group: '4.10',
+      apply: () =>
+        applyPreset({
+          planType: 'BSPCE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'PARTIAL',
+          conditions: [
+            {
+              id: uuid('as-tiers-3'),
+              name: 'EBITDA avec 3 paliers',
+              conditionType: 'NON_MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              metric: 'EBITDA',
+              comparisonOperator: '>=',
+              targetValue: '50000000',
+              targetUnit: '€',
+              acquisitionScale: {
+                mode: 'TIERS',
+                tiers: [
+                  { min: 0, max: 50, acquisition: 0, label: 'Plancher' },
+                  { min: 50, max: 100, acquisition: 50, label: 'Mi-cible' },
+                  { min: 100, max: 200, acquisition: 100, label: 'Cible+' },
+                ],
+              },
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.10 · TIERS 5 paliers progressifs',
+      group: '4.10',
+      apply: () =>
+        applyPreset({
+          planType: 'PERFORMANCE_SHARE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'PARTIAL',
+          conditions: [
+            {
+              id: uuid('as-tiers-5'),
+              name: 'TSR avec 5 paliers',
+              conditionType: 'MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              marketMetricType: 'TSR_ABS',
+              comparisonOperator: '>=',
+              targetValue: '30',
+              targetUnit: '%',
+              performanceStartDate: '2026-01-01',
+              performanceEndDate: '2029-01-01',
+              startPriceMethod: 'SPOT',
+              endPriceMethod: 'SPOT',
+              acquisitionScale: {
+                mode: 'TIERS',
+                tiers: [
+                  { min: 0, max: 60, acquisition: 0 },
+                  { min: 60, max: 80, acquisition: 25 },
+                  { min: 80, max: 100, acquisition: 75 },
+                  { min: 100, max: 120, acquisition: 100 },
+                  { min: 120, max: 200, acquisition: 150 },
+                ],
+              },
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.10 · KO · TIERS 1 seul palier',
+      group: '4.10',
+      apply: () =>
+        applyPreset({
+          planType: 'BSPCE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('as-tiers-ko-1'),
+              name: 'TIERS avec 1 seul palier',
+              conditionType: 'NON_MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              metric: 'EBITDA',
+              comparisonOperator: '>=',
+              targetValue: '50000000',
+              targetUnit: '€',
+              acquisitionScale: {
+                mode: 'TIERS',
+                tiers: [{ min: 0, max: 100, acquisition: 100 }],
+              },
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.10 · KO · TIERS chevauchants',
+      group: '4.10',
+      apply: () =>
+        applyPreset({
+          planType: 'BSPCE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('as-tiers-ko-overlap'),
+              name: 'TIERS avec paliers chevauchants',
+              conditionType: 'NON_MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              metric: 'EBITDA',
+              comparisonOperator: '>=',
+              targetValue: '50000000',
+              targetUnit: '€',
+              acquisitionScale: {
+                mode: 'TIERS',
+                tiers: [
+                  { min: 0, max: 100, acquisition: 50 },
+                  { min: 50, max: 150, acquisition: 100 }, // chevauche [0,100]
+                ],
+              },
+            },
+          ],
+        }),
+    },
+    {
+      label: '4.10 · KO · TIERS min ≥ max',
+      group: '4.10',
+      apply: () =>
+        applyPreset({
+          planType: 'BSPCE',
+          grantDate: '2026-01-01',
+          hasPerformanceConditions: true,
+          combinationType: 'AND',
+          evaluationMoment: 'END',
+          failureAction: 'FORFEIT',
+          conditions: [
+            {
+              id: uuid('as-tiers-ko-minmax'),
+              name: 'TIERS avec min ≥ max',
+              conditionType: 'NON_MARKET',
+              category: 'FINANCIAL',
+              weight: 100,
+              enablePartialScoring: true,
+              metric: 'EBITDA',
+              comparisonOperator: '>=',
+              targetValue: '50000000',
+              targetUnit: '€',
+              acquisitionScale: {
+                mode: 'TIERS',
+                tiers: [
+                  { min: 0, max: 50, acquisition: 0 },
+                  { min: 100, max: 100, acquisition: 100 }, // min === max
+                ],
+              },
+            },
+          ],
+        }),
+    },
+
     // ----- Groupe 4.1 — squelette / structure -----
     {
       label: 'Désactivé',
@@ -1444,12 +1621,13 @@ export function WizardStep4Sandbox() {
   const presets47 = presets.filter((p) => p.group === '4.7');
   const presets48 = presets.filter((p) => p.group === '4.8');
   const presets49 = presets.filter((p) => p.group === '4.9');
+  const presets410 = presets.filter((p) => p.group === '4.10');
 
   return (
     <div className="container mx-auto max-w-5xl space-y-6 px-4 py-8">
       <header className="space-y-1">
         <p className="text-muted-foreground font-mono text-xs uppercase">/dev — sandbox</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.9)</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Step 4 — Performance (4.10)</h1>
         <p className="text-muted-foreground text-sm">
           Squelette (4.1) + NON_MARKET (4.2) + SERVICE (4.3) + MARKET basique (4.4) + TSR_REL_INDEX
           (4.5) + TSR_REL_PEERS flat (4.6) + TSR_REL_PEERS WEIGHTED (4.7 : groupes hiérarchiques
@@ -1468,6 +1646,7 @@ export function WizardStep4Sandbox() {
       <PresetGroup title="Branche MARKET TSR_REL_PEERS WEIGHTED (4.7)" presets={presets47} />
       <PresetGroup title="ReferencePriceConfig V5 (4.8)" presets={presets48} />
       <PresetGroup title="AcquisitionScale CURVE (4.9)" presets={presets49} />
+      <PresetGroup title="AcquisitionScale TIERS + chart (4.10)" presets={presets410} />
 
       <FormProvider {...methods}>
         <Step4Performance />
