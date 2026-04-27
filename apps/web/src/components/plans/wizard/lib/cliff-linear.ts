@@ -48,14 +48,19 @@ export function generateCliffLinearTranches(
   if (!grantDate) return [];
   if (!Number.isFinite(cliffMonths) || cliffMonths < 0) return [];
   if (!Number.isFinite(cliffPercentage) || cliffPercentage < 0 || cliffPercentage > 100) return [];
-  if (!Number.isFinite(totalMonths) || totalMonths <= cliffMonths) return [];
+  // totalMonths < cliffMonths est invalide. L'égalité (totalMonths ===
+  // cliffMonths) est légale et représente un "cliff sans paliers" :
+  // une seule tranche au cliff date, ramenée à 100 % par drift correction
+  // si cliffPercentage < 100.
+  if (!Number.isFinite(totalMonths) || totalMonths < cliffMonths) return [];
 
   const start = parseIsoDate(grantDate);
   if (!start) return [];
 
   const interval = FREQ_INTERVAL_MONTHS[frequency];
-  const postCliffMonths = totalMonths - cliffMonths;
-  const numPostTranches = Math.max(1, Math.floor(postCliffMonths / interval));
+  const postCliffMonths = Math.max(0, totalMonths - cliffMonths);
+  const numPostTranches =
+    postCliffMonths === 0 ? 0 : Math.max(1, Math.floor(postCliffMonths / interval));
   const remainingPercentage = 100 - cliffPercentage;
   const perTranche = numPostTranches > 0 ? remainingPercentage / numPostTranches : 0;
 

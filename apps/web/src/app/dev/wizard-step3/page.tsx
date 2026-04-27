@@ -8,18 +8,13 @@ export const metadata: Metadata = {
 /**
  * Sandbox de prévisualisation pour Step3Vesting.
  *
- * NE PAS exposer en prod : la page renvoie un message neutre via le check
- * `NODE_ENV !== 'production'` ci-dessous. NB : en App Router Next 16 les
- * dossiers commençant par `_` sont des "private folders" et ne deviennent
- * PAS des routes — on utilise donc `dev/` (sans underscore) plus le
- * NODE_ENV check pour fail-safe.
+ * Garde-fou prod centralisé dans `app/dev/layout.tsx` (404 en
+ * production sauf si ENABLE_DEV_SANDBOX=true). Cette page est donc
+ * inconditionnellement la sandbox.
  *
- * Sert uniquement à valider visuellement le rendu du wizard step avant de
- * monter le wizard container complet (Module 3a §2.3, à venir).
+ * Sert uniquement à valider visuellement le rendu du wizard step avant
+ * de monter le wizard container complet (Module 3a §2.3).
  */
 export default function DevWizardStep3Page() {
-  if (process.env.NODE_ENV === 'production') {
-    return <div className="text-muted-foreground p-12 text-center text-sm">Indisponible.</div>;
-  }
   return <WizardStep3Sandbox />;
 }

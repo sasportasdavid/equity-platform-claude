@@ -402,11 +402,28 @@ const planWizardBase = step1Schema
  *  - `singleVestingDate > grantDate` (Step 3 single + Step 2 grantDate)
  *  - mode `tranches` : somme des % = 100 (déjà appliqué dans step3Schema
  *    discriminated union, mais on dépend ici de l'array partial)
- *  - mode `cliff_linear` : cliffMonths < totalMonths
+ *  - mode `cliff_linear` : cliffMonths ≤ totalMonths
  *
  * Tous les checks sont attachés au schéma global parce qu'ils croisent des
  * champs de plusieurs étapes ; les step-schemas individuels restent
  * réutilisables pour `methods.trigger(stepFields)`.
+ *
+ * ⚠️ Tension input/output Zod (à connaître côté wizard / Server Actions) :
+ *
+ * Plusieurs champs déclarent `.default(...)` (`useAntithetic`, `numPaths`,
+ * `currency`, `volMethod`, `enablePartialScoring`, etc.). Conséquence :
+ *   - `z.input<typeof planWizardSchema>`  → ces champs sont OPTIONNELS
+ *     (l'utilisateur n'a pas à les fournir, le default s'applique au parse)
+ *   - `z.output<typeof planWizardSchema>` (= `PlanWizardData` exporté ici)
+ *     → ces champs sont REQUIS (après application des defaults)
+ *
+ * Le `zodResolver(planWizardSchema)` du frontend renvoie `Resolver<input>`,
+ * mais `useForm<PlanWizardData>()` (= output) attend `Resolver<output>` →
+ * mismatch, d'où le cast `as unknown as Resolver<PlanWizardData>` qu'on
+ * trouve dans le sandbox et qu'on retrouvera dans le wizard container.
+ *
+ * Côté Server Actions, on parse en sortie (output), donc on récupère
+ * directement `PlanWizardData` avec tous les defaults appliqués.
  */
 export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
   // single — date de vesting > date de grant
@@ -447,17 +464,20 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
     }
   }
 
-  // cliff_linear — cliffMonths < totalMonths
+  // cliff_linear — cliffMonths ≤ totalMonths.
+  // L'égalité représente un cliff unique sans paliers post-cliff (cas
+  // dégénéré mais légal — generateCliffLinearTranches le supporte en
+  // renvoyant 1 tranche au cliff date, drift-corrected à 100 %).
   if (
     data.vestingType === 'cliff_linear' &&
     data.cliffMonths != null &&
     data.totalMonths != null &&
-    data.cliffMonths >= data.totalMonths
+    data.cliffMonths > data.totalMonths
   ) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['cliffMonths'],
-      message: 'Le cliff doit être strictement inférieur à la durée totale du vesting',
+      message: 'Le cliff ne peut pas dépasser la durée totale du vesting',
     });
   }
 });
