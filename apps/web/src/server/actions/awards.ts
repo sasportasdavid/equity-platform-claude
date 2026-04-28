@@ -1,0 +1,593 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
+import {
+  AWARD_MODIFICATION_TYPES,
+  awardStatusSchema,
+  bulkAwardImportSchema,
+  cancelAwardSchema,
+  createAwardSchema,
+  createModificationSchema,
+  forfeitAwardSchema,
+  transitionAwardSchema,
+  updateAwardDraftSchema,
+  uuidSchema,
+  type AwardStatus,
+  type BulkAwardImportInput,
+  type CancelAwardInput,
+  type CreateAwardInput,
+  type CreateModificationInput,
+  type ForfeitAwardInput,
+  type TransitionAwardInput,
+  type UpdateAwardDraftInput,
+} from '@equity/shared';
+import { logAuditEvent } from '@/lib/audit';
+import { hasPermission, requirePermission } from '@/lib/auth/rbac';
+import {
+  canTransition,
+  isCancellable,
+  timestampFieldForStatus,
+} from '@/lib/stateMachines/awardStateMachine';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
+
+/**
+ * Module 3b — Server Actions pour le lifecycle des awards.
+ *
+ * 8 actions (cf. spec §5.1) :
+ *   - createAwardDraft / updateAwardDraft / loadAward
+ *   - transitionAward (pivot state machine)
+ *   - cancelAward (wrapper transitionAward → CANCELLED)
+ *   - forfeitAward (wrapper transitionAward → FORFEITED + metadata leaver)
+ *   - bulkCreateAwards (CSV import via RPC bulk_create_awards)
+ *   - createAwardModification (IFRS 2.27-28 modifications post-grant)
+ *
+ * Pattern de retour uniforme :
+ *   { ok: true, ... } | { ok: false, error: string, validationIssues?: number }
+ *
+ * Toutes les actions :
+ *   1. Zod parse → return validation error si KO
+ *   2. requirePermission appropriée
+ *   3. SELECT FOR UPDATE row-lock pour transitionAward (anti-race)
+ *   4. Audit (best-effort, non-bloquant)
+ *   5. revalidatePath des routes impactées
+ */
+
+// ---------------------------------------------------------------------------
+// Types de retour communs
+// ---------------------------------------------------------------------------
+
+export type ActionOk<T> = { ok: true } & T;
+export type ActionError = { ok: false; error: string; validationIssues?: number };
+/** Réponse void — pas de payload data. */
+export type ActionVoid = { ok: true } | ActionError;
+
+function validationError<T>(err: z.ZodError): ActionError {
+  return {
+    ok: false,
+    error: `Validation échouée : ${err.issues.length} erreur(s)`,
+    validationIssues: err.issues.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 1. createAwardDraft — appelle RPC create_award_full
+// ---------------------------------------------------------------------------
+
+export type CreateAwardOk = ActionOk<{ id: string; awardNumber: string }>;
+export type CreateAwardResult = CreateAwardOk | ActionError;
+
+export async function createAwardDraft(input: unknown): Promise<CreateAwardResult> {
+  const parsed = createAwardSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+
+  const data = parsed.data;
+  const user = await requirePermission('awards.propose');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const supabase = await createSupabaseServerClient();
+
+  const { data: rpcResult, error: rpcError } = await supabase.rpc('create_award_full', {
+    p_data: {
+      planId: data.planId,
+      beneficiaryId: data.beneficiaryId,
+      unitsGranted: data.unitsGranted,
+      exercisePrice: data.exercisePrice ?? '',
+      grantDate: data.grantDate,
+      vestingStartDate: data.vestingStartDate ?? '',
+      expiryDate: data.expiryDate ?? '',
+      acceptanceDeadline: data.acceptanceDeadline ?? '',
+      initialStatus: data.initialStatus,
+    } as never,
+  });
+
+  if (rpcError) return { ok: false, error: rpcError.message };
+  const newId = rpcResult as unknown as string | null;
+  if (!newId) return { ok: false, error: 'RPC create_award_full sans id retour' };
+
+  // Récupérer l'award_number pour le retour API (le RPC ne le renvoie pas)
+  const { data: row } = await supabase
+    .from('awards')
+    .select('award_number')
+    .eq('id', newId)
+    .maybeSingle();
+
+  revalidatePath('/dashboard/awards');
+  revalidatePath(`/dashboard/plans/${data.planId}`);
+
+  return { ok: true, id: newId, awardNumber: row?.award_number ?? '' };
+}
+
+// ---------------------------------------------------------------------------
+// 2. updateAwardDraft — UPDATE direct, refuse si status != DRAFT
+// ---------------------------------------------------------------------------
+
+export async function updateAwardDraft(
+  awardId: string,
+  patch: unknown,
+): Promise<ActionVoid | ActionError> {
+  const idCheck = uuidSchema.safeParse(awardId);
+  if (!idCheck.success) return { ok: false, error: 'award_id invalide' };
+  const patchCheck = updateAwardDraftSchema.safeParse(patch);
+  if (!patchCheck.success) return validationError(patchCheck.error);
+
+  const user = await requirePermission('awards.propose');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const supabase = await createSupabaseServerClient();
+  const { data: existing } = await supabase
+    .from('awards')
+    .select('id, status, plan_id')
+    .eq('id', idCheck.data)
+    .maybeSingle();
+  if (!existing) return { ok: false, error: 'Award introuvable' };
+  if (existing.status !== 'DRAFT') {
+    return {
+      ok: false,
+      error: `Award en status ${existing.status} — édition possible uniquement en DRAFT`,
+    };
+  }
+
+  // Mapping camelCase → snake_case
+  const updateData: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  const p = patchCheck.data;
+  if (p.beneficiaryId !== undefined) updateData.beneficiary_id = p.beneficiaryId;
+  if (p.unitsGranted !== undefined) updateData.units_granted = p.unitsGranted;
+  if (p.exercisePrice !== undefined) updateData.exercise_price = p.exercisePrice;
+  if (p.grantDate !== undefined) updateData.grant_date = p.grantDate;
+  if (p.vestingStartDate !== undefined) updateData.vesting_start_date = p.vestingStartDate;
+  if (p.expiryDate !== undefined) updateData.expiry_date = p.expiryDate;
+  if (p.acceptanceDeadline !== undefined) updateData.acceptance_deadline = p.acceptanceDeadline;
+
+  const { error } = await supabase
+    .from('awards')
+    .update(updateData as never)
+    .eq('id', idCheck.data);
+  if (error) return { ok: false, error: error.message };
+
+  await logAuditEvent({
+    eventType: 'award.updated',
+    resourceType: 'AWARD',
+    resourceId: idCheck.data,
+    metadata: p as Record<string, unknown>,
+    userId: user.id,
+    userEmail: user.email,
+    orgId: user.activeOrgId,
+  });
+
+  revalidatePath('/dashboard/awards');
+  revalidatePath(`/dashboard/plans/${existing.plan_id}`);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// 3. loadAward — SELECT joint awards + plan + beneficiary + counts
+// ---------------------------------------------------------------------------
+
+export type AwardDetail = {
+  id: string;
+  awardNumber: string | null;
+  status: string;
+  unitsGranted: number;
+  unitsVested: number | null;
+  exercisePrice: number | null;
+  grantDate: string;
+  vestingStartDate: string | null;
+  expiryDate: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+  plan: { id: string; name: string; planType: string } | null;
+  beneficiary: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+  } | null;
+  vestingEventsCount: number;
+  modificationsCount: number;
+};
+
+export async function loadAward(
+  awardId: string,
+): Promise<ActionOk<{ award: AwardDetail }> | ActionError> {
+  const idCheck = uuidSchema.safeParse(awardId);
+  if (!idCheck.success) return { ok: false, error: 'award_id invalide' };
+
+  const can = await hasPermission('awards.read.all');
+  if (!can) return { ok: false, error: 'Permission awards.read.all requise' };
+
+  const supabase = await createSupabaseServerClient();
+  const { data: row, error } = await supabase
+    .from('awards')
+    .select(
+      `id, award_number, status, units_granted, units_vested, exercise_price, grant_date,
+       vesting_start_date, expiry_date, created_at, updated_at,
+       plan:plans!awards_plan_id_fkey ( id, name, plan_type ),
+       beneficiary:beneficiaries!awards_beneficiary_id_fkey ( id, first_name, last_name, email )`,
+    )
+    .eq('id', idCheck.data)
+    .maybeSingle();
+
+  if (error || !row) return { ok: false, error: error?.message ?? 'Award introuvable' };
+
+  const [{ count: veCount }, { count: modCount }] = await Promise.all([
+    supabase
+      .from('vesting_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('award_id', idCheck.data),
+    supabase
+      .from('award_modifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('award_id', idCheck.data),
+  ]);
+
+  return {
+    ok: true,
+    award: {
+      id: row.id,
+      awardNumber: row.award_number,
+      status: row.status,
+      unitsGranted: Number(row.units_granted),
+      unitsVested: row.units_vested != null ? Number(row.units_vested) : null,
+      exercisePrice: row.exercise_price != null ? Number(row.exercise_price) : null,
+      grantDate: row.grant_date,
+      vestingStartDate: row.vesting_start_date,
+      expiryDate: row.expiry_date,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      plan: row.plan
+        ? { id: row.plan.id, name: row.plan.name, planType: row.plan.plan_type }
+        : null,
+      beneficiary: row.beneficiary
+        ? {
+            id: row.beneficiary.id,
+            firstName: row.beneficiary.first_name,
+            lastName: row.beneficiary.last_name,
+            email: row.beneficiary.email,
+          }
+        : null,
+      vestingEventsCount: veCount ?? 0,
+      modificationsCount: modCount ?? 0,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 4. transitionAward — la plus critique
+// ---------------------------------------------------------------------------
+// Permission mapping selon §2.4 :
+//   PROPOSED ← DRAFT          : awards.propose
+//   PENDING_APPROVAL ← *      : awards.propose
+//   APPROVED ← PENDING_APPROVAL : awards.approve
+//   BOARD_APPROVED ← PENDING_BOARD : awards.board.approve (fallback awards.approve V1)
+//   PENDING_SIGNATURE ← *     : awards.propose
+//   GRANTED ← PENDING_SIGNATURE : awards.propose (admin flip manuel V1)
+//   * ← VESTING/POST          : awards.update (transitions cron)
+//   * → CANCELLED             : awards.cancel
+//   * → FORFEITED             : awards.modify
+
+function permissionForTransition(_from: AwardStatus, to: AwardStatus): string {
+  if (to === 'CANCELLED') return 'awards.cancel';
+  if (to === 'FORFEITED') return 'awards.modify';
+  if (to === 'APPROVED') return 'awards.approve';
+  if (to === 'BOARD_APPROVED') return 'awards.approve'; // V1 : fallback (awards.board.approve viendra B7)
+  // Tous les autres transitions (PROPOSED, PENDING_*, GRANTED…) → propose
+  return 'awards.propose';
+}
+
+export async function transitionAward(input: unknown): Promise<ActionVoid | ActionError> {
+  const parsed = transitionAwardSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+  const { awardId, toStatus, reason } = parsed.data;
+
+  const supabase = await createSupabaseServerClient();
+
+  // Charger l'award (pas de SELECT FOR UPDATE car Supabase JS ne l'expose pas
+  // — la course est très improbable côté UX, et les triggers DB attrapent
+  // les violations cohérence pool/lock).
+  const { data: award } = await supabase
+    .from('awards')
+    .select('id, status, plan_id, beneficiary_id, units_granted, units_vested, vesting_start_date')
+    .eq('id', awardId)
+    .maybeSingle();
+  if (!award) return { ok: false, error: 'Award introuvable' };
+
+  const fromStatus = award.status as AwardStatus;
+  if (!canTransition(fromStatus, toStatus)) {
+    return {
+      ok: false,
+      error: `Transition interdite : ${fromStatus} → ${toStatus}`,
+    };
+  }
+
+  // Permission check selon la transition cible
+  const requiredPerm = permissionForTransition(fromStatus, toStatus);
+  const user = await requirePermission(requiredPerm as never);
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  // Side-effect GRANTED → matérialiser vesting_events
+  if (toStatus === 'GRANTED') {
+    const { error: matError } = await supabase.rpc('materialize_vesting_events', {
+      p_award_id: awardId,
+    });
+    if (matError) {
+      return { ok: false, error: `materialize_vesting_events échoué : ${matError.message}` };
+    }
+  }
+
+  // UPDATE status + timestamp dédié si applicable
+  const updateData: Record<string, unknown> = {
+    status: toStatus,
+    updated_at: new Date().toISOString(),
+  };
+  const tsField = timestampFieldForStatus(toStatus);
+  if (tsField) updateData[tsField] = new Date().toISOString();
+  if (toStatus === 'CANCELLED' && reason) updateData.cancellation_reason = reason;
+
+  const { error: updError } = await supabase
+    .from('awards')
+    .update(updateData as never)
+    .eq('id', awardId);
+  if (updError) return { ok: false, error: updError.message };
+
+  await logAuditEvent({
+    eventType: 'award.status_changed',
+    resourceType: 'AWARD',
+    resourceId: awardId,
+    beforeState: { status: fromStatus },
+    afterState: { status: toStatus },
+    metadata: { from: fromStatus, to: toStatus, reason: reason ?? null },
+    userId: user.id,
+    userEmail: user.email,
+    orgId: user.activeOrgId,
+  });
+
+  revalidatePath('/dashboard/awards');
+  if (award.plan_id) revalidatePath(`/dashboard/plans/${award.plan_id}`);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// 5. cancelAward — wrapper transitionAward → CANCELLED
+// ---------------------------------------------------------------------------
+
+export async function cancelAward(input: unknown): Promise<ActionVoid | ActionError> {
+  const parsed = cancelAwardSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+  const { awardId, reason } = parsed.data;
+
+  const supabase = await createSupabaseServerClient();
+  const { data: award } = await supabase
+    .from('awards')
+    .select('status')
+    .eq('id', awardId)
+    .maybeSingle();
+  if (!award) return { ok: false, error: 'Award introuvable' };
+  if (!isCancellable(award.status as AwardStatus)) {
+    return {
+      ok: false,
+      error: `Award en status ${award.status} non cancellable (utilisez forfeitAward ou createAwardModification post-GRANTED)`,
+    };
+  }
+
+  return transitionAward({ awardId, toStatus: 'CANCELLED', reason });
+}
+
+// ---------------------------------------------------------------------------
+// 6. forfeitAward — wrapper transitionAward → FORFEITED
+// ---------------------------------------------------------------------------
+//
+// V1 — units_forfeited = units_granted - units_vested (les non-vested partent).
+// Le treatment fin (forfeit_all / keep_vested / pro_rata / accelerate)
+// par leaver_type sera géré au Module 9.
+
+export async function forfeitAward(input: unknown): Promise<ActionVoid | ActionError> {
+  const parsed = forfeitAwardSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+  const { awardId, leaverType, eventDate, reason } = parsed.data;
+
+  const supabase = await createSupabaseServerClient();
+  const { data: award } = await supabase
+    .from('awards')
+    .select('id, status, units_granted, units_vested, plan_id')
+    .eq('id', awardId)
+    .maybeSingle();
+  if (!award) return { ok: false, error: 'Award introuvable' };
+  if (!canTransition(award.status as AwardStatus, 'FORFEITED')) {
+    return { ok: false, error: `Award en status ${award.status} non forfeitable` };
+  }
+
+  const unitsForfeited = Math.max(0, Number(award.units_granted) - Number(award.units_vested ?? 0));
+
+  // Audit forfeit metadata avant la transition (pour avoir tous les détails)
+  const user = await requirePermission('awards.modify');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  await logAuditEvent({
+    eventType: 'award.forfeited',
+    resourceType: 'AWARD',
+    resourceId: awardId,
+    metadata: {
+      leaver_type: leaverType,
+      event_date: eventDate,
+      units_forfeited: unitsForfeited,
+      units_granted: Number(award.units_granted),
+      units_vested: Number(award.units_vested ?? 0),
+      reason: reason ?? null,
+    },
+    userId: user.id,
+    userEmail: user.email,
+    orgId: user.activeOrgId,
+  });
+
+  return transitionAward({
+    awardId,
+    toStatus: 'FORFEITED',
+    reason: reason ?? `Leaver event ${leaverType} @ ${eventDate}`,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 7. bulkCreateAwards — appelle RPC bulk_create_awards
+// ---------------------------------------------------------------------------
+
+export type BulkResult = ActionOk<{ created: number; awardIds: string[] }> | ActionError;
+
+export async function bulkCreateAwards(input: unknown): Promise<BulkResult> {
+  const parsed = bulkAwardImportSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+
+  const user = await requirePermission('awards.bulk_import');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const supabase = await createSupabaseServerClient();
+  // Pour V1, le RPC bulk_create_awards reçoit un array de payloads
+  // create_award_full directement (pas de upsert beneficiaries — Module 4).
+  // La spec §5.3 dit que le RPC fait l'upsert beneficiary par email ; on
+  // l'implémentera quand le RPC `upsert_beneficiary` arrive (Module 4).
+  // Pour l'instant : la rangée doit déjà avoir beneficiaryId (UUID) résolu
+  // côté caller (la transformation email→id se fera côté Server Action B6).
+  const rows = (parsed.data as BulkAwardImportInput).rows.map((r) => ({
+    planId: parsed.data.planId,
+    // ⚠️ V1 : on suppose les bénéficiaires déjà créés. B6 fera l'upsert email→id.
+    beneficiaryId: '', // À remplacer côté caller B6 après upsert
+    unitsGranted: r.unitsGranted,
+    exercisePrice: r.exercisePrice ?? '',
+    grantDate: r.grantDate,
+    vestingStartDate: r.vestingStartDate ?? '',
+    initialStatus: 'DRAFT',
+  }));
+
+  const { data: rpcResult, error } = await supabase.rpc('bulk_create_awards', {
+    p_rows: rows as never,
+  });
+  if (error) return { ok: false, error: error.message };
+  const result = rpcResult as { created: number; award_ids: string[] } | null;
+  if (!result) return { ok: false, error: 'Réponse bulk_create_awards inattendue' };
+
+  revalidatePath('/dashboard/awards');
+  return { ok: true, created: result.created, awardIds: result.award_ids ?? [] };
+}
+
+// ---------------------------------------------------------------------------
+// 8. createAwardModification — IFRS 2.27-28 modifications post-grant
+// ---------------------------------------------------------------------------
+
+export async function createAwardModification(
+  input: unknown,
+): Promise<ActionOk<{ modificationId: string }> | ActionError> {
+  const parsed = createModificationSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+  const { awardId, type, changes, reason, effectiveDate } = parsed.data;
+
+  const user = await requirePermission('awards.modify');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const supabase = await createSupabaseServerClient();
+
+  // before_snapshot : SELECT row complet de l'award au moment T
+  const { data: before } = await supabase
+    .from('awards')
+    .select('*')
+    .eq('id', awardId)
+    .maybeSingle();
+  if (!before) return { ok: false, error: 'Award introuvable' };
+
+  // after_snapshot : projection des `changes` sur le before
+  const after = { ...before, ...changes };
+
+  const { data: insRow, error: insError } = await supabase
+    .from('award_modifications')
+    .insert({
+      org_id: user.activeOrgId,
+      award_id: awardId,
+      modification_type: type,
+      effective_date: effectiveDate ?? new Date().toISOString().slice(0, 10),
+      before_snapshot: before as never,
+      after_snapshot: after as never,
+      reason,
+    })
+    .select('id')
+    .single();
+  if (insError || !insRow) {
+    return { ok: false, error: insError?.message ?? 'Insert award_modifications échoué' };
+  }
+
+  // has_modifications flag sur l'award
+  await supabase.from('awards').update({ has_modifications: true }).eq('id', awardId);
+
+  // Pour REPRICING / EXTENSION / ACCELERATION / ADDITIONAL_GRANT : trigger un
+  // valuation_run en QUEUED (le moteur Python recalcule l'incremental fair value).
+  // CANCELLATION : pas de re-valuation, c'est juste un soft-delete avec impact IFRS 2.
+  const requiresRevaluation = (
+    [
+      'REPRICING',
+      'EXTENSION',
+      'ACCELERATION',
+      'ADDITIONAL_GRANT',
+    ] as readonly (typeof AWARD_MODIFICATION_TYPES)[number][]
+  ).includes(type);
+  if (requiresRevaluation && before.plan_id) {
+    await supabase.from('valuation_runs').insert({
+      org_id: user.activeOrgId,
+      plan_id: before.plan_id,
+      status: 'QUEUED',
+      triggered_by: user.id,
+    });
+  }
+
+  await logAuditEvent({
+    eventType: 'award.modified',
+    resourceType: 'AWARD',
+    resourceId: awardId,
+    metadata: {
+      modification_id: insRow.id,
+      modification_type: type,
+      changes,
+      reason,
+      revaluation_queued: requiresRevaluation,
+    },
+    userId: user.id,
+    userEmail: user.email,
+    orgId: user.activeOrgId,
+  });
+
+  revalidatePath('/dashboard/awards');
+  return { ok: true, modificationId: insRow.id };
+}
+
+// ---------------------------------------------------------------------------
+// Re-exports utilitaires (pour Server Components qui veulent valider les inputs)
+// ---------------------------------------------------------------------------
+export {
+  awardStatusSchema,
+  type AwardStatus,
+  type CancelAwardInput,
+  type CreateAwardInput,
+  type CreateModificationInput,
+  type ForfeitAwardInput,
+  type TransitionAwardInput,
+  type UpdateAwardDraftInput,
+};
