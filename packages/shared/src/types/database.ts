@@ -1553,7 +1553,9 @@ export type Database = {
           id: string
           org_id: string | null
           parameters: Json | null
+          plan_id: string | null
           total_expense: number | null
+          valuation_run_id: string | null
         }
         Insert: {
           award_id?: string | null
@@ -1561,7 +1563,9 @@ export type Database = {
           id?: string
           org_id?: string | null
           parameters?: Json | null
+          plan_id?: string | null
           total_expense?: number | null
+          valuation_run_id?: string | null
         }
         Update: {
           award_id?: string | null
@@ -1569,7 +1573,9 @@ export type Database = {
           id?: string
           org_id?: string | null
           parameters?: Json | null
+          plan_id?: string | null
           total_expense?: number | null
+          valuation_run_id?: string | null
         }
         Relationships: [
           {
@@ -1577,6 +1583,20 @@ export type Database = {
             columns: ["award_id"]
             isOneToOne: false
             referencedRelation: "awards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ifrs2_expense_schedules_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ifrs2_expense_schedules_valuation_run_id_fkey"
+            columns: ["valuation_run_id"]
+            isOneToOne: false
+            referencedRelation: "valuation_runs"
             referencedColumns: ["id"]
           },
         ]
@@ -2750,23 +2770,50 @@ export type Database = {
       valuation_results: {
         Row: {
           audit_data: Json | null
+          ci95_high: number | null
+          ci95_low: number | null
           computed_at: string
+          distribution_stats: Json | null
           fair_value: number | null
+          fair_value_per_instrument: number | null
+          fair_value_total: number | null
           id: string
+          market_data_snapshot: Json | null
+          org_id: string | null
+          sensitivities: Json | null
+          std_error: number | null
           valuation_run_id: string
         }
         Insert: {
           audit_data?: Json | null
+          ci95_high?: number | null
+          ci95_low?: number | null
           computed_at?: string
+          distribution_stats?: Json | null
           fair_value?: number | null
+          fair_value_per_instrument?: number | null
+          fair_value_total?: number | null
           id?: string
+          market_data_snapshot?: Json | null
+          org_id?: string | null
+          sensitivities?: Json | null
+          std_error?: number | null
           valuation_run_id: string
         }
         Update: {
           audit_data?: Json | null
+          ci95_high?: number | null
+          ci95_low?: number | null
           computed_at?: string
+          distribution_stats?: Json | null
           fair_value?: number | null
+          fair_value_per_instrument?: number | null
+          fair_value_total?: number | null
           id?: string
+          market_data_snapshot?: Json | null
+          org_id?: string | null
+          sensitivities?: Json | null
+          std_error?: number | null
           valuation_run_id?: string
         }
         Relationships: [
@@ -2783,11 +2830,13 @@ export type Database = {
         Row: {
           completed_at: string | null
           created_at: string
+          engine_version: string | null
           error_message: string | null
           id: string
           org_id: string | null
           parameters: Json | null
           plan_id: string | null
+          pricer_used: string | null
           results_json: Json | null
           simulation_config_id: string | null
           started_at: string | null
@@ -2797,11 +2846,13 @@ export type Database = {
         Insert: {
           completed_at?: string | null
           created_at?: string
+          engine_version?: string | null
           error_message?: string | null
           id?: string
           org_id?: string | null
           parameters?: Json | null
           plan_id?: string | null
+          pricer_used?: string | null
           results_json?: Json | null
           simulation_config_id?: string | null
           started_at?: string | null
@@ -2811,11 +2862,13 @@ export type Database = {
         Update: {
           completed_at?: string | null
           created_at?: string
+          engine_version?: string | null
           error_message?: string | null
           id?: string
           org_id?: string | null
           parameters?: Json | null
           plan_id?: string | null
+          pricer_used?: string | null
           results_json?: Json | null
           simulation_config_id?: string | null
           started_at?: string | null
@@ -3301,3 +3354,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+
