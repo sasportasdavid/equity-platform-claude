@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import {
   STANDARD_FR_LEAVER_RULES,
   planWizardSchema,
+  step6Schema,
   type PlanWizardData,
   type WizardLeaverType,
 } from '@equity/shared';
@@ -136,6 +137,22 @@ export async function createPlan(input: unknown): Promise<CreatePlanSuccess | Cr
     };
   }
   const data = parseResult.data;
+
+  // 1.b. Re-check Step 6 strictement — `planWizardSchema` fait
+  // `step6Schema.partial()` pour tolérer les drafts intermédiaires, donc
+  // `volatility` / `riskFreeRate` / etc. peuvent être undefined au submit
+  // final. Sans ce garde, on a vu un plan créé avec
+  // `volatility_schemes.annualized_sigma = NULL`, qui faisait planter
+  // l'Edge Function compute-valuation au moment du payload Python.
+  const step6Check = step6Schema.safeParse(data);
+  if (!step6Check.success) {
+    const fields = step6Check.error.issues.map((i) => i.path.join('.')).join(', ');
+    return {
+      ok: false,
+      error: `Étape 6 (Valorisation) incomplète : ${fields || step6Check.error.issues.length + ' erreur(s)'}`,
+      validationIssues: step6Check.error.issues.length,
+    };
+  }
 
   // 2. Permission + activeOrgId requis
   const user = await requirePermission('plans.create');

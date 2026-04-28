@@ -27,10 +27,41 @@ export function RunValuationButton({ planId }: { planId: string }) {
   const [status, setStatus] = useState<'IDLE' | 'QUEUED' | 'RUNNING' | 'DONE' | 'ERROR'>('IDLE');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Subscribe Realtime quand on a un runId
+  // Subscribe Realtime quand on a un runId. La subscribe est non-instantanée
+  // (handshake WebSocket + ack Supabase ~200-500ms) ; entre-temps l'Edge
+  // Function peut déjà avoir fait UPDATE → DONE (~6-7s typique mais parfois
+  // <1s en cache chaud). On déclenche donc aussi un SELECT one-shot pour
+  // capter l'état courant et éviter de rester bloqué sur QUEUED si l'event
+  // a été émis avant l'établissement de la souscription.
   useEffect(() => {
     if (!runId) return;
     const supabase = createSupabaseBrowserClient();
+
+    function applyStatus(newRow: { status?: string | null; error_message?: string | null }) {
+      if (newRow.status === 'RUNNING' || newRow.status === 'DONE' || newRow.status === 'ERROR') {
+        setStatus(newRow.status);
+        if (newRow.status === 'ERROR') {
+          setErrorMsg(newRow.error_message ?? 'Erreur inconnue');
+        }
+        if (newRow.status === 'DONE') {
+          setTimeout(() => router.refresh(), 500);
+        }
+      }
+    }
+
+    let cancelled = false;
+
+    // SELECT one-shot anti-race
+    void supabase
+      .from('valuation_runs')
+      .select('status, error_message')
+      .eq('id', runId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled && data) applyStatus(data);
+      });
+
+    // Souscription Realtime pour les transitions futures
     const channel = supabase
       .channel(`valuation_run_${runId}`)
       .on(
@@ -42,26 +73,29 @@ export function RunValuationButton({ planId }: { planId: string }) {
           filter: `id=eq.${runId}`,
         },
         (payload) => {
-          const newRow = payload.new as { status?: string; error_message?: string };
-          if (
-            newRow.status === 'RUNNING' ||
-            newRow.status === 'DONE' ||
-            newRow.status === 'ERROR'
-          ) {
-            setStatus(newRow.status);
-            if (newRow.status === 'ERROR') {
-              setErrorMsg(newRow.error_message ?? 'Erreur inconnue');
-            }
-            if (newRow.status === 'DONE') {
-              // Refresh la page pour récupérer les valuation_results
-              setTimeout(() => router.refresh(), 500);
-            }
-          }
+          applyStatus(payload.new as { status?: string; error_message?: string | null });
         },
       )
       .subscribe();
 
+    // Filet de sécurité : si toujours QUEUED après 30 s, on refait un SELECT
+    // (Realtime peut être down/RLS-bloqué ; on évite de laisser le badge
+    // tourner indéfiniment). 30 s couvre le pire cas observé (~7 s typique).
+    const fallback = setTimeout(() => {
+      if (cancelled) return;
+      void supabase
+        .from('valuation_runs')
+        .select('status, error_message')
+        .eq('id', runId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (!cancelled && data) applyStatus(data);
+        });
+    }, 30_000);
+
     return () => {
+      cancelled = true;
+      clearTimeout(fallback);
       void supabase.removeChannel(channel);
     };
   }, [runId, router]);

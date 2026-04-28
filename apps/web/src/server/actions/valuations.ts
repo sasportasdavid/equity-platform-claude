@@ -103,17 +103,30 @@ export async function runValuation(
   });
 
   if (invokeError) {
-    // L'Edge Function n'a pas démarré — on marque le run en ERROR pour
-    // éviter qu'il reste QUEUED indéfiniment.
-    await supabase
+    // L'Edge Function peut elle-même avoir écrit un error_message spécifique
+    // (try/catch interne) avant qu'on ne reçoive le non-2xx. On lit d'abord
+    // ce qu'elle a écrit pour ne pas masquer la vraie cause par notre wrapper
+    // générique « non-2xx status code ».
+    const { data: existing } = await supabase
       .from('valuation_runs')
-      .update({
-        status: 'ERROR',
-        error_message: `Invoke compute-valuation échoué : ${invokeError.message}`,
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', run.id);
-    return { ok: false, error: `Edge Function inaccessible : ${invokeError.message}` };
+      .select('status, error_message')
+      .eq('id', run.id)
+      .maybeSingle();
+
+    const edgeMessage = existing?.error_message ?? null;
+    const finalMessage = edgeMessage ?? `Invoke compute-valuation échoué : ${invokeError.message}`;
+
+    if (existing?.status !== 'ERROR') {
+      await supabase
+        .from('valuation_runs')
+        .update({
+          status: 'ERROR',
+          error_message: finalMessage,
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', run.id);
+    }
+    return { ok: false, error: finalMessage };
   }
 
   // Audit
