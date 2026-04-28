@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { ArrowLeft, Lock } from 'lucide-react';
 import { uuidSchema } from '@equity/shared';
 import { PageShell } from '@/components/shared/PageShell';
+import { PlanActionsMenu } from '@/components/plans/PlanActionsMenu';
 import { PlanTypeBadge } from '@/components/plans/shared/PlanTypeBadge';
 import { RunValuationButton } from '@/components/plans/RunValuationButton';
 import { StatusBadge } from '@/components/plans/shared/StatusBadge';
@@ -42,8 +43,13 @@ export default async function PlanDetailPage({ params }: { params: Promise<{ id:
   const detail = await getPlanDetails(idCheck.data);
   if (!detail) notFound();
 
-  const canUpdate = await hasPermission('plans.update');
-  const canRunValuation = await hasPermission('valuations.run');
+  const [canUpdate, canRunValuation, canCreate, canLock, canDelete] = await Promise.all([
+    hasPermission('plans.update'),
+    hasPermission('valuations.run'),
+    hasPermission('plans.create'),
+    hasPermission('plans.lock'),
+    hasPermission('plans.delete'),
+  ]);
 
   return (
     <PageShell
@@ -79,6 +85,14 @@ export default async function PlanDetailPage({ params }: { params: Promise<{ id:
             Retour à la liste
           </Link>
           {canRunValuation ? <RunValuationButton planId={detail.plan.id} /> : null}
+          <PlanActionsMenu
+            planId={detail.plan.id}
+            isLocked={detail.plan.is_locked}
+            canUpdate={canUpdate}
+            canLock={canLock}
+            canDelete={canDelete}
+            canCreate={canCreate}
+          />
         </>
       }
     >

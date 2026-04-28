@@ -3147,6 +3147,10 @@ export type Database = {
       current_org_id: { Args: never; Returns: string }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       decrypt_sensitive: { Args: { ciphertext: string }; Returns: string }
+      duplicate_plan_full: {
+        Args: { p_new_name?: string; p_source_plan_id: string }
+        Returns: Json
+      }
       encrypt_sensitive: { Args: { plaintext: string }; Returns: string }
       get_beneficiary_decrypted: {
         Args: { p_id: string }
