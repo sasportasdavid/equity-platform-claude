@@ -520,7 +520,7 @@ function Ifrs2Tab({ detail }: { detail: PlanDetail }) {
         <CardHeader>
           <CardTitle className="text-base">Cumul de la charge sur la période</CardTitle>
           <CardDescription>
-            Évolution mois par mois jusqu'à la fin du vesting de la dernière tranche.
+            Évolution mois par mois jusqu&apos;à la fin du vesting de la dernière tranche.
           </CardDescription>
         </CardHeader>
         <CardContent>

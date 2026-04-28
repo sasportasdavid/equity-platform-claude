@@ -255,11 +255,12 @@ function TrancheDetailsCard({ distributionStats }: { distributionStats: unknown 
 // ---------------------------------------------------------------------------
 function SamplePathsCard({ distributionStats }: { distributionStats: unknown }) {
   const paths = useMemo(() => extractSamplePaths(distributionStats), [distributionStats]);
-  if (paths.length === 0) return null;
 
   // Recharts attend une row par point t, avec une colonne par path. On
-  // transforme [path[t]] en [{ t, p0, p1, ..., pN }].
+  // transforme [path[t]] en [{ t, p0, p1, ..., pN }]. Le useMemo doit
+  // venir AVANT tout early return (Rules of Hooks).
   const chartData = useMemo(() => {
+    if (paths.length === 0) return [];
     const maxLen = Math.max(...paths.map((p) => p.length));
     return Array.from({ length: maxLen }, (_, t) => {
       const row: Record<string, number> = { t };
@@ -270,6 +271,8 @@ function SamplePathsCard({ distributionStats }: { distributionStats: unknown }) 
       return row;
     });
   }, [paths]);
+
+  if (paths.length === 0) return null;
 
   return (
     <Card>
