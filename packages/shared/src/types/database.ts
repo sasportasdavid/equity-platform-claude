@@ -3076,6 +3076,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_plan_full: {
+        Args: {
+          p_company_id: string
+          p_compliance_warnings: Json
+          p_conditions: Json
+          p_hypothesis: Json
+          p_leaver_rules: Json
+          p_org_id: string
+          p_plan_data: Json
+          p_simulation: Json
+          p_vesting: Json
+          p_volatility: Json
+        }
+        Returns: Json
+      }
       current_org_id: { Args: never; Returns: string }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       decrypt_sensitive: { Args: { ciphertext: string }; Returns: string }
