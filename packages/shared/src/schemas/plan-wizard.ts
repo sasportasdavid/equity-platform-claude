@@ -170,7 +170,11 @@ export const step2Schema = z.object({
     .min(PLAN_WIZARD_LIMITS.MIN_NAME_LENGTH, 'Le nom doit faire au moins 3 caractères')
     .max(PLAN_WIZARD_LIMITS.MAX_NAME_LENGTH, 'Le nom doit faire au plus 100 caractères'),
   boardDate: z.string().regex(isoDateRegex, 'Date conseil invalide (YYYY-MM-DD)'),
-  grantDate: z.string().regex(isoDateRegex, 'Date d’attribution invalide (YYYY-MM-DD)').optional(),
+  // grantDate REQUIS au step 2 — auto-copié depuis boardDate au mount via
+  // Step2GeneralInfo (useEffect ligne 46-51). Cohérent avec la contrainte
+  // DB `plans.grant_date NOT NULL` (cf. memory/module_3a_b1_post_check.md
+  // écart 1). Pas d'override en optional dans planWizardBase ci-dessous.
+  grantDate: z.string().regex(isoDateRegex, 'Date d’attribution invalide (YYYY-MM-DD)'),
   poolSize: z
     .number({ message: 'Pool requis' })
     .int('Le pool doit être un entier')
@@ -469,6 +473,12 @@ const planWizardBase = step1Schema
     cliffPercentage: z.number().optional(),
     totalMonths: z.number().int().optional(),
     frequency: FrequencyEnum.optional(),
+    // Override de step2Schema.partial() : on RESTAURE grantDate en required
+    // (la contrainte DB `plans.grant_date NOT NULL` l'exige + le moteur
+    // Python en a besoin comme baseline du calendrier de vesting).
+    // L'auto-copie depuis boardDate au step 2 garantit qu'il est toujours
+    // rempli au moment du submit final.
+    grantDate: z.string().regex(isoDateRegex, 'Date d’attribution invalide (YYYY-MM-DD)'),
   });
 
 /**
@@ -500,11 +510,11 @@ const planWizardBase = step1Schema
  * directement `PlanWizardData` avec tous les defaults appliqués.
  */
 export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
-  // single — date de vesting > date de grant
+  // single — date de vesting > date de grant (grantDate toujours défini, cf.
+  // override planWizardBase qui restaure le required après step2.partial()).
   if (
     data.vestingType === 'single' &&
     data.singleVestingDate &&
-    data.grantDate &&
     data.singleVestingDate <= data.grantDate
   ) {
     ctx.addIssue({
@@ -525,17 +535,15 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
       });
     }
     // Toutes les dates de tranches doivent être > grantDate
-    if (data.grantDate) {
-      data.vestingTranches.forEach((tranche, idx) => {
-        if (tranche.vestingDate <= data.grantDate!) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['vestingTranches', idx, 'vestingDate'],
-            message: 'Doit être postérieure à la date d’attribution',
-          });
-        }
-      });
-    }
+    data.vestingTranches.forEach((tranche, idx) => {
+      if (tranche.vestingDate <= data.grantDate) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['vestingTranches', idx, 'vestingDate'],
+          message: 'Doit être postérieure à la date d’attribution',
+        });
+      }
+    });
   }
 
   // cliff_linear — cliffMonths ≤ totalMonths.
@@ -721,7 +729,7 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
         });
       }
       // Cohérence avec grantDate au niveau du plan.
-      if (start && data.grantDate && start < data.grantDate) {
+      if (start && start < data.grantDate) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['conditions', idx, 'performanceStartDate'],
