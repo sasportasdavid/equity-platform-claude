@@ -12,4 +12,4 @@
 export * from './constants';
 export * from './schemas';
 export * from './state-machines';
-export type { Database, Tables, TablesInsert, TablesUpdate } from './types/database';
+export type { Database, Json, Tables, TablesInsert, TablesUpdate } from './types/database';
