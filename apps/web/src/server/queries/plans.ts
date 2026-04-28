@@ -172,6 +172,27 @@ export type PlanDetail = {
     ci95Low: number | null;
     ci95High: number | null;
   } | null;
+  /**
+   * Dernier calendrier IFRS 2 généré pour ce plan (1 schedule par
+   * valuation_run). Calculé par l'Edge Function compute-ifrs2-expense (B5.6)
+   * en aval de chaque run DONE. `null` si aucun run n'a encore généré
+   * de calendrier.
+   */
+  latestIfrs2: {
+    scheduleId: string;
+    valuationRunId: string | null;
+    totalExpense: number;
+    /** Inputs gelés (méthode straight-line, fair_value, pool_size, etc.). */
+    parameters: Json;
+    createdAt: string;
+    /** Périodes mensuelles triées chronologiquement. */
+    periods: Array<{
+      id: string;
+      periodStart: string; // YYYY-MM-DD
+      periodEnd: string; // YYYY-MM-DD
+      expenseAmount: number;
+    }>;
+  } | null;
   versions: Array<{
     id: string;
     version: number;
@@ -255,7 +276,7 @@ export async function getPlanDetails(planId: string): Promise<PlanDetail | null>
 
   if (planError || !plan) return null;
 
-  // 7 queries parallèles (sub-requêtes du detail)
+  // 8 queries parallèles (sub-requêtes du detail)
   const [
     vestingResult,
     conditionsResult,
@@ -264,6 +285,7 @@ export async function getPlanDetails(planId: string): Promise<PlanDetail | null>
     runsResult,
     versionsResult,
     latestValuationResult,
+    latestIfrs2Result,
   ] = await Promise.all([
     supabase
       .from('vesting_schedules')
@@ -319,6 +341,17 @@ export async function getPlanDetails(planId: string): Promise<PlanDetail | null>
       .order('completed_at', { ascending: false, nullsFirst: false })
       .limit(1)
       .maybeSingle(),
+    // Dernier calendrier IFRS 2 généré pour ce plan (B5.6) — embedded
+    // resource pour récupérer toutes les périodes en 1 query.
+    supabase
+      .from('ifrs2_expense_schedules')
+      .select(
+        'id, valuation_run_id, total_expense, parameters, created_at, ifrs2_expense_periods ( id, period_start, period_end, expense_amount )',
+      )
+      .eq('plan_id', planId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const vesting = vestingResult.data;
@@ -345,6 +378,33 @@ export async function getPlanDetails(planId: string): Promise<PlanDetail | null>
         stdError: latestResultRow?.std_error ?? null,
         ci95Low: latestResultRow?.ci95_low ?? null,
         ci95High: latestResultRow?.ci95_high ?? null,
+      }
+    : null;
+
+  // Latest IFRS 2 schedule + periods (embedded resource → array)
+  const latestIfrs2Row = latestIfrs2Result.data;
+  const ifrs2PeriodsRaw = (latestIfrs2Row?.ifrs2_expense_periods ?? []) as Array<{
+    id: string;
+    period_start: string | null;
+    period_end: string | null;
+    expense_amount: number | null;
+  }>;
+  const latestIfrs2 = latestIfrs2Row
+    ? {
+        scheduleId: latestIfrs2Row.id,
+        valuationRunId: latestIfrs2Row.valuation_run_id,
+        totalExpense: Number(latestIfrs2Row.total_expense ?? 0),
+        parameters: latestIfrs2Row.parameters,
+        createdAt: latestIfrs2Row.created_at,
+        periods: ifrs2PeriodsRaw
+          .filter((p) => p.period_start && p.period_end && p.expense_amount != null)
+          .map((p) => ({
+            id: p.id,
+            periodStart: p.period_start as string,
+            periodEnd: p.period_end as string,
+            expenseAmount: Number(p.expense_amount),
+          }))
+          .sort((a, b) => a.periodStart.localeCompare(b.periodStart)),
       }
     : null;
 
@@ -411,6 +471,7 @@ export async function getPlanDetails(planId: string): Promise<PlanDetail | null>
     hypothesisSets,
     valuationRuns,
     latestValuation,
+    latestIfrs2,
     versions,
   };
 }

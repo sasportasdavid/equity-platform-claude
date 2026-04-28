@@ -115,11 +115,7 @@ export function PlanDetailClient({
           <PerformanceTab detail={detail} />
         </TabsContent>
         <TabsContent value="ifrs2">
-          <PlaceholderTab
-            icon={<Sigma className="size-10" />}
-            title="IFRS 2 — calcul de charge"
-            description="Calcul de la charge IFRS 2 (juste valeur × probabilité × période). Disponible en B5 quand le moteur Python sera intégré."
-          />
+          <Ifrs2Tab detail={detail} />
         </TabsContent>
         <TabsContent value="hypotheses">
           <HypothesesTab detail={detail} />
@@ -441,6 +437,166 @@ function PerformanceTab({ detail }: { detail: PlanDetail }) {
       ))}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Onglet 4 — IFRS 2 (calcul de charge)
+//
+// Affiche le calendrier IFRS 2 généré par compute-ifrs2-expense (B5.6) :
+// total cumul, charge passée vs future (par rapport à today), tableau
+// mensuel et LineChart cumul. État vide si aucun run n'a encore généré
+// de calendrier.
+// ---------------------------------------------------------------------------
+function Ifrs2Tab({ detail }: { detail: PlanDetail }) {
+  const ifrs2 = detail.latestIfrs2;
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { cumulData, expensePast, expenseFuture } = useMemo(() => {
+    if (!ifrs2) return { cumulData: [], expensePast: 0, expenseFuture: 0 };
+    let cumul = 0;
+    let past = 0;
+    let future = 0;
+    const data = ifrs2.periods.map((p) => {
+      cumul += p.expenseAmount;
+      if (p.periodEnd <= today) past += p.expenseAmount;
+      else future += p.expenseAmount;
+      return {
+        date: p.periodStart,
+        amount: p.expenseAmount,
+        cumul: Math.round(cumul * 100) / 100,
+      };
+    });
+    return { cumulData: data, expensePast: past, expenseFuture: future };
+  }, [ifrs2, today]);
+
+  if (!ifrs2) {
+    return (
+      <PlaceholderTab
+        icon={<Sigma className="size-10" />}
+        title="IFRS 2 — pas encore calculé"
+        description="Lancez une valorisation pour générer le calendrier IFRS 2 (charge mensuelle étalée linéairement sur la période d'acquisition). Le calcul se déclenche automatiquement après chaque run de valorisation."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Sigma className="size-4" />
+            Charge IFRS 2 (étalement straight-line mensuel)
+          </CardTitle>
+          <CardDescription>
+            Calculée le {formatDateTime(ifrs2.createdAt)} · {ifrs2.periods.length} période
+            {ifrs2.periods.length > 1 ? 's' : ''} mensuelle{ifrs2.periods.length > 1 ? 's' : ''}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <KpiCard
+              icon={<Sigma className="size-4" />}
+              label="Charge totale"
+              value={formatEur(ifrs2.totalExpense)}
+              sub={`Pool × juste-valeur × P_non_market`}
+            />
+            <KpiCard
+              icon={<History className="size-4" />}
+              label="Charge passée"
+              value={formatEur(expensePast)}
+              sub="Périodes ≤ aujourd'hui"
+            />
+            <KpiCard
+              icon={<TrendingUp className="size-4" />}
+              label="Charge future projetée"
+              value={formatEur(expenseFuture)}
+              sub="Périodes > aujourd'hui"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Cumul de la charge sur la période</CardTitle>
+          <CardDescription>
+            Évolution mois par mois jusqu'à la fin du vesting de la dernière tranche.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {cumulData.length > 0 ? (
+            <div className="h-[280px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={cumulData} margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(d) => formatDateShort(d)}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v) => `${(v / 1000).toFixed(0)}k €`}
+                  />
+                  <RechartsTooltip
+                    formatter={(value, name) => [
+                      typeof value === 'number' ? formatEur(value) : value,
+                      name === 'cumul' ? 'Cumul' : 'Période',
+                    ]}
+                    labelFormatter={(label) => formatDate(label)}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="cumul"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Détail mensuel</CardTitle>
+          <CardDescription>
+            Un row par mois, charge constante par tranche (étalement linéaire). Total = somme.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="max-h-[420px] overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 sticky top-0 text-left text-xs uppercase">
+                <tr>
+                  <th className="text-muted-foreground px-3 py-2 font-medium">Période</th>
+                  <th className="text-muted-foreground px-3 py-2 text-right font-medium">
+                    Charge mensuelle
+                  </th>
+                  <th className="text-muted-foreground px-3 py-2 text-right font-medium">Cumul</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {cumulData.map((row, i) => (
+                  <tr key={i} className={row.date > today ? 'text-muted-foreground' : ''}>
+                    <td className="px-3 py-2">{formatDate(row.date)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatEur(row.amount)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatEur(row.cumul)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function formatEur(n: number): string {
+  return `${n.toLocaleString('fr-FR', { maximumFractionDigits: 2, minimumFractionDigits: 2 })} €`;
 }
 
 // ---------------------------------------------------------------------------
