@@ -2065,6 +2065,41 @@ export type Database = {
         }
         Relationships: []
       }
+      plan_drafts: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          org_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          id?: string
+          org_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_drafts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans: {
         Row: {
           board_date: string | null
@@ -3105,6 +3140,18 @@ export type Database = {
         Returns: boolean
       }
       is_org_member: { Args: { org_id_param: string }; Returns: boolean }
+      list_my_plan_drafts: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: string
+          plan_name: string
+          plan_type: string
+          updated_at: string
+        }[]
+      }
+      load_plan_draft: { Args: { p_draft_id: string }; Returns: Json }
+      upsert_plan_draft: { Args: { p_data: Json }; Returns: Json }
       user_all_permissions: { Args: never; Returns: string[] }
       user_has_permission: { Args: { p_perm: string }; Returns: boolean }
     }
