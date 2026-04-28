@@ -155,6 +155,23 @@ export type PlanDetail = {
     error_message: string | null;
     created_at: string;
   }>;
+  /**
+   * Dernière valorisation aboutie (status='DONE') avec son résultat joint.
+   * `null` si aucune valorisation n'a encore été lancée ou aucune n'a réussi.
+   * Utilisé par la card « Valorisation » de l'onglet Synthèse pour afficher
+   * la juste-valeur sans avoir à charger la page détail B5.5 dédiée.
+   */
+  latestValuation: {
+    runId: string;
+    completedAt: string | null;
+    pricerUsed: string | null;
+    engineVersion: string | null;
+    fairValuePerInstrument: number | null;
+    fairValueTotal: number | null;
+    stdError: number | null;
+    ci95Low: number | null;
+    ci95High: number | null;
+  } | null;
   versions: Array<{
     id: string;
     version: number;
@@ -238,52 +255,71 @@ export async function getPlanDetails(planId: string): Promise<PlanDetail | null>
 
   if (planError || !plan) return null;
 
-  // 6 queries parallèles (sub-requêtes du detail)
-  const [vestingResult, conditionsResult, leaversResult, hypoResult, runsResult, versionsResult] =
-    await Promise.all([
-      supabase
-        .from('vesting_schedules')
-        .select(
-          'id, vesting_type, cliff_months, cliff_percentage, total_months, frequency, linear_after_cliff, single_vesting_date, vesting_tranches ( id, sort_order, vesting_date, percentage_of_award )',
-        )
-        .eq('plan_id', planId)
-        .maybeSingle(),
-      supabase
-        .from('performance_conditions')
-        .select(
-          'id, name, condition_type, category, weight, enable_partial_scoring, metric, target_value, target_unit, comparison_operator, threshold_min, threshold_max, market_metric_type, reference_index, reference_index_display_name, comparison_method, measurement_period_years, performance_start_date, performance_end_date, start_price_method, end_price_method, start_fixed_price, end_fixed_price, start_averaging_days, end_averaging_days, peer_group, weighted_peer_groups, acquisition_scale',
-        )
-        .eq('plan_id', planId)
-        .order('weight', { ascending: false, nullsFirst: false }),
-      supabase
-        .from('early_termination_rules')
-        .select('id, leaver_type, treatment, acceleration_months, exercise_window_days')
-        .eq('plan_id', planId)
-        .order('leaver_type', { ascending: true }),
-      supabase
-        .from('hypothesis_sets')
-        .select(
-          'id, as_of_date, s0, rate_flat, dividend_yield, vol_method, ticker_override, currency, volatility, underlying_model, model_choice, time_horizon_years, created_at',
-        )
-        .eq('plan_id', planId)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('valuation_runs')
-        .select('id, status, started_at, completed_at, error_message, created_at')
-        .eq('plan_id', planId)
-        .order('created_at', { ascending: false })
-        .limit(20),
-      // Versions : tous les plans avec le même parent_plan_id (lineage)
-      // ou ce plan lui-même + ceux dont parent_plan_id = ce plan.
-      // V1 : seulement le plan courant (lineage arrive en B3 quand
-      // duplicatePlan créera des versions).
-      supabase
-        .from('plans')
-        .select('id, version, name, status, created_at')
-        .or(`id.eq.${planId},parent_plan_id.eq.${planId}`)
-        .is('deleted_at', null)
-        .order('version', { ascending: false }),
-    ]);
+  // 7 queries parallèles (sub-requêtes du detail)
+  const [
+    vestingResult,
+    conditionsResult,
+    leaversResult,
+    hypoResult,
+    runsResult,
+    versionsResult,
+    latestValuationResult,
+  ] = await Promise.all([
+    supabase
+      .from('vesting_schedules')
+      .select(
+        'id, vesting_type, cliff_months, cliff_percentage, total_months, frequency, linear_after_cliff, single_vesting_date, vesting_tranches ( id, sort_order, vesting_date, percentage_of_award )',
+      )
+      .eq('plan_id', planId)
+      .maybeSingle(),
+    supabase
+      .from('performance_conditions')
+      .select(
+        'id, name, condition_type, category, weight, enable_partial_scoring, metric, target_value, target_unit, comparison_operator, threshold_min, threshold_max, market_metric_type, reference_index, reference_index_display_name, comparison_method, measurement_period_years, performance_start_date, performance_end_date, start_price_method, end_price_method, start_fixed_price, end_fixed_price, start_averaging_days, end_averaging_days, peer_group, weighted_peer_groups, acquisition_scale',
+      )
+      .eq('plan_id', planId)
+      .order('weight', { ascending: false, nullsFirst: false }),
+    supabase
+      .from('early_termination_rules')
+      .select('id, leaver_type, treatment, acceleration_months, exercise_window_days')
+      .eq('plan_id', planId)
+      .order('leaver_type', { ascending: true }),
+    supabase
+      .from('hypothesis_sets')
+      .select(
+        'id, as_of_date, s0, rate_flat, dividend_yield, vol_method, ticker_override, currency, volatility, underlying_model, model_choice, time_horizon_years, created_at',
+      )
+      .eq('plan_id', planId)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('valuation_runs')
+      .select('id, status, started_at, completed_at, error_message, created_at')
+      .eq('plan_id', planId)
+      .order('created_at', { ascending: false })
+      .limit(20),
+    // Versions : tous les plans avec le même parent_plan_id (lineage)
+    // ou ce plan lui-même + ceux dont parent_plan_id = ce plan.
+    // V1 : seulement le plan courant (lineage arrive en B3 quand
+    // duplicatePlan créera des versions).
+    supabase
+      .from('plans')
+      .select('id, version, name, status, created_at')
+      .or(`id.eq.${planId},parent_plan_id.eq.${planId}`)
+      .is('deleted_at', null)
+      .order('version', { ascending: false }),
+    // Dernière valorisation DONE + son résultat joint, pour affichage
+    // direct sur l'onglet Synthèse sans avoir à attendre B5.5.
+    supabase
+      .from('valuation_runs')
+      .select(
+        'id, completed_at, pricer_used, engine_version, valuation_results ( fair_value_per_instrument, fair_value_total, std_error, ci95_low, ci95_high )',
+      )
+      .eq('plan_id', planId)
+      .eq('status', 'DONE')
+      .order('completed_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   const vesting = vestingResult.data;
   const conditions = conditionsResult.data ?? [];
@@ -291,6 +327,26 @@ export async function getPlanDetails(planId: string): Promise<PlanDetail | null>
   const hypothesisSets = hypoResult.data ?? [];
   const valuationRuns = runsResult.data ?? [];
   const versions = versionsResult.data ?? [];
+
+  // valuation_results est un array (relation 1:N côté Supabase) — on prend
+  // le premier élément, qui est l'unique résultat associé à ce run DONE.
+  const latestRun = latestValuationResult.data;
+  const latestResultRow = Array.isArray(latestRun?.valuation_results)
+    ? latestRun.valuation_results[0]
+    : (latestRun?.valuation_results ?? null);
+  const latestValuation = latestRun
+    ? {
+        runId: latestRun.id,
+        completedAt: latestRun.completed_at,
+        pricerUsed: latestRun.pricer_used,
+        engineVersion: latestRun.engine_version,
+        fairValuePerInstrument: latestResultRow?.fair_value_per_instrument ?? null,
+        fairValueTotal: latestResultRow?.fair_value_total ?? null,
+        stdError: latestResultRow?.std_error ?? null,
+        ci95Low: latestResultRow?.ci95_low ?? null,
+        ci95High: latestResultRow?.ci95_high ?? null,
+      }
+    : null;
 
   return {
     plan: {
@@ -354,6 +410,7 @@ export async function getPlanDetails(planId: string): Promise<PlanDetail | null>
     leavers,
     hypothesisSets,
     valuationRuns,
+    latestValuation,
     versions,
   };
 }

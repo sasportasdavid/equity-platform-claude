@@ -185,6 +185,8 @@ function SynthesisTab({ detail }: { detail: PlanDetail }) {
         />
       </div>
 
+      <ValuationCard latest={detail.latestValuation} />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Calendrier de vesting</CardTitle>
@@ -233,6 +235,83 @@ function SynthesisTab({ detail }: { detail: PlanDetail }) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card « Valorisation » (Synthèse) — affiche la dernière valorisation DONE.
+//
+// Trois états :
+//   - latest = null → empty state avec hint pour cliquer sur « Lancer »
+//   - latest avec fair_value chiffrée → KpiCard centrale + métadonnées
+//   - latest sans fair_value (cas dégénéré) → état d'erreur léger
+// ---------------------------------------------------------------------------
+function ValuationCard({ latest }: { latest: PlanDetail['latestValuation'] }) {
+  if (!latest) {
+    return (
+      <Card className="border-dashed">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Calculator className="size-4" />
+            Valorisation
+          </CardTitle>
+          <CardDescription>
+            Aucune valorisation lancée. Cliquez sur « Lancer une valorisation » en haut de la page
+            pour calculer la juste-valeur IFRS 2.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  const fv = latest.fairValuePerInstrument;
+  const fvLabel = fv != null ? `${fv.toFixed(2)} €` : '—';
+  const ci =
+    latest.ci95Low != null && latest.ci95High != null
+      ? `IC 95 % : ${latest.ci95Low.toFixed(2)} – ${latest.ci95High.toFixed(2)} €`
+      : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Calculator className="size-4" />
+          Valorisation IFRS 2
+          <Badge variant="outline" className="ml-2 font-mono text-xs">
+            {latest.engineVersion ?? 'V8'}
+          </Badge>
+          <Badge variant="outline" className="text-xs font-normal">
+            {latest.pricerUsed ?? 'BLACK_SCHOLES'}
+          </Badge>
+        </CardTitle>
+        <CardDescription>
+          Calculée le {formatDateTime(latest.completedAt)}
+          {ci ? ` · ${ci}` : ''}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <KpiCard
+            icon={<Sigma className="size-4" />}
+            label="Juste-valeur unitaire"
+            value={fvLabel}
+            sub={latest.stdError != null ? `± ${latest.stdError.toFixed(4)}` : undefined}
+          />
+          <KpiCard
+            icon={<TrendingUp className="size-4" />}
+            label="Juste-valeur totale (× 1)"
+            value={latest.fairValueTotal != null ? `${latest.fairValueTotal.toFixed(2)} €` : '—'}
+            sub="Pondération bénéficiaires en Module 3b"
+          />
+          <KpiCard
+            icon={<History className="size-4" />}
+            label="Run id"
+            value={latest.runId.slice(0, 8)}
+            sub="Détail complet en B5.5"
+          />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -598,6 +677,17 @@ function formatDateShort(iso: string | null): string {
   if (!m || !m[1] || !m[2] || !m[3]) return iso;
   // dd/MM/yy — gain de place pour l'axe X
   return `${m[3]}/${m[2]}/${m[1].slice(2)}`;
+}
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return iso;
+    return d.toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch {
+    return iso;
+  }
 }
 
 // Suppress noisy unused — typed import for keeping reference
