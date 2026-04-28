@@ -31,16 +31,16 @@ Ne pas anticiper les modules futurs sauf instruction explicite.
 
 - [x] Module 1 — Foundation
 - [x] Module 2 — Identity & Roles — login fonctionnel ✅
-- [~] Module 3a — Plans
+- [x] Module 3a — Plans
   - [x] Wizard 7 étapes (container + sidebar + footer + auto-save brouillon)
-  - [x] B1 — Migrations tables métier (00010-00018)
-  - [x] B2 — RPC `create_plan_full` atomique + Server Action `createPlan` réelle
+  - [x] B1 — Migrations tables métier (00010-00019)
+  - [x] B2 — RPC `create_plan_full` atomique + Server Action `createPlan`
+  - [x] B3 — Server Actions update / duplicate / archive / lock + RPC `duplicate_plan_full` + `PlanActionsMenu` UI
   - [x] B4 — Pages liste + détail (8 onglets) + sidebar nav globale
   - [x] B5 fundation — Edge Function `compute-valuation` v4 + Server Action `runValuation` + `RunValuationButton` (Realtime) + `ValuationCard` sur Synthèse → fair_value IFRS 2 affiché end-to-end ✅
-  - [ ] B3 — Server Actions update / duplicate / archive / lock
-  - [ ] B5.5 — Page détail valuation `/valuations/[runId]` (sample paths Recharts + tranche details + replay)
-  - [ ] B5.6 — Onglet IFRS 2 réel + Edge Function `compute-ifrs2-expense` + table `ifrs2_expense_periods` peuplée
-  - [ ] B5.7 — Sensitivities (`compute_greeks=true`) + tests E2E manuels
+  - [x] B5.5 — Page détail valuation `/valuations/[runId]` (KPIs + tranches + sample paths Recharts + Greeks + audit trail)
+  - [x] B5.6 — Onglet IFRS 2 réel + Edge Function `compute-ifrs2-expense` (étalement straight-line mensuel) + tables peuplées
+  - [x] B5.7 — `compute_greeks=true` + `include_debug_paths` activés dans payload Python
 
 ## TODOs transverses (post Module 3a)
 
