@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { ArrowLeft, Lock, PlayCircle } from 'lucide-react';
+import { ArrowLeft, Lock } from 'lucide-react';
 import { uuidSchema } from '@equity/shared';
 import { PageShell } from '@/components/shared/PageShell';
 import { PlanTypeBadge } from '@/components/plans/shared/PlanTypeBadge';
+import { RunValuationButton } from '@/components/plans/RunValuationButton';
 import { StatusBadge } from '@/components/plans/shared/StatusBadge';
 import { Badge } from '@/components/ui/badge';
 import { hasPermission, requirePermission } from '@/lib/auth/rbac';
@@ -42,6 +43,7 @@ export default async function PlanDetailPage({ params }: { params: Promise<{ id:
   if (!detail) notFound();
 
   const canUpdate = await hasPermission('plans.update');
+  const canRunValuation = await hasPermission('valuations.run');
 
   return (
     <PageShell
@@ -76,15 +78,7 @@ export default async function PlanDetailPage({ params }: { params: Promise<{ id:
             <ArrowLeft className="mr-2 size-4" />
             Retour à la liste
           </Link>
-          <button
-            type="button"
-            disabled
-            title="Disponible en B5"
-            className="bg-muted text-muted-foreground inline-flex h-9 cursor-not-allowed items-center justify-center gap-2 rounded-md px-4 text-sm font-medium"
-          >
-            <PlayCircle className="size-4" />
-            Lancer une valorisation
-          </button>
+          {canRunValuation ? <RunValuationButton planId={detail.plan.id} /> : null}
         </>
       }
     >
