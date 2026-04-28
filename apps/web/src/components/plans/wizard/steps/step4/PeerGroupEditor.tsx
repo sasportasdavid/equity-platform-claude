@@ -50,10 +50,11 @@ function blankPeer(): PeerCompany {
 export function PeerGroupEditor({ index }: { index: number }) {
   const { register, watch, setValue, formState } = useFormContext<PlanWizardData>();
   // Register déclaratif (sans rendre l'input) pour que RHF suive le champ
-  // et le purge automatiquement via shouldUnregister quand le composant
-  // unmount (= switch vers SHARE_PRICE / TSR_ABS / TSR_REL_INDEX). Sans
-  // ça, peerGroup resterait en form state avec des données orphelines.
-  register(`conditions.${index}.peerGroup`, { shouldUnregister: true });
+  // et l'inclue dans le payload submit. Cleanup au switch de
+  // marketMetricType / conditionType géré au parent (cf. cleanConditionForType).
+  // shouldUnregister VOLONTAIREMENT évité : il purgerait aussi au unmount
+  // step navigation (cf. fix bug step 7 review).
+  register(`conditions.${index}.peerGroup`);
 
   const condition = watch(`conditions.${index}`) as PerformanceConditionInput | undefined;
   const peers = condition?.peerGroup ?? [];

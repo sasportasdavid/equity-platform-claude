@@ -49,11 +49,12 @@ function blankPoint(threshold: number = 0, acquisition: number = 0) {
 
 export function AcquisitionScaleEditor({ index }: { index: number }) {
   const { register, watch, setValue, formState } = useFormContext<PlanWizardData>();
-  // Register déclaratif pour shouldUnregister au switch de conditionType.
-  // L'échelle est valable pour MARKET et NON_MARKET, pas SERVICE — le
-  // wrapper côté ConditionEditor ne montera ce composant que pour les
-  // types pertinents.
-  register(`conditions.${index}.acquisitionScale`, { shouldUnregister: true });
+  // Register déclaratif pour que RHF suive le champ et l'inclue dans le
+  // payload submit. L'échelle est valable pour MARKET et NON_MARKET, pas
+  // SERVICE — le wrapper côté ConditionEditor ne montera ce composant que
+  // pour les types pertinents. Cleanup au switch de conditionType géré
+  // par cleanConditionForType (parent).
+  register(`conditions.${index}.acquisitionScale`);
 
   const condition = watch(`conditions.${index}`) as PerformanceConditionInput | undefined;
   const scale = condition?.acquisitionScale;

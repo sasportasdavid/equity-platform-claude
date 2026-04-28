@@ -59,8 +59,9 @@ function blankPeer(): PeerCompany {
 
 export function WeightedPeerGroupsEditor({ index }: { index: number }) {
   const { register, watch, setValue, formState } = useFormContext<PlanWizardData>();
-  // Register déclaratif pour shouldUnregister au switch de marketMetricType.
-  register(`conditions.${index}.weightedPeerGroups`, { shouldUnregister: true });
+  // Register déclaratif pour que RHF inclue le champ dans le payload submit.
+  // Cleanup au switch géré au parent ConditionEditor (cleanConditionForType).
+  register(`conditions.${index}.weightedPeerGroups`);
 
   const condition = watch(`conditions.${index}`) as PerformanceConditionInput | undefined;
   const groups = condition?.weightedPeerGroups ?? [];

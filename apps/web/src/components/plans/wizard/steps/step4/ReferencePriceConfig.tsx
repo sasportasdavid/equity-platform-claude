@@ -28,8 +28,11 @@ import { Label } from '@/components/ui/label';
  *  - FIXED → fixedPrice obligatoire (positif, ≤ MAX_REFERENCE_PRICE)
  *  - AVERAGE → averagingDays obligatoire (entier 1–90)
  *
- * Pattern : tous les `register` utilisent `{ shouldUnregister: true }`
- * pour purge automatique au switch de marketMetricType.
+ * Cleanup : pas de `shouldUnregister: true` — purgerait au unmount step
+ * (cf. fix bug step 7 review). Le switch de conditionType est purgé par
+ * `cleanConditionForType` au parent. Sub-mode (FIXED → AVERAGE → SPOT)
+ * laisse des valeurs orphelines ; acceptable car la Server Action filtre
+ * via `cleanConditionForType` côté serveur (défense en profondeur).
  */
 export function ReferencePriceConfig({ index }: { index: number }) {
   const { watch } = useFormContext<PlanWizardData>();
@@ -100,9 +103,7 @@ function SidePanel({
           id={`${side}-${index}-method`}
           className="border-input bg-background shadow-xs h-8 w-full rounded-md border px-3 text-sm"
           aria-invalid={!!methodErr?.message}
-          {...register(methodPath as `conditions.${number}.startPriceMethod`, {
-            shouldUnregister: true,
-          })}
+          {...register(methodPath as `conditions.${number}.startPriceMethod`)}
           defaultValue={method ?? ''}
         >
           <option value="">— Choisir —</option>
@@ -132,9 +133,7 @@ function SidePanel({
             placeholder="Ex : 150"
             aria-invalid={!!fixedErr?.message}
             className="h-8 font-mono"
-            {...register(fixedPath as `conditions.${number}.startFixedPrice`, {
-              shouldUnregister: true,
-            })}
+            {...register(fixedPath as `conditions.${number}.startFixedPrice`)}
           />
           {fixedErr?.message ? (
             <p className="text-destructive text-xs">{String(fixedErr.message)}</p>
@@ -157,9 +156,7 @@ function SidePanel({
             placeholder="Ex : 20"
             aria-invalid={!!daysErr?.message}
             className="h-8 font-mono"
-            {...register(daysPath as `conditions.${number}.startAveragingDays`, {
-              shouldUnregister: true,
-            })}
+            {...register(daysPath as `conditions.${number}.startAveragingDays`)}
           />
           {daysErr?.message ? (
             <p className="text-destructive text-xs">{String(daysErr.message)}</p>

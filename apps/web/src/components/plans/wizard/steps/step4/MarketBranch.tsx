@@ -42,11 +42,13 @@ import { YahooIndexSearch } from './YahooIndexSearch';
  * `planWizardSchema.superRefine`). Elles sont gérées par le bloc
  * partagé du `ConditionEditor`.
  *
- * **Tous les `register` utilisent `{ shouldUnregister: true }`** : quand
- * le composant unmount (l'utilisateur change le `conditionType` pour
- * SERVICE ou NON_MARKET), RHF purge automatiquement les valeurs.
- * Pattern identique à NonMarketBranch — voir le commentaire détaillé
- * dans ce composant pour la rationale.
+ * **Cleanup au switch de `conditionType`** : centralisé au parent
+ * `ConditionEditor` via `cleanConditionForType`. On NE PAS utiliser
+ * `shouldUnregister: true` ici : ce flag purgerait aussi les valeurs
+ * quand le composant unmount pour des raisons NON liées au switch de
+ * type (ex : navigation step 4 → step 5, où `<Step4Performance />`
+ * disparaît du DOM via `{stepId === 4 ? ... : null}`). Symptôme observé
+ * : champs vidés au retour sur step 4 ou au step 7 review.
  */
 export function MarketBranch({ index }: { index: number }) {
   const { register, watch, setValue, formState } = useFormContext<PlanWizardData>();
@@ -137,7 +139,7 @@ export function MarketBranch({ index }: { index: number }) {
             id={`cond-${index}-market-metric`}
             className="border-input bg-background shadow-xs h-9 w-full rounded-md border px-3 text-sm"
             aria-invalid={!!conditionErrors?.marketMetricType}
-            {...register(`conditions.${index}.marketMetricType`, { shouldUnregister: true })}
+            {...register(`conditions.${index}.marketMetricType`)}
             defaultValue={condition.marketMetricType ?? ''}
           >
             <option value="">— Sélectionner une métrique —</option>
@@ -168,7 +170,7 @@ export function MarketBranch({ index }: { index: number }) {
             id={`cond-${index}-market-operator`}
             className="border-input bg-background shadow-xs h-9 w-full rounded-md border px-3 text-sm"
             aria-invalid={!!conditionErrors?.comparisonOperator}
-            {...register(`conditions.${index}.comparisonOperator`, { shouldUnregister: true })}
+            {...register(`conditions.${index}.comparisonOperator`)}
             defaultValue={condition.comparisonOperator ?? ''}
           >
             <option value="">— Sélectionner un opérateur —</option>
@@ -202,7 +204,7 @@ export function MarketBranch({ index }: { index: number }) {
             placeholder={targetValuePlaceholder(condition.marketMetricType)}
             maxLength={PLAN_WIZARD_LIMITS.MAX_TARGET_VALUE_LENGTH}
             aria-invalid={!!conditionErrors?.targetValue}
-            {...register(`conditions.${index}.targetValue`, { shouldUnregister: true })}
+            {...register(`conditions.${index}.targetValue`)}
           />
           {conditionErrors?.targetValue?.message ? (
             <p className="text-destructive text-xs">
@@ -222,7 +224,7 @@ export function MarketBranch({ index }: { index: number }) {
             type="text"
             placeholder={placeholderForMetric}
             aria-invalid={!!conditionErrors?.targetUnit}
-            {...register(`conditions.${index}.targetUnit`, { shouldUnregister: true })}
+            {...register(`conditions.${index}.targetUnit`)}
           />
           <p className="text-muted-foreground text-xs">
             Auto-remplie selon la métrique. Modifiable.
@@ -406,17 +408,16 @@ function PeersBranch({ index }: { index: number }) {
 /**
  * Wrapper RHF autour de `YahooIndexSearch`. Branche les 2 champs
  * `referenceIndex` (ticker) et `referenceIndexDisplayName` (nom
- * affichable) ; les deux sont déclarés avec `shouldUnregister: true`
- * pour la même raison que les autres champs MARKET — purge automatique
- * au switch de type ou de marketMetricType.
+ * affichable). Cleanup des valeurs orphelines au switch de
+ * `conditionType` géré par `cleanConditionForType` (parent ConditionEditor).
  */
 function IndexSelector({ index }: { index: number }) {
   const { register, watch, setValue, formState } = useFormContext<PlanWizardData>();
   // Register déclaratifs (sans rendre l'input) — RHF a besoin du register
-  // pour suivre le champ et le purger via shouldUnregister au unmount.
-  // On rend l'UI custom via YahooIndexSearch et on synchronise via setValue.
-  register(`conditions.${index}.referenceIndex`, { shouldUnregister: true });
-  register(`conditions.${index}.referenceIndexDisplayName`, { shouldUnregister: true });
+  // pour que les valeurs soient incluses dans le payload submit. On rend
+  // l'UI custom via YahooIndexSearch et on synchronise via setValue.
+  register(`conditions.${index}.referenceIndex`);
+  register(`conditions.${index}.referenceIndexDisplayName`);
 
   const value = (watch(`conditions.${index}.referenceIndex`) as string | undefined) ?? '';
   const displayName =
