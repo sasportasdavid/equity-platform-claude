@@ -113,6 +113,19 @@ export type PythonPayload = {
     vesting_schedule: Array<{ time: number; portion: number }>;
   };
   conditions: Array<Record<string, unknown>>;
+  /**
+   * Top-level flags du `ValuationRequest` côté moteur Python (HANDOVER_PACK
+   * §4.2 + OpenAPI). Ne sont PAS dans `config` — c'est important pour que
+   * le moteur les lise correctement.
+   *
+   *   - compute_greeks      : si true, retourne `greeks` (delta/gamma/vega/
+   *                           theta/rho) — coût ~5× le calcul vanilla
+   *   - include_debug_paths : si true, retourne `debug_paths` pour viz UI
+   *   - debug_light_paths   : nb max de paths renvoyés (downsamplé)
+   */
+  compute_greeks: boolean;
+  include_debug_paths: boolean;
+  debug_light_paths: number;
 };
 
 // =============================================================================
@@ -181,7 +194,22 @@ export function buildPythonPayload(ctx: PythonValuationContext): PythonPayload {
 
   const conditions = ctx.conditions.map((cond) => buildConditionParams(cond, s0));
 
-  return { config, market, instrument, conditions };
+  return {
+    config,
+    market,
+    instrument,
+    conditions,
+    // Greeks activés systématiquement (cf. spec sensitivities §6) — coût
+    // ~5× la valuation vanilla mais on en a besoin pour la card Sensibilités
+    // de la page détail valuation B5.5. Si perf devient un problème sur des
+    // gros plans Monte Carlo, on rendra ça opt-in côté UI.
+    compute_greeks: true,
+    // Debug paths : utilisés par le LineChart Recharts de B5.5 pour montrer
+    // les trajectoires Monte Carlo. Cap à 50 paths côté moteur (downsample
+    // à la source = pas de coût réseau si MC pour millions de paths).
+    include_debug_paths: true,
+    debug_light_paths: 50,
+  };
 }
 
 // =============================================================================
