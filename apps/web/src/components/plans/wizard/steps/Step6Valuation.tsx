@@ -199,7 +199,6 @@ export function Step6Valuation() {
                 step="any"
                 placeholder="Ex : 1.20"
                 errorMsg={errors.dividendAmount?.message as string | undefined}
-                shouldUnregister
               />
             ) : (
               <NumberField
@@ -211,9 +210,14 @@ export function Step6Valuation() {
                 step="any"
                 placeholder="Ex : 2"
                 errorMsg={errors.dividendYield?.message as string | undefined}
-                shouldUnregister
               />
             )}
+            {/* Pas de `shouldUnregister: true` ici — purgerait au unmount
+                step 6 → 7 → 6, pas seulement au toggle de dividendInputMode.
+                Le champ inactif reste en form state mais est ignoré par le
+                superRefine (qui ne valide que celui correspondant au mode
+                courant). Server-side, cleanConditionForType ou le mapping
+                builder filtrera l'orphelin. Cf. fix step4 commit 2647a23. */}
           </CardContent>
         </Card>
 
@@ -481,10 +485,12 @@ type RegisterFn = ReturnType<typeof useFormContext<PlanWizardData>>['register'];
  * NumberField est fully controlled : lit via `watch(name)` et écrit via
  * `setValue(name, ...)`. Sans ça, RHF garde un shadow state qui ne se
  * re-sync pas au `reset()` du form (ex : un input dividendAmount qui
- * gardait '0.15' après un préset KO sans dividendAmount). Le prop
- * `register` reste accepté pour la rétro-compatibilité de signature
- * mais n'est plus utilisé (le composant utilise useFormContext en
- * interne).
+ * gardait '0.15' après un préset KO sans dividendAmount).
+ *
+ * **Pas de `register` ni `shouldUnregister`** : le composant utilise
+ * useFormContext en interne. Les valeurs sont persistées via setValue →
+ * form state, qui survit aux unmounts (FormProvider au niveau PlanWizard).
+ * Donc safe par construction face à la navigation step-to-step.
  */
 function NumberField({
   name,
@@ -496,8 +502,6 @@ function NumberField({
   errorMsg,
   helpText,
 }: {
-  // register accepté pour rétro-compat mais ignoré (le composant
-  // utilise useFormContext en interne pour le pattern controlled).
   register?: RegisterFn;
   name: Parameters<RegisterFn>[0];
   label: string;
@@ -507,7 +511,6 @@ function NumberField({
   placeholder?: string;
   errorMsg?: string;
   helpText?: string;
-  shouldUnregister?: boolean;
 }) {
   const { watch, setValue } = useFormContext<PlanWizardData>();
   const value = watch(name) as number | undefined;
