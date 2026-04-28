@@ -24,7 +24,7 @@ export function PageShell({
   className?: string;
 }) {
   return (
-    <div className={cn('container mx-auto max-w-7xl space-y-6 px-4 py-6 lg:px-8', className)}>
+    <div className={cn('mx-auto w-full max-w-7xl space-y-6', className)}>
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
