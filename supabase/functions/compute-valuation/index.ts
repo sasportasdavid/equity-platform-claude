@@ -36,15 +36,19 @@ import type { PythonValuationContext } from '../_shared/buildPythonPayload.ts';
 
 type PythonResponse = {
   fair_value?: number;
+  fair_value_market_only?: number;
   fair_value_per_unit?: number;
   std_error?: number;
   ci95_low?: number;
   ci95_high?: number;
   vesting_probability?: number;
+  vesting_probability_real?: number;
+  avg_market_multiplier?: number;
   debug_paths?: unknown;
   audit_trail?: unknown;
   tranche_details?: unknown;
   condition_breakdown?: unknown;
+  greeks?: Record<string, number> | null;
   sensitivities?: Record<string, number>;
   engine_version?: string;
 };
@@ -87,25 +91,47 @@ Deno.serve(async (req: Request) => {
     const result = await callPythonEngine(payload);
 
     // 5. Save results
+    //
+    // IFRS 2 §16-22 : la juste-valeur d'un instrument equity-settled est
+    // celle du sous-jacent SANS prise en compte des conditions de service
+    // (rétention salarié) ni des conditions non-marché (perf interne).
+    // Celles-ci ajustent la CHARGE comptable, pas la juste-valeur unitaire.
+    //
+    // Le moteur Python expose les deux niveaux :
+    //   - `fair_value_market_only` = juste-valeur option pure (= ce qu'on
+    //     veut stocker en `fair_value_per_instrument` IFRS 2)
+    //   - `fair_value` = filtrée par vesting_probability × payout_multiplier
+    //     (= valeur cash-flow attendue, utile pour reporting interne mais
+    //     pas pour IFRS 2)
+    //
+    // Conditions MARKET (TSR/SHARE_PRICE) : elles SONT incluses dans la
+    // juste-valeur IFRS 2 → elles font partie du Monte Carlo et impactent
+    // déjà `fair_value_market_only` côté moteur (cf. HANDOVER_PACK §3).
+    const fairValuePerUnit =
+      result.fair_value_market_only ?? result.fair_value_per_unit ?? result.fair_value ?? null;
+
     await supabase.from('valuation_results').insert({
       valuation_run_id: runId,
       org_id: context.orgId,
-      fair_value_per_instrument: result.fair_value_per_unit ?? null,
-      fair_value_total: result.fair_value ?? null,
+      fair_value_per_instrument: fairValuePerUnit,
+      fair_value_total: fairValuePerUnit, // = par_unit pour 1 instrument ; à pondérer par allocations Module 3b
       std_error: result.std_error ?? null,
       ci95_low: result.ci95_low ?? null,
       ci95_high: result.ci95_high ?? null,
       distribution_stats: {
         debug_paths: result.debug_paths,
         vesting_probability: result.vesting_probability,
+        vesting_probability_real: result.vesting_probability_real,
+        avg_market_multiplier: result.avg_market_multiplier,
+        fair_value_filtered: result.fair_value, // = market × proba — utile reporting interne
         audit_trail: result.audit_trail,
         tranche_details: result.tranche_details,
         condition_breakdown: result.condition_breakdown,
       },
-      sensitivities: result.sensitivities ?? null,
+      sensitivities: result.greeks ?? result.sensitivities ?? null,
       market_data_snapshot: context.marketDataSnapshot,
       // Champs legacy 00001 (gardés pour compat) :
-      fair_value: result.fair_value ?? null,
+      fair_value: fairValuePerUnit,
       audit_data: { source: 'compute-valuation', engine_version: result.engine_version },
     });
 

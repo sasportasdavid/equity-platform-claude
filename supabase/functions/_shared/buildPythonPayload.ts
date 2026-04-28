@@ -161,12 +161,16 @@ export function buildPythonPayload(ctx: PythonValuationContext): PythonPayload {
     use_monte_carlo: useMonteCarlo,
   };
 
-  const market = {
-    S0: s0,
-    r: ctx.hypothesisSet.rate_flat ?? 0,
-    q: ctx.hypothesisSet.dividend_yield ?? 0,
-    sigma,
-  };
+  // Convention DB drift : `annualized_sigma` est stockée en fraction (0.35
+  // pour 35 %), mais `rate_flat` et `dividend_yield` sont stockés en pourcent
+  // bruts (3.0 pour 3 %, cf. buildHypothesisPayload côté plans.ts qui ne
+  // divise pas par 100). Le moteur Python attend tout en fractions, donc on
+  // normalise ici. Détection : si la valeur est ≥ 1 ou < 0, on suppose un
+  // pourcent (= 3.0 pour 3 %) et on divise. Sinon (≤ 1), on suppose déjà
+  // une fraction. Cap dur à 0 pour q = 0 % usuel (pas de division 0/100).
+  const r = normalizeRateUnit(ctx.hypothesisSet.rate_flat);
+  const q = normalizeRateUnit(ctx.hypothesisSet.dividend_yield);
+  const market = { S0: s0, r, q, sigma };
 
   const instrument = {
     strike: ctx.plan.exercise_price ?? 0,
@@ -208,6 +212,25 @@ export function shouldUseMonteCarlo(ctx: PythonValuationContext): boolean {
  */
 function isOptionType(planType: string): boolean {
   return ['BSPCE', 'STOCK_OPTION', 'BSA', 'SAR'].includes(planType);
+}
+
+/**
+ * Normalise un taux (rate ou yield) vers une fraction (0-1).
+ *
+ * Convention DB drift documentée dans buildPythonPayload : `rate_flat` et
+ * `dividend_yield` sont stockés en pourcent bruts (ex. 3.0 = 3 %), alors
+ * que `annualized_sigma` l'est déjà en fraction. Le moteur Python attend
+ * tout en fractions.
+ *
+ * Heuristique : si la valeur strictement > 1, elle est probablement un
+ * pourcent → on divise par 100. Sinon on suppose une fraction déjà
+ * correcte. Une valeur 1.0 est ambigüe (= 100 % = 1.0) ; on tranche pour
+ * « pourcent » (un taux flat de 100 % serait absurde dans tous les cas
+ * réalistes).
+ */
+function normalizeRateUnit(value: number | null | undefined): number {
+  if (value == null) return 0;
+  return value > 1 ? value / 100 : value;
 }
 
 /**
