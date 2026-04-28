@@ -1,7 +1,12 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { planWizardSchema, type PlanWizardData } from '@equity/shared';
+import {
+  STANDARD_FR_LEAVER_RULES,
+  planWizardSchema,
+  type PlanWizardData,
+  type WizardLeaverType,
+} from '@equity/shared';
 import { generateCliffLinearTranches } from '@/components/plans/wizard/lib/cliff-linear';
 import { logAuditEvent } from '@/lib/audit';
 import { requirePermission } from '@/lib/auth/rbac';
@@ -337,19 +342,33 @@ function buildConditionsPayload(data: PlanWizardData): Record<string, unknown>[]
   }));
 }
 
+/**
+ * Construit le payload des 8 règles leavers à insérer en DB.
+ *
+ * Garantie : retourne TOUJOURS les 8 leaver_types (anti-bug E2E B2 où
+ * un user qui n'avait pas touché Step 5 finissait avec 0 leavers en DB
+ * et un moteur Monte Carlo sans fallback). Pour chaque leaver_type non
+ * renseigné par l'utilisateur, on applique le preset Standard FR Tech
+ * (cf. STANDARD_FR_LEAVER_RULES dans @equity/shared).
+ */
 function buildLeaverRulesPayload(data: PlanWizardData): Record<string, unknown>[] {
-  if (!data.leaverRules) return [];
-  const out: Record<string, unknown>[] = [];
-  for (const [leaverType, rule] of Object.entries(data.leaverRules)) {
-    if (!rule) continue;
-    out.push({
+  const userRules = data.leaverRules ?? ({} as Record<string, never>);
+  const allLeaverTypes = Object.keys(STANDARD_FR_LEAVER_RULES) as WizardLeaverType[];
+  return allLeaverTypes.map((leaverType) => {
+    const userRule = (
+      userRules as Record<
+        string,
+        { treatment?: string; accelerationMonths?: number; exerciseWindowDays?: number } | undefined
+      >
+    )[leaverType];
+    const treatment = userRule?.treatment ?? STANDARD_FR_LEAVER_RULES[leaverType].treatment;
+    return {
       leaver_type: leaverType,
-      treatment: rule.treatment,
-      acceleration_months: rule.accelerationMonths,
-      exercise_window_days: rule.exerciseWindowDays,
-    });
-  }
-  return out;
+      treatment,
+      acceleration_months: userRule?.accelerationMonths,
+      exercise_window_days: userRule?.exerciseWindowDays,
+    };
+  });
 }
 
 function buildHypothesisPayload(data: PlanWizardData): Record<string, unknown> {

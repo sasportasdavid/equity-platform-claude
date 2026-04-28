@@ -163,18 +163,40 @@ export type Step1Data = z.infer<typeof step1Schema>;
 // ---------------------------------------------------------------------------
 const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * Vérifie qu'une date ISO YYYY-MM-DD a une année dans une fourchette
+ * raisonnable pour un plan d'actionnariat (1900-2100).
+ *
+ * Bug rencontré sans cette refine : le navigateur accepte un input HTML5
+ * `type="date"` avec une année à 1-3 chiffres et la pad à 4 (ex : « 2 »
+ * → « 0002-01-01 »). Le regex `^\d{4}-\d{2}-\d{2}$` accepte « 0002-01-01 »
+ * → DB stocke an 2 AD → toLocaleDateString affiche « 01/01/2 ».
+ * Cf. plan corrompu observé en E2E B2 (grant_date = '0002-01-01').
+ */
+function dateYearInRange(iso: string): boolean {
+  const year = parseInt(iso.slice(0, 4), 10);
+  return Number.isFinite(year) && year >= 1900 && year <= 2100;
+}
+const dateYearMessage = 'Année invalide (doit être entre 1900 et 2100)';
+
 export const step2Schema = z.object({
   name: z
     .string()
     .trim()
     .min(PLAN_WIZARD_LIMITS.MIN_NAME_LENGTH, 'Le nom doit faire au moins 3 caractères')
     .max(PLAN_WIZARD_LIMITS.MAX_NAME_LENGTH, 'Le nom doit faire au plus 100 caractères'),
-  boardDate: z.string().regex(isoDateRegex, 'Date conseil invalide (YYYY-MM-DD)'),
+  boardDate: z
+    .string()
+    .regex(isoDateRegex, 'Date conseil invalide (YYYY-MM-DD)')
+    .refine(dateYearInRange, dateYearMessage),
   // grantDate REQUIS au step 2 — auto-copié depuis boardDate au mount via
   // Step2GeneralInfo (useEffect ligne 46-51). Cohérent avec la contrainte
   // DB `plans.grant_date NOT NULL` (cf. memory/module_3a_b1_post_check.md
   // écart 1). Pas d'override en optional dans planWizardBase ci-dessous.
-  grantDate: z.string().regex(isoDateRegex, 'Date d’attribution invalide (YYYY-MM-DD)'),
+  grantDate: z
+    .string()
+    .regex(isoDateRegex, 'Date d’attribution invalide (YYYY-MM-DD)')
+    .refine(dateYearInRange, dateYearMessage),
   poolSize: z
     .number({ message: 'Pool requis' })
     .int('Le pool doit être un entier')
@@ -384,6 +406,37 @@ export const step5Schema = z.object({
 });
 export type Step5Data = z.infer<typeof step5Schema>;
 
+/**
+ * Règles leavers appliquées par défaut quand l'utilisateur n'a renseigné
+ * AUCUNE règle au step 5 (preset Standard FR Tech).
+ *
+ * Utilisé par `buildLeaverRulesPayload` (apps/web Server Action) pour
+ * garantir que les 8 règles sont toujours insérées en DB — sinon le
+ * moteur de simulation Monte Carlo n'a pas de fallback (il assume une
+ * règle pour chaque type) et la page détail affiche "0 leavers" alors
+ * que l'utilisateur s'attend au standard.
+ *
+ * Décision arbitrage user (B2 follow-up bug) : on insert les 8 par défaut
+ * pour cohérence. Le user peut toujours appliquer un autre preset au
+ * step 5 (Conservateur / Founder-friendly) ou customiser à la main.
+ *
+ * Référence Step 5 LEAVER_PRESETS[0] (Standard FR Tech). Source de
+ * vérité unique : si la valeur change ici, le preset doit être mis à
+ * jour pour rester cohérent.
+ */
+export const STANDARD_FR_LEAVER_RULES: Readonly<
+  Record<WizardLeaverType, { treatment: WizardLeaverTreatment }>
+> = {
+  resignation: { treatment: 'keep_vested' },
+  termination_cause: { treatment: 'forfeit_all' },
+  termination_no_cause: { treatment: 'keep_vested' },
+  death: { treatment: 'full_accelerate' },
+  retirement: { treatment: 'keep_vested' },
+  company_sale: { treatment: 'full_accelerate' },
+  mutual_agreement: { treatment: 'keep_vested' },
+  end_of_contract: { treatment: 'keep_vested' },
+};
+
 // ---------------------------------------------------------------------------
 // Step 6 — Valuation
 // ---------------------------------------------------------------------------
@@ -474,11 +527,12 @@ const planWizardBase = step1Schema
     totalMonths: z.number().int().optional(),
     frequency: FrequencyEnum.optional(),
     // Override de step2Schema.partial() : on RESTAURE grantDate en required
-    // (la contrainte DB `plans.grant_date NOT NULL` l'exige + le moteur
-    // Python en a besoin comme baseline du calendrier de vesting).
-    // L'auto-copie depuis boardDate au step 2 garantit qu'il est toujours
-    // rempli au moment du submit final.
-    grantDate: z.string().regex(isoDateRegex, 'Date d’attribution invalide (YYYY-MM-DD)'),
+    // + refine année 1900-2100 (cf. dateYearInRange ci-dessus, anti-bug
+    // E2E B2 « 0002-01-01 »).
+    grantDate: z
+      .string()
+      .regex(isoDateRegex, 'Date d’attribution invalide (YYYY-MM-DD)')
+      .refine(dateYearInRange, dateYearMessage),
   });
 
 /**
