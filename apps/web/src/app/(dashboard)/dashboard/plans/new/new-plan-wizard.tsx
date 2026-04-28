@@ -9,12 +9,11 @@ import { createPlan, loadDraftPlan, saveDraftPlan } from '@/server/actions/plans
  * Module 3a (`createPlan` / `saveDraftPlan` / `loadDraftPlan`) et la
  * navigation post-création.
  *
- * `createPlan` est actuellement un STUB qui valide le payload Zod +
- * écrit en `audit_events` + retourne un planId temporaire — le RPC
- * PostgreSQL `create_plan_full` qui insère les 9 tables métier
- * atomiquement (cf. MODULE_03A_PLANS.md §3.1) sera livré dans une
- * migration dédiée. Le wizard est néanmoins fonctionnel end-to-end et
- * le auto-save serveur est branché.
+ * Sur succès : redirection vers `/dashboard/plans/[id]` (page détail
+ * placeholder en B2 — vue complète arrive en B4).
+ *
+ * Sur échec : la PlanWizard affiche `result.error` dans le footer
+ * (cf. WizardFooter, branche submitState.error).
  */
 export function NewPlanWizard() {
   const router = useRouter();
@@ -23,10 +22,13 @@ export function NewPlanWizard() {
       onSubmit={async (data) => {
         const result = await createPlan(data);
         if (result.ok) {
-          // Une fois le RPC livré : router.push(`/dashboard/plans/${result.planId}`)
-          router.refresh();
+          router.push(`/dashboard/plans/${result.planId}`);
         }
-        return result;
+        // Re-shape vers le contrat attendu par PlanWizard (sans companyId /
+        // complianceWarnings — on les garde côté server pour audit).
+        return result.ok
+          ? { ok: true as const, planId: result.planId }
+          : { ok: false as const, error: result.error };
       }}
       saveDraft={async (data) => saveDraftPlan(data)}
       loadServerDraft={async () => loadDraftPlan()}
