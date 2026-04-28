@@ -19,6 +19,10 @@ export async function createSupabaseServerClient() {
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
+      // `flowType: 'pkce'` aligné avec le browser client — nécessaire
+      // pour que `exchangeCodeForSession` côté /auth/callback retrouve
+      // le verifier stocké en cookie au moment du signInWithOtp().
+      auth: { flowType: 'pkce' },
       cookies: {
         getAll() {
           return cookieStore.getAll();

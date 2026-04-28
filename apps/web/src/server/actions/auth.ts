@@ -15,16 +15,72 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 const MAGIC_LINK_EXPIRES_MINUTES = 15;
 
 // ===========================================================================
-// sendMagicLink
+// checkEmailExistsForLogin
 // ===========================================================================
 //
-// Module 2 §1.3 — Flow login utilisateur existant.
-//   1. Vérifier que l'email existe dans user_profiles (sinon « fake success »
-//      pour éviter l'email enumeration, spec §11)
-//   2. supabase.auth.admin.generateLink({ type: 'magiclink', ... }) → action_link
-//   3. Envoyer l'email via Resend (template magic_link_login)
-//   4. Logger audit `auth.magic_link_sent`
-//   5. Retourner toujours `{ success: true }` (no leak)
+// Server Action utilitaire pour le login self-service via signInWithOtp
+// côté browser (Option C). Le pré-check d'existence est nécessaire parce
+// que :
+//
+//   - On veut bloquer le signup public (l'inscription se fait par
+//     invitation admin uniquement).
+//   - Si on appelle `signInWithOtp({ shouldCreateUser: false })` côté
+//     client + Supabase Dashboard a "Signups disabled", Supabase répond
+//     422 `otp_disabled` même pour un email valide (cf. diagnostic
+//     dans le commit précédent).
+//   - Donc on appelle `signInWithOtp({ shouldCreateUser: true })` SEULEMENT
+//     si l'email existe en DB. Si l'email n'existe pas, on retourne
+//     fake success côté client (anti email enumeration préservé).
+//
+// Cette fonction renvoie un boolean — pas l'identifiant du user, pour
+// limiter la surface d'attaque en cas d'abus (rate limit côté Supabase
+// + Vercel + this server).
+//
+// **Rate limiting recommandé** : à ajouter côté webhook Vercel ou via
+// upstash en future itération si le bot scraping devient un problème.
+
+export async function checkEmailExistsForLogin(rawEmail: string): Promise<boolean> {
+  const parsed = emailSchema.safeParse(rawEmail);
+  if (!parsed.success) return false;
+  const admin = getSupabaseAdminClient();
+  const { data: profile } = await admin
+    .from('user_profiles')
+    .select('id')
+    .eq('email', parsed.data)
+    .maybeSingle();
+  return !!profile;
+}
+
+// ===========================================================================
+// sendMagicLink — RÉSERVÉ AUX INVITATIONS ADMIN (n'est plus utilisé pour
+// le login self-service depuis la refonte Option B — cf. login-form.tsx)
+// ===========================================================================
+//
+// Module 2 §1.3 — Génération + envoi d'un magic link via le service_role
+// (admin) avec template Resend custom. Utilisé pour :
+//   - Les invitations bénéficiaires (Module 2 §3.4)
+//   - Tout flow où l'admin doit déclencher un envoi de magic link à un
+//     autre utilisateur (recovery contrôlé, etc.)
+//
+// ⚠️ NE PAS UTILISER pour le login self-service utilisateur :
+// `admin.auth.admin.generateLink({ type: 'magiclink' })` génère un lien
+// OTP legacy (`?token=&type=magiclink`) vulnérable au pre-fetching
+// Gmail / Apple Mail (consume le token one-time-use avant le clic →
+// `otp_expired`). Pour le login user, on utilise `signInWithOtp` côté
+// client browser qui pose un PKCE verifier en cookie (résistant au
+// pre-fetching). Voir `apps/web/src/app/(auth)/login/login-form.tsx`.
+//
+// Cette Server Action reste pertinente pour les invitations car :
+//   - L'admin doit déclencher l'envoi d'un email à QUELQU'UN D'AUTRE,
+//     pas pour lui-même (signInWithOtp ne marche pas dans ce cas).
+//   - Le template Resend custom (`magic_link_login`) reste utile pour
+//     le branding email des invites.
+//   - Le pre-fetching reste un risque mais l'invité peut toujours
+//     redemander un nouveau lien.
+//
+// Étape de migration future possible : configurer un Auth Hook
+// "Send Email" côté Dashboard Supabase pour combiner PKCE natif +
+// template Resend dans un seul flow propre.
 
 const SendMagicLinkSchema = z.object({
   email: emailSchema,

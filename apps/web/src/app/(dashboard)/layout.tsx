@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { LogOut, Settings } from 'lucide-react';
+import { DashboardSidebar } from '@/components/shared/dashboard-sidebar';
 import { OrgSwitcher } from '@/components/shared/org-switcher';
 import { ThemeToggle } from '@/components/shared/theme-toggle';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -58,7 +59,10 @@ export default async function DashboardLayout({ children }: { children: ReactNod
           </form>
         </nav>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">{children}</main>
+      <div className="flex flex-1">
+        <DashboardSidebar />
+        <main className="min-w-0 flex-1 px-6 py-10 lg:px-8">{children}</main>
+      </div>
     </div>
   );
 }

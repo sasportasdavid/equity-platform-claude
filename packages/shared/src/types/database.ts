@@ -1,7 +1,3 @@
-// Auto-generated from Supabase schema. Do NOT edit by hand.
-// Regenerate via Supabase MCP generate_typescript_types or:
-//   pnpm dlx supabase gen types typescript --project-id ytlfnxcrclugrsbvqdkb > packages/shared/src/types/database.ts
-
 export type Json =
   | string
   | number
@@ -1415,27 +1411,105 @@ export type Database = {
       }
       hypothesis_sets: {
         Row: {
+          as_of_date: string | null
+          company_id: string | null
+          correlation_override: number | null
           created_at: string
+          currency: string | null
+          dividend_amount: number | null
+          dividend_input_mode: string | null
+          dividend_yield: number | null
           id: string
+          lookback_days: number | null
+          model_choice: string | null
+          multi_asset_params: Json | null
           name: string | null
           org_id: string | null
           parameters: Json | null
+          plan_id: string | null
+          rate_flat: number | null
+          s0: number | null
+          ticker_override: string | null
+          time_horizon_years: number | null
+          underlying_model: string | null
+          updated_at: string
+          vol_method: string | null
+          volatility: number | null
+          volatility_price_type: string | null
+          volatility_winsorizing_pct: number | null
         }
         Insert: {
+          as_of_date?: string | null
+          company_id?: string | null
+          correlation_override?: number | null
           created_at?: string
+          currency?: string | null
+          dividend_amount?: number | null
+          dividend_input_mode?: string | null
+          dividend_yield?: number | null
           id?: string
+          lookback_days?: number | null
+          model_choice?: string | null
+          multi_asset_params?: Json | null
           name?: string | null
           org_id?: string | null
           parameters?: Json | null
+          plan_id?: string | null
+          rate_flat?: number | null
+          s0?: number | null
+          ticker_override?: string | null
+          time_horizon_years?: number | null
+          underlying_model?: string | null
+          updated_at?: string
+          vol_method?: string | null
+          volatility?: number | null
+          volatility_price_type?: string | null
+          volatility_winsorizing_pct?: number | null
         }
         Update: {
+          as_of_date?: string | null
+          company_id?: string | null
+          correlation_override?: number | null
           created_at?: string
+          currency?: string | null
+          dividend_amount?: number | null
+          dividend_input_mode?: string | null
+          dividend_yield?: number | null
           id?: string
+          lookback_days?: number | null
+          model_choice?: string | null
+          multi_asset_params?: Json | null
           name?: string | null
           org_id?: string | null
           parameters?: Json | null
+          plan_id?: string | null
+          rate_flat?: number | null
+          s0?: number | null
+          ticker_override?: string | null
+          time_horizon_years?: number | null
+          underlying_model?: string | null
+          updated_at?: string
+          vol_method?: string | null
+          volatility?: number | null
+          volatility_price_type?: string | null
+          volatility_winsorizing_pct?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "hypothesis_sets_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hypothesis_sets_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ifrs2_expense_periods: {
         Row: {
@@ -1479,7 +1553,9 @@ export type Database = {
           id: string
           org_id: string | null
           parameters: Json | null
+          plan_id: string | null
           total_expense: number | null
+          valuation_run_id: string | null
         }
         Insert: {
           award_id?: string | null
@@ -1487,7 +1563,9 @@ export type Database = {
           id?: string
           org_id?: string | null
           parameters?: Json | null
+          plan_id?: string | null
           total_expense?: number | null
+          valuation_run_id?: string | null
         }
         Update: {
           award_id?: string | null
@@ -1495,7 +1573,9 @@ export type Database = {
           id?: string
           org_id?: string | null
           parameters?: Json | null
+          plan_id?: string | null
           total_expense?: number | null
+          valuation_run_id?: string | null
         }
         Relationships: [
           {
@@ -1503,6 +1583,20 @@ export type Database = {
             columns: ["award_id"]
             isOneToOne: false
             referencedRelation: "awards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ifrs2_expense_schedules_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ifrs2_expense_schedules_valuation_run_id_fkey"
+            columns: ["valuation_run_id"]
+            isOneToOne: false
+            referencedRelation: "valuation_runs"
             referencedColumns: ["id"]
           },
         ]
@@ -1856,30 +1950,119 @@ export type Database = {
       }
       performance_conditions: {
         Row: {
+          acquisition_scale: Json | null
+          category: string | null
+          comparison_method: string | null
+          comparison_operator: string | null
           condition_type: string | null
           created_at: string
+          enable_partial_scoring: boolean
+          end_averaging_days: number | null
+          end_fixed_price: number | null
+          end_price_method: string | null
           id: string
+          market_metric_type: string | null
+          measurement_period_years: number | null
+          metric: string | null
           name: string | null
           org_id: string | null
           parameters: Json | null
+          peer_group: Json | null
+          performance_end_date: string | null
+          performance_start_date: string | null
+          plan_id: string | null
+          reference_index: string | null
+          reference_index_display_name: string | null
+          start_averaging_days: number | null
+          start_fixed_price: number | null
+          start_price_method: string | null
+          target_unit: string | null
+          target_value: string | null
+          threshold_max: number | null
+          threshold_min: number | null
+          updated_at: string
+          weight: number | null
+          weighted_peer_groups: Json | null
         }
         Insert: {
+          acquisition_scale?: Json | null
+          category?: string | null
+          comparison_method?: string | null
+          comparison_operator?: string | null
           condition_type?: string | null
           created_at?: string
+          enable_partial_scoring?: boolean
+          end_averaging_days?: number | null
+          end_fixed_price?: number | null
+          end_price_method?: string | null
           id?: string
+          market_metric_type?: string | null
+          measurement_period_years?: number | null
+          metric?: string | null
           name?: string | null
           org_id?: string | null
           parameters?: Json | null
+          peer_group?: Json | null
+          performance_end_date?: string | null
+          performance_start_date?: string | null
+          plan_id?: string | null
+          reference_index?: string | null
+          reference_index_display_name?: string | null
+          start_averaging_days?: number | null
+          start_fixed_price?: number | null
+          start_price_method?: string | null
+          target_unit?: string | null
+          target_value?: string | null
+          threshold_max?: number | null
+          threshold_min?: number | null
+          updated_at?: string
+          weight?: number | null
+          weighted_peer_groups?: Json | null
         }
         Update: {
+          acquisition_scale?: Json | null
+          category?: string | null
+          comparison_method?: string | null
+          comparison_operator?: string | null
           condition_type?: string | null
           created_at?: string
+          enable_partial_scoring?: boolean
+          end_averaging_days?: number | null
+          end_fixed_price?: number | null
+          end_price_method?: string | null
           id?: string
+          market_metric_type?: string | null
+          measurement_period_years?: number | null
+          metric?: string | null
           name?: string | null
           org_id?: string | null
           parameters?: Json | null
+          peer_group?: Json | null
+          performance_end_date?: string | null
+          performance_start_date?: string | null
+          plan_id?: string | null
+          reference_index?: string | null
+          reference_index_display_name?: string | null
+          start_averaging_days?: number | null
+          start_fixed_price?: number | null
+          start_price_method?: string | null
+          target_unit?: string | null
+          target_value?: string | null
+          threshold_max?: number | null
+          threshold_min?: number | null
+          updated_at?: string
+          weight?: number | null
+          weighted_peer_groups?: Json | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "performance_conditions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       permissions_catalog: {
         Row: {
@@ -1902,13 +2085,50 @@ export type Database = {
         }
         Relationships: []
       }
+      plan_drafts: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          org_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          id?: string
+          org_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          org_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_drafts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans: {
         Row: {
           board_date: string | null
           company_id: string
+          compliance_warnings: Json
           created_at: string
           created_by: string | null
           deleted_at: string | null
+          description: string | null
           exercise_price: number | null
           grant_date: string
           id: string
@@ -1937,9 +2157,11 @@ export type Database = {
         Insert: {
           board_date?: string | null
           company_id: string
+          compliance_warnings?: Json
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          description?: string | null
           exercise_price?: number | null
           grant_date: string
           id?: string
@@ -1968,9 +2190,11 @@ export type Database = {
         Update: {
           board_date?: string | null
           company_id?: string
+          compliance_warnings?: Json
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          description?: string | null
           exercise_price?: number | null
           grant_date?: string
           id?: string
@@ -2375,30 +2599,68 @@ export type Database = {
       }
       simulation_configs: {
         Row: {
+          antithetic_variates: boolean
           created_at: string
+          effective_model: string | null
+          heston_params: Json | null
+          hypothesis_set_id: string | null
           id: string
+          jump_params: Json | null
           name: string | null
           num_paths: number | null
           org_id: string | null
           parameters: Json | null
+          pricer_type: string | null
+          steps_per_year: number | null
+          time_horizon_years: number | null
+          underlying_model: string | null
+          updated_at: string
         }
         Insert: {
+          antithetic_variates?: boolean
           created_at?: string
+          effective_model?: string | null
+          heston_params?: Json | null
+          hypothesis_set_id?: string | null
           id?: string
+          jump_params?: Json | null
           name?: string | null
           num_paths?: number | null
           org_id?: string | null
           parameters?: Json | null
+          pricer_type?: string | null
+          steps_per_year?: number | null
+          time_horizon_years?: number | null
+          underlying_model?: string | null
+          updated_at?: string
         }
         Update: {
+          antithetic_variates?: boolean
           created_at?: string
+          effective_model?: string | null
+          heston_params?: Json | null
+          hypothesis_set_id?: string | null
           id?: string
+          jump_params?: Json | null
           name?: string | null
           num_paths?: number | null
           org_id?: string | null
           parameters?: Json | null
+          pricer_type?: string | null
+          steps_per_year?: number | null
+          time_horizon_years?: number | null
+          underlying_model?: string | null
+          updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "simulation_configs_hypothesis_set_id_fkey"
+            columns: ["hypothesis_set_id"]
+            isOneToOne: false
+            referencedRelation: "hypothesis_sets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_profiles: {
         Row: {
@@ -2508,23 +2770,50 @@ export type Database = {
       valuation_results: {
         Row: {
           audit_data: Json | null
+          ci95_high: number | null
+          ci95_low: number | null
           computed_at: string
+          distribution_stats: Json | null
           fair_value: number | null
+          fair_value_per_instrument: number | null
+          fair_value_total: number | null
           id: string
+          market_data_snapshot: Json | null
+          org_id: string | null
+          sensitivities: Json | null
+          std_error: number | null
           valuation_run_id: string
         }
         Insert: {
           audit_data?: Json | null
+          ci95_high?: number | null
+          ci95_low?: number | null
           computed_at?: string
+          distribution_stats?: Json | null
           fair_value?: number | null
+          fair_value_per_instrument?: number | null
+          fair_value_total?: number | null
           id?: string
+          market_data_snapshot?: Json | null
+          org_id?: string | null
+          sensitivities?: Json | null
+          std_error?: number | null
           valuation_run_id: string
         }
         Update: {
           audit_data?: Json | null
+          ci95_high?: number | null
+          ci95_low?: number | null
           computed_at?: string
+          distribution_stats?: Json | null
           fair_value?: number | null
+          fair_value_per_instrument?: number | null
+          fair_value_total?: number | null
           id?: string
+          market_data_snapshot?: Json | null
+          org_id?: string | null
+          sensitivities?: Json | null
+          std_error?: number | null
           valuation_run_id?: string
         }
         Relationships: [
@@ -2541,9 +2830,15 @@ export type Database = {
         Row: {
           completed_at: string | null
           created_at: string
+          engine_version: string | null
+          error_message: string | null
           id: string
           org_id: string | null
           parameters: Json | null
+          plan_id: string | null
+          pricer_used: string | null
+          results_json: Json | null
+          simulation_config_id: string | null
           started_at: string | null
           status: string | null
           triggered_by: string | null
@@ -2551,9 +2846,15 @@ export type Database = {
         Insert: {
           completed_at?: string | null
           created_at?: string
+          engine_version?: string | null
+          error_message?: string | null
           id?: string
           org_id?: string | null
           parameters?: Json | null
+          plan_id?: string | null
+          pricer_used?: string | null
+          results_json?: Json | null
+          simulation_config_id?: string | null
           started_at?: string | null
           status?: string | null
           triggered_by?: string | null
@@ -2561,14 +2862,35 @@ export type Database = {
         Update: {
           completed_at?: string | null
           created_at?: string
+          engine_version?: string | null
+          error_message?: string | null
           id?: string
           org_id?: string | null
           parameters?: Json | null
+          plan_id?: string | null
+          pricer_used?: string | null
+          results_json?: Json | null
+          simulation_config_id?: string | null
           started_at?: string | null
           status?: string | null
           triggered_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "valuation_runs_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "valuation_runs_simulation_config_id_fkey"
+            columns: ["simulation_config_id"]
+            isOneToOne: false
+            referencedRelation: "simulation_configs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vesting_events: {
         Row: {
@@ -2649,69 +2971,95 @@ export type Database = {
       vesting_schedules: {
         Row: {
           cliff_months: number | null
+          cliff_percentage: number | null
           created_at: string
           custom_data: Json | null
           description: string | null
+          frequency: string | null
           id: string
           is_template: boolean
+          linear_after_cliff: boolean | null
           name: string | null
           org_id: string | null
-          schedule_type: string | null
+          plan_id: string | null
+          single_vesting_date: string | null
           total_months: number | null
+          updated_at: string
+          vesting_type: string | null
         }
         Insert: {
           cliff_months?: number | null
+          cliff_percentage?: number | null
           created_at?: string
           custom_data?: Json | null
           description?: string | null
+          frequency?: string | null
           id?: string
           is_template?: boolean
+          linear_after_cliff?: boolean | null
           name?: string | null
           org_id?: string | null
-          schedule_type?: string | null
+          plan_id?: string | null
+          single_vesting_date?: string | null
           total_months?: number | null
+          updated_at?: string
+          vesting_type?: string | null
         }
         Update: {
           cliff_months?: number | null
+          cliff_percentage?: number | null
           created_at?: string
           custom_data?: Json | null
           description?: string | null
+          frequency?: string | null
           id?: string
           is_template?: boolean
+          linear_after_cliff?: boolean | null
           name?: string | null
           org_id?: string | null
-          schedule_type?: string | null
+          plan_id?: string | null
+          single_vesting_date?: string | null
           total_months?: number | null
+          updated_at?: string
+          vesting_type?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vesting_schedules_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vesting_tranches: {
         Row: {
           created_at: string
           id: string
+          percentage_of_award: number
           performance_condition_id: string | null
           schedule_id: string
-          tranche_order: number
-          units_or_pct: number | null
-          vest_date: string | null
+          sort_order: number
+          vesting_date: string
         }
         Insert: {
           created_at?: string
           id?: string
+          percentage_of_award: number
           performance_condition_id?: string | null
           schedule_id: string
-          tranche_order: number
-          units_or_pct?: number | null
-          vest_date?: string | null
+          sort_order: number
+          vesting_date: string
         }
         Update: {
           created_at?: string
           id?: string
+          percentage_of_award?: number
           performance_condition_id?: string | null
           schedule_id?: string
-          tranche_order?: number
-          units_or_pct?: number | null
-          vest_date?: string | null
+          sort_order?: number
+          vesting_date?: string
         }
         Relationships: [
           {
@@ -2725,39 +3073,84 @@ export type Database = {
       }
       volatility_schemes: {
         Row: {
+          annualized_sigma: number | null
           created_at: string
+          heston_params: Json | null
+          hypothesis_set_id: string | null
           id: string
+          jump_params: Json | null
+          lookback_period_days: number | null
+          method: string | null
           name: string | null
           org_id: string | null
           parameters: Json | null
-          scheme_type: string | null
+          updated_at: string
         }
         Insert: {
+          annualized_sigma?: number | null
           created_at?: string
+          heston_params?: Json | null
+          hypothesis_set_id?: string | null
           id?: string
+          jump_params?: Json | null
+          lookback_period_days?: number | null
+          method?: string | null
           name?: string | null
           org_id?: string | null
           parameters?: Json | null
-          scheme_type?: string | null
+          updated_at?: string
         }
         Update: {
+          annualized_sigma?: number | null
           created_at?: string
+          heston_params?: Json | null
+          hypothesis_set_id?: string | null
           id?: string
+          jump_params?: Json | null
+          lookback_period_days?: number | null
+          method?: string | null
           name?: string | null
           org_id?: string | null
           parameters?: Json | null
-          scheme_type?: string | null
+          updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "volatility_schemes_hypothesis_set_id_fkey"
+            columns: ["hypothesis_set_id"]
+            isOneToOne: false
+            referencedRelation: "hypothesis_sets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      create_plan_full: {
+        Args: {
+          p_company_id: string
+          p_compliance_warnings: Json
+          p_conditions: Json
+          p_hypothesis: Json
+          p_leaver_rules: Json
+          p_org_id: string
+          p_plan_data: Json
+          p_simulation: Json
+          p_vesting: Json
+          p_volatility: Json
+        }
+        Returns: Json
+      }
       current_org_id: { Args: never; Returns: string }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       decrypt_sensitive: { Args: { ciphertext: string }; Returns: string }
+      duplicate_plan_full: {
+        Args: { p_new_name?: string; p_source_plan_id: string }
+        Returns: Json
+      }
       encrypt_sensitive: { Args: { plaintext: string }; Returns: string }
       get_beneficiary_decrypted: {
         Args: { p_id: string }
@@ -2819,6 +3212,18 @@ export type Database = {
         Returns: boolean
       }
       is_org_member: { Args: { org_id_param: string }; Returns: boolean }
+      list_my_plan_drafts: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: string
+          plan_name: string
+          plan_type: string
+          updated_at: string
+        }[]
+      }
+      load_plan_draft: { Args: { p_draft_id: string }; Returns: Json }
+      upsert_plan_draft: { Args: { p_data: Json }; Returns: Json }
       user_all_permissions: { Args: never; Returns: string[] }
       user_has_permission: { Args: { p_perm: string }; Returns: boolean }
     }
@@ -2953,3 +3358,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

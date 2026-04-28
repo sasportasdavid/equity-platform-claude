@@ -1,0 +1,286 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { useFormContext } from 'react-hook-form';
+import { CalendarDays, Hash, Info, Wallet } from 'lucide-react';
+import {
+  PLAN_TYPE_UI_LABELS,
+  PLAN_TYPES_REQUIRING_STRIKE,
+  strikeMinPercent,
+  type PlanWizardData,
+} from '@equity/shared';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+
+/**
+ * Step 2 — Informations générales (Module 3a §2.5).
+ *
+ * Comportements clés :
+ *  - **Auto-copie boardDate → grantDate** au premier remplissage. On utilise
+ *    un `useRef` flag pour ne pas l'écraser si l'utilisateur a déjà touché
+ *    grantDate (évite la boucle infinie + le comportement inattendu).
+ *  - **Champ exercise price conditionnel** : visible uniquement pour les types
+ *    qui requièrent un strike (BSPCE / Stock Options / BSA / SAR).
+ *  - **Validation strike vs FMV** (warning soft, calculé à partir du
+ *    `underlyingPrice` saisi en Step 6 ; absent ici, donc placeholder).
+ *  - **Bannière info** par type de plan : règles légales saillantes (BSPCE
+ *    18 mois, AGA 38 mois, etc.).
+ */
+export function Step2GeneralInfo() {
+  const { register, watch, setValue, formState } = useFormContext<PlanWizardData>();
+  const errors = formState.errors;
+
+  const planType = watch('planType');
+  const boardDate = watch('boardDate');
+  const grantDate = watch('grantDate');
+  const exercisePrice = watch('exercisePrice');
+  const underlyingPrice = watch('underlyingPrice');
+
+  // Auto-copie boardDate → grantDate uniquement au premier remplissage.
+  // useState plutôt qu'useRef car on a besoin que le re-render expose la
+  // nouvelle valeur au useEffect ; c'est aussi ce que demande le linter
+  // `react-hooks/refs` activé dans Next 16 (lecture du ref pendant render
+  // = anti-pattern, alors que setState est sûr).
+  const [grantDateTouched, setGrantDateTouched] = useState(false);
+  useEffect(() => {
+    if (grantDateTouched) return;
+    if (boardDate && !grantDate) {
+      setValue('grantDate', boardDate, { shouldValidate: false, shouldDirty: false });
+    }
+  }, [boardDate, grantDate, grantDateTouched, setValue]);
+
+  const markGrantDateTouched = useCallback(() => {
+    setGrantDateTouched(true);
+  }, []);
+
+  const requiresStrike = planType ? PLAN_TYPES_REQUIRING_STRIKE.has(planType) : false;
+  const strikeMinPct = planType ? strikeMinPercent(planType) : null;
+
+  // Strike vs FMV warning (soft)
+  let strikeWarning: string | null = null;
+  if (requiresStrike && strikeMinPct && exercisePrice != null && underlyingPrice != null) {
+    const minStrike = underlyingPrice * strikeMinPct;
+    if (exercisePrice < minStrike) {
+      strikeWarning =
+        planType === 'BSPCE'
+          ? `Le strike doit être ≥ 100 % de la valeur réelle de l’action (FMV) — minimum ${minStrike.toFixed(2)} € ici.`
+          : `Recommandé : strike ≥ ${(strikeMinPct * 100).toFixed(0)} % FMV — minimum ${minStrike.toFixed(2)} € ici.`;
+    }
+  }
+
+  return (
+    <section className="space-y-5" data-testid="step-2-general-info">
+      {planType ? <PlanTypeBanner planType={planType} /> : null}
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        {/* Nom + description */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Identité du plan</CardTitle>
+            <CardDescription>
+              Comment vous l’appellerez en interne et dans vos documents.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-name">Nom *</Label>
+              <Input
+                id="plan-name"
+                placeholder="Ex : BSPCE 2026 — Plan A"
+                aria-invalid={!!errors.name}
+                {...register('name')}
+              />
+              {errors.name?.message ? (
+                <p className="text-destructive text-xs">{String(errors.name.message)}</p>
+              ) : (
+                <p className="text-muted-foreground text-xs">3 à 100 caractères.</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-description">Description (optionnel)</Label>
+              <textarea
+                id="plan-description"
+                rows={3}
+                maxLength={1000}
+                placeholder="Contexte, objectifs, ou tout commentaire utile pour les CAC."
+                className="border-input bg-background focus-visible:ring-ring/50 shadow-xs focus-visible:ring-3 w-full rounded-md border px-3 py-2 text-sm"
+                {...register('description')}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pool & strike */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Wallet className="size-4" /> Pool & pricing
+            </CardTitle>
+            <CardDescription>
+              Volume total à attribuer (instruments) et prix d’exercice si applicable.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-pool-size">Pool d’instruments *</Label>
+              <Input
+                id="plan-pool-size"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                placeholder="Ex : 50000"
+                aria-invalid={!!errors.poolSize}
+                {...register('poolSize', { valueAsNumber: true })}
+              />
+              {errors.poolSize?.message ? (
+                <p className="text-destructive text-xs">{String(errors.poolSize.message)}</p>
+              ) : (
+                <p className="text-muted-foreground text-xs">
+                  Nombre total d’instruments disponibles à allouer.
+                </p>
+              )}
+            </div>
+
+            {requiresStrike ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="plan-exercise-price">
+                  Prix d’exercice (€){' '}
+                  <span className="text-muted-foreground font-normal">— par instrument</span>
+                </Label>
+                <Input
+                  id="plan-exercise-price"
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="any"
+                  placeholder="Ex : 1.25"
+                  aria-invalid={!!errors.exercisePrice}
+                  {...register('exercisePrice', { valueAsNumber: true })}
+                />
+                {errors.exercisePrice?.message ? (
+                  <p className="text-destructive text-xs">{String(errors.exercisePrice.message)}</p>
+                ) : strikeWarning ? (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">⚠ {strikeWarning}</p>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    {strikeMinPct
+                      ? `Strike minimum recommandé : ${(strikeMinPct * 100).toFixed(0)} % FMV.`
+                      : 'Optionnel selon le contexte fiscal.'}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-muted-foreground rounded-md border border-dashed px-3 py-2 text-xs">
+                Pas de prix d’exercice pour les{' '}
+                <strong className="text-foreground">
+                  {PLAN_TYPE_UI_LABELS[planType ?? 'AGA']}
+                </strong>{' '}
+                — l’attribution est gratuite ou settlement-cash.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Dates */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CalendarDays className="size-4" /> Dates clés
+            </CardTitle>
+            <CardDescription>
+              Conseil d’administration, attribution, et autorisation AGE le cas échéant.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-board-date">Date du conseil *</Label>
+              <Input
+                id="plan-board-date"
+                type="date"
+                aria-invalid={!!errors.boardDate}
+                {...register('boardDate')}
+              />
+              {errors.boardDate?.message ? (
+                <p className="text-destructive text-xs">{String(errors.boardDate.message)}</p>
+              ) : null}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-grant-date">Date d’attribution</Label>
+              <Input
+                id="plan-grant-date"
+                type="date"
+                aria-invalid={!!errors.grantDate}
+                {...register('grantDate', { onChange: markGrantDateTouched })}
+              />
+              {errors.grantDate?.message ? (
+                <p className="text-destructive text-xs">{String(errors.grantDate.message)}</p>
+              ) : (
+                <p className="text-muted-foreground text-xs">
+                  Auto-copiée depuis la date du conseil.
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-shareholder-meeting-date">Date AGE (autorisation)</Label>
+              <Input
+                id="plan-shareholder-meeting-date"
+                type="date"
+                {...register('shareholderMeetingDate')}
+              />
+              <p className="text-muted-foreground text-xs">Optionnel — surtout AGA / BSPCE.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="plan-shareholder-auth-expires">Validité autorisation</Label>
+              <Input
+                id="plan-shareholder-auth-expires"
+                type="date"
+                {...register('shareholderAuthorizationExpiresAt')}
+              />
+              <p className="text-muted-foreground text-xs">Max 38 mois pour AGA.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <p className="text-muted-foreground flex items-start gap-2 text-xs">
+        <Hash className="mt-0.5 size-3.5" />
+        Tous les champs marqués <span className="text-foreground font-semibold">*</span> sont
+        obligatoires. Les autres restent modifiables tant que le plan n’est pas verrouillé.
+      </p>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Bannière info contextuelle par type de plan
+// ---------------------------------------------------------------------------
+function PlanTypeBanner({ planType }: { planType: PlanWizardData['planType'] }) {
+  const message = PLAN_TYPE_BANNER[planType];
+  if (!message) return null;
+  return (
+    <div className="border-primary/20 bg-primary/5 text-primary-foreground dark:bg-primary/10 flex gap-3 rounded-md border px-4 py-3 text-sm">
+      <Info className="text-primary mt-0.5 size-4 shrink-0" />
+      <div className="text-foreground">
+        <strong className="font-semibold">{PLAN_TYPE_UI_LABELS[planType]}</strong> — {message}
+      </div>
+    </div>
+  );
+}
+
+const PLAN_TYPE_BANNER: Record<PlanWizardData['planType'], string> = {
+  BSPCE:
+    'Régime fiscal de faveur français. La société doit être éligible (CGI 163 bis G) ; le strike doit être ≥ 100 % FMV.',
+  AGA: 'Période d’acquisition ≥ 1 an, conservation cumulée ≥ 2 ans pour le régime de faveur. Plafond 10 % du capital. Autorisation AGE valide 38 mois.',
+  STOCK_OPTION:
+    'Strike généralement ≥ 80 % FMV (US safe-harbour). Vesting standard 4 ans cliff 1 an. Imposable à l’exercice + plus-value.',
+  BSA: 'Instrument souvent utilisé pour consultants, advisors et investisseurs. Pas de régime fiscal préférentiel automatique.',
+  PERFORMANCE_SHARE:
+    'Actions soumises à des conditions de performance (TSR, financières, ESG). Souvent réservées au top management.',
+  RSU: 'Equivalent international de l’AGA. Imposable à la livraison comme du salaire. Vesting typique 3-4 ans.',
+  PHANTOM:
+    'Plan en cash-equivalent — pas de dilution. Settlement en cash basé sur la valeur de l’action au moment du paiement.',
+  ESOP: 'Programme global d’actionnariat collectif salarié (US). Comporte typiquement des conditions de durée et de performance.',
+  SAR: 'Stock Appreciation Rights : payement de la plus-value (cash ou actions) sans achat préalable des actions.',
+};
