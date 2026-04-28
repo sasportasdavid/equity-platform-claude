@@ -185,7 +185,7 @@ function SynthesisTab({ detail }: { detail: PlanDetail }) {
         />
       </div>
 
-      <ValuationCard latest={detail.latestValuation} />
+      <ValuationCard planId={detail.plan.id} latest={detail.latestValuation} />
 
       <Card>
         <CardHeader>
@@ -246,7 +246,13 @@ function SynthesisTab({ detail }: { detail: PlanDetail }) {
 //   - latest avec fair_value chiffrée → KpiCard centrale + métadonnées
 //   - latest sans fair_value (cas dégénéré) → état d'erreur léger
 // ---------------------------------------------------------------------------
-function ValuationCard({ latest }: { latest: PlanDetail['latestValuation'] }) {
+function ValuationCard({
+  planId,
+  latest,
+}: {
+  planId: string;
+  latest: PlanDetail['latestValuation'];
+}) {
   if (!latest) {
     return (
       <Card className="border-dashed">
@@ -270,24 +276,36 @@ function ValuationCard({ latest }: { latest: PlanDetail['latestValuation'] }) {
     latest.ci95Low != null && latest.ci95High != null
       ? `IC 95 % : ${latest.ci95Low.toFixed(2)} – ${latest.ci95High.toFixed(2)} €`
       : null;
+  const detailHref = `/dashboard/plans/${planId}/valuations/${latest.runId}`;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Calculator className="size-4" />
-          Valorisation IFRS 2
-          <Badge variant="outline" className="ml-2 font-mono text-xs">
-            {latest.engineVersion ?? 'V8'}
-          </Badge>
-          <Badge variant="outline" className="text-xs font-normal">
-            {latest.pricerUsed ?? 'BLACK_SCHOLES'}
-          </Badge>
-        </CardTitle>
-        <CardDescription>
-          Calculée le {formatDateTime(latest.completedAt)}
-          {ci ? ` · ${ci}` : ''}
-        </CardDescription>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Calculator className="size-4" />
+              Valorisation IFRS 2
+              <Badge variant="outline" className="ml-2 font-mono text-xs">
+                {latest.engineVersion ?? 'V8'}
+              </Badge>
+              <Badge variant="outline" className="text-xs font-normal">
+                {latest.pricerUsed ?? 'BLACK_SCHOLES'}
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Calculée le {formatDateTime(latest.completedAt)}
+              {ci ? ` · ${ci}` : ''}
+            </CardDescription>
+          </div>
+          <Link
+            href={detailHref}
+            className="text-muted-foreground hover:text-foreground inline-flex items-center whitespace-nowrap text-sm"
+            data-testid="valuation-card-detail-link"
+          >
+            Voir le détail
+          </Link>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -307,7 +325,7 @@ function ValuationCard({ latest }: { latest: PlanDetail['latestValuation'] }) {
             icon={<History className="size-4" />}
             label="Run id"
             value={latest.runId.slice(0, 8)}
-            sub="Détail complet en B5.5"
+            sub="Cliquez « Voir le détail » pour audit"
           />
         </div>
       </CardContent>
