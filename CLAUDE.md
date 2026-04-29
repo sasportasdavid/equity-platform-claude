@@ -162,18 +162,20 @@ apps/web/src/lib/supabase/database.types.ts`
 
 ### En cours
 
-- [ ] Module 3b — Awards Lifecycle (branche feat/module-3b-awards,
-      PR draft #5)
+- [x] Module 3b — Awards Lifecycle (branche feat/module-3b-awards,
+      PR #5 ready-for-review)
   - [x] B1 — DB & RPCs (counter, triggers, create_award_full,
         materialize_vesting_events, bulk_create_awards)
   - [x] B2 — State machine + Server Actions + sandbox
         /dev/award-state-machine
   - [x] B3 — Page liste /dashboard/awards + modale création +
         row actions (cancel/forfeit/transition)
-  - [ ] B4 — Page détail /dashboard/awards/[id] (5 onglets)
-  - [ ] B5 — Bulk import CSV
-  - [ ] B6 — Modifications IFRS 2.27-28
-  - [ ] B7 — Compliance V1 + closure
+  - [x] B4 — Page détail /dashboard/awards/[id] (5 onglets)
+  - [x] B5 — Bulk import CSV (papaparse + wizard 3 étapes)
+  - [x] B6 — Modifications IFRS 2.27-28 (RPC + 5 sub-forms +
+        JsonDiffViewer)
+  - [x] B7 — Compliance V1 (4 rules + runChecks + UI dialogs) +
+        closure module 3b complete
 
 ### À venir
 
@@ -197,26 +199,59 @@ apps/web/src/lib/supabase/database.types.ts`
    dans `normalizeRateUnit()` côté payload Python. À refondre
    en migration propre quand on touchera au Module 11.
 
-2. **`runComplianceChecks`** : actuellement stub,
-   `compliance_warnings` toujours vide. Implémentation V1 en
-   Module 3b B7 puis V2 configurable en Module 12.
+2. **`runComplianceChecks` V1 livrée Module 3b B7** : 4 rules pure
+   functions (BSPCE_BENEFICIARY_TYPE, AGA_30_PERCENT_CAP,
+   POOL_AVAILABLE, GRANT_DATE_RECENT) hookées dans `transitionAward`
+   à `toStatus=PROPOSED` uniquement. V2 configurable par org en
+   Module 12 via une table `compliance_rules_overrides`.
 
-3. **Tests automatisés** :
-   - Vitest setup OK, 58/58 tests
+3. **AGA_30_PERCENT_CAP** : retourne null en V1 si
+   `companyTotalShares` indisponible (cap table pas en place). Full
+   check Module 10. La rule existe et est testée — il manque juste
+   le ctx loader côté `runChecks.ts` quand Module 10 livrera la cap
+   table.
+
+4. **Realtime sur awards** : pas de push Supabase Realtime sur
+   `awards.status_changed`. Le user doit `router.refresh()` ou
+   recharger pour voir un nouveau statut. À envisager Module 4+
+   (cosmétique, pas bloquant).
+
+5. **Vesting cron auto** : pas de pg_cron qui passe les
+   `vesting_events` PENDING → VESTED automatiquement à la
+   `scheduled_date`. Le bouton "Forcer le vesting" prévu dans la
+   spec a été skip en V1. À implémenter Module 9 (exercise
+   lifecycle).
+
+6. **Migration drift cloud** : 1 hotfix appliqué en cloud sans
+   file local : `module_3b_create_award_full_fix_fk` (20260428).
+   À reverse-engineer depuis le cloud + créer un file local
+   (00021_fix_fk.sql ou similaire) pour resync avant qu'un autre
+   dev clone le repo.
+
+7. **Tests automatisés** :
+   - Vitest setup OK, 107/107 tests workspace (12 shared + 95 web)
    - Playwright pas encore en place — tests E2E manuels en
      attendant
    - Tests d'intégration Server Actions ↔ Supabase test
      instance pas en place
+   - Pas de plugin React JSX dans Vitest (les tests de composants
+     React doivent passer par des helpers pure extraits)
 
-4. **Mini-table beneficiaries** : créée a minima pour Module 3b.
+8. **Mini-table beneficiaries** : créée a minima pour Module 3b.
    CRUD complet + import RH + lifecycle au Module 4.
 
-5. **valuation_runs.hypothesis_set_id** : sans FK explicite.
+9. **valuation_runs.hypothesis_set_id** : sans FK explicite.
    Fonctionne via convention. À nettoyer au Module 11.
 
-6. **8 leavers defaults Standard FR Tech** : hardcodés au mapper
-   du wizard plan. Les rendre configurables (par template plan)
-   au Module 4 ou Module 12.
+10. **8 leavers defaults Standard FR Tech** : hardcodés au mapper
+    du wizard plan. Les rendre configurables (par template plan)
+    au Module 4 ou Module 12.
+
+11. **`incremental_fair_value`** sur `award_modifications` :
+    colonne existe mais le calcul est différé au moteur Python
+    (Module 11). Affichage UI = "—" en attendant. Pas de page UI
+    pour suivre les `valuation_runs` déclenchés par les
+    modifications IFRS 2 (Module 11).
 
 ## Sécurité
 
@@ -245,6 +280,16 @@ Si tu te demandes "comment faire X", chercher d'abord :
   `apps/web/src/components/shared/data-table.tsx`
 - **Modale de création + sub-form** : voir
   `apps/web/src/components/awards/CreateAwardModal.tsx`
+- **Modale wizard multi-step (useReducer)** : voir
+  `apps/web/src/components/awards/BulkImportModal.tsx` ou
+  `CreateModificationModal.tsx`
+- **Compliance rule pure function + runner** : voir
+  `apps/web/src/lib/compliance/rules/awardRules.ts` +
+  `runChecks.ts`
+- **JSON diff viewer 2 colonnes** : voir
+  `apps/web/src/components/shared/JsonDiffViewer.tsx`
+- **Discriminated union Zod par variant** : voir
+  `packages/shared/src/schemas/award.ts::createModificationSchema`
 - **Sandbox /dev/** : voir `apps/web/src/app/dev/*/page.tsx`
 - **Edge Function avec service_role** : voir
   `supabase/functions/compute-valuation/`
