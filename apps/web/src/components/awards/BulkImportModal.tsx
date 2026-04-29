@@ -26,6 +26,7 @@ import { bulkCreateAwards } from '@/server/actions/awards';
 import { getPoolStatusAction } from './get-pool-status-action';
 import {
   parseAwardsCsv,
+  summarizeBulk,
   validateBulkRows,
   type ParsedRow,
   type RowValidationResult,
@@ -437,11 +438,154 @@ function Step1Upload({
 }
 
 // ---------------------------------------------------------------------------
-// Step 2 — Preview + validation (placeholder, contenu en step 3 commit)
+// Step 2 — Preview + validation Zod par ligne
 // ---------------------------------------------------------------------------
 
 function Step2Preview({ state }: { state: State }) {
-  return <div className="text-muted-foreground py-8 text-center text-sm">Step 2 (à venir)</div>;
+  const summary = summarizeBulk(state.parsedRows, state.rowValidations);
+  const poolRemaining = state.pool?.remaining ?? null;
+  const poolAfter = poolRemaining !== null ? poolRemaining - summary.totalUnits : null;
+  const poolExceeded = poolAfter !== null && poolAfter < 0;
+
+  return (
+    <div className="space-y-3 py-2">
+      <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        <SummaryCard label="Total" value={summary.total.toString()} />
+        <SummaryCard label="Valides" value={summary.valid.toString()} tone="emerald" />
+        <SummaryCard
+          label="Erreurs"
+          value={summary.invalid.toString()}
+          tone={summary.invalid > 0 ? 'destructive' : undefined}
+        />
+        <SummaryCard label="Total units" value={summary.totalUnits.toLocaleString('fr-FR')} />
+      </div>
+
+      {poolRemaining !== null ? (
+        <div
+          className={[
+            'rounded-md border p-2 text-xs',
+            poolExceeded
+              ? 'border-destructive/40 bg-destructive/10 text-destructive'
+              : 'border-border bg-muted/30 text-muted-foreground',
+          ].join(' ')}
+          data-testid="bulk-import-pool-banner"
+        >
+          Pool restant après import :{' '}
+          <span className="font-mono font-medium">
+            {poolAfter !== null ? poolAfter.toLocaleString('fr-FR') : '—'}
+          </span>{' '}
+          unités
+          {poolExceeded ? (
+            <span className="ml-2 font-semibold">
+              ⚠ Dépassement — réduire les units ou agrandir le pool
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="overflow-x-auto rounded-md border" data-testid="bulk-import-preview-table">
+        <table className="w-full text-xs">
+          <thead className="bg-muted/30 text-muted-foreground border-b text-left uppercase">
+            <tr>
+              <th className="px-2 py-1.5 font-medium">#</th>
+              <th className="px-2 py-1.5 font-medium">Email</th>
+              <th className="px-2 py-1.5 font-medium">Nom</th>
+              <th className="px-2 py-1.5 font-medium">Type</th>
+              <th className="px-2 py-1.5 text-right font-medium">Units</th>
+              <th className="px-2 py-1.5 text-right font-medium">Strike</th>
+              <th className="px-2 py-1.5 font-medium">Grant</th>
+              <th className="px-2 py-1.5 font-medium">Vesting start</th>
+              <th className="px-2 py-1.5 font-medium">État</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {state.parsedRows.map((row, idx) => (
+              <PreviewRow
+                key={idx}
+                rowIndex={idx}
+                row={row}
+                validation={state.rowValidations[idx]}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: 'emerald' | 'destructive';
+}) {
+  const toneCls =
+    tone === 'emerald'
+      ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400'
+      : tone === 'destructive'
+        ? 'border-destructive/30 bg-destructive/5 text-destructive'
+        : 'border-border bg-muted/20';
+  return (
+    <div className={`rounded-md border p-2 ${toneCls}`}>
+      <div className="text-muted-foreground text-[10px] uppercase">{label}</div>
+      <div className="font-mono text-base font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function PreviewRow({
+  rowIndex,
+  row,
+  validation,
+}: {
+  rowIndex: number;
+  row: ParsedRow;
+  validation: RowValidationResult | undefined;
+}) {
+  const valid = validation?.valid ?? false;
+  const errors = validation && !validation.valid ? validation.errors : [];
+  const errorMsg = errors.map((e) => `${e.path}: ${e.message}`).join(' · ');
+
+  return (
+    <tr
+      className={valid ? '' : 'bg-destructive/5'}
+      title={errorMsg || undefined}
+      data-testid={`bulk-import-row-${rowIndex}`}
+    >
+      <td className="px-2 py-1 font-mono text-[11px]">{rowIndex + 1}</td>
+      <td className="max-w-[180px] truncate px-2 py-1">{row.beneficiaryEmail ?? '—'}</td>
+      <td className="max-w-[140px] truncate px-2 py-1">{row.beneficiaryFullName ?? '—'}</td>
+      <td className="px-2 py-1">{row.beneficiaryType ?? '—'}</td>
+      <td className="px-2 py-1 text-right tabular-nums">
+        {typeof row.unitsGranted === 'number' ? row.unitsGranted.toLocaleString('fr-FR') : '—'}
+      </td>
+      <td className="px-2 py-1 text-right tabular-nums">
+        {typeof row.exercisePrice === 'number' ? row.exercisePrice.toFixed(2) : '—'}
+      </td>
+      <td className="px-2 py-1 font-mono">{row.grantDate ?? '—'}</td>
+      <td className="px-2 py-1 font-mono">{row.vestingStartDate ?? '—'}</td>
+      <td className="px-2 py-1">
+        {valid ? (
+          <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+            <CheckCircle2 className="size-3" />
+            OK
+          </span>
+        ) : (
+          <span
+            className="bg-destructive/15 text-destructive inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+            data-testid={`bulk-import-row-error-${rowIndex}`}
+          >
+            <AlertTriangle className="size-3" />
+            Erreur
+          </span>
+        )}
+      </td>
+    </tr>
+  );
 }
 
 function Step2Footer({
@@ -453,9 +597,37 @@ function Step2Footer({
   onLaunch: () => void;
   pending: boolean;
 }) {
+  const summary = summarizeBulk(state.parsedRows, state.rowValidations);
+  const poolRemaining = state.pool?.remaining ?? null;
+  const poolExceeded = poolRemaining !== null && poolRemaining - summary.totalUnits < 0;
+  const cantLaunch = summary.invalid > 0 || summary.valid === 0 || poolExceeded;
+
+  function onClick() {
+    if (summary.valid > 50) {
+      const ok = window.confirm(
+        `Importer ${summary.valid} attributions ? Cette action créera ${summary.valid} awards en DRAFT.`,
+      );
+      if (!ok) return;
+    }
+    onLaunch();
+  }
+
   return (
-    <Button onClick={onLaunch} disabled={pending} data-testid="bulk-import-launch">
-      Lancer l&apos;import
+    <Button
+      onClick={onClick}
+      disabled={cantLaunch || pending}
+      data-testid="bulk-import-launch"
+      title={
+        cantLaunch
+          ? summary.invalid > 0
+            ? 'Corriger les erreurs avant de lancer'
+            : poolExceeded
+              ? 'Pool insuffisant'
+              : 'Aucune ligne valide'
+          : undefined
+      }
+    >
+      Lancer l&apos;import ({summary.valid})
     </Button>
   );
 }
