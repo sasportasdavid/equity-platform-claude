@@ -71,7 +71,7 @@ Ne pas anticiper les modules futurs sauf instruction explicite.
 
 - Toutes les actions admin commencent par `requirePermission('xxx')`
   (RBAC du Module 2). Pas de service_role côté client.
-- Les RPC sensibles (create*\*, transition*_, delete\__) ont
+- Les RPC sensibles (create*\*, transition*\_, delete\_\_) ont
   SECURITY DEFINER + check user_has_permission() en haut.
 
 ### Audit
@@ -109,6 +109,21 @@ resource_type, resource_id, metadata })`.
 - Sidebar nav : ajouter le nouveau lien dès que la page existe
   (pas de placeholder "à venir")
 
+### Base UI — pièges courants
+
+- **DropdownMenuLabel** doit être dans **DropdownMenuGroup** (sinon
+  "MenuGroupRootContext is missing" runtime). Le composant
+  `DropdownMenuLabel` (`apps/web/src/components/ui/dropdown-menu.tsx`)
+  wrappe désormais automatiquement le Label dans un Group "stand-alone"
+  pour éviter le piège — pas besoin de Group manuel côté call-site, mais
+  rien ne casse si tu en mets un.
+- **DropdownMenuRadioItem** doit être dans **DropdownMenuRadioGroup**.
+  Pas de fallback automatique — wrap manuellement.
+- **DropdownMenuCheckboxItem** : OK seul, pas besoin de Group.
+- En cas de doute sur un nouveau composant Base UI : wrapper avec son
+  Group parent par défaut, lire la doc en cas de runtime error
+  "...ContextRoot is missing".
+
 ### Migration DB
 
 - Numéro séquentiel : 00001_xxx, 00002_yyy, ...
@@ -116,7 +131,7 @@ resource_type, resource_id, metadata })`.
   SQL pur avant de toucher au TS
 - Régénérer les types après chaque migration :
   `pnpm supabase gen types typescript --linked > 
- apps/web/src/lib/supabase/database.types.ts`
+apps/web/src/lib/supabase/database.types.ts`
 
 ### Sandbox /dev/\*
 
