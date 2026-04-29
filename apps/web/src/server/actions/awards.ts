@@ -370,6 +370,27 @@ export async function transitionAward(input: unknown): Promise<ActionVoid | Acti
 }
 
 // ---------------------------------------------------------------------------
+// 4 bis. createAndPropose — helper « créer + soumettre » (modale UI B3)
+// ---------------------------------------------------------------------------
+// Wrap createAwardDraft + transitionAward → PROPOSED en 1 appel.
+// Si la transition échoue, l'award reste en DRAFT (pas de rollback du
+// create — l'utilisateur peut re-soumettre depuis la page liste).
+
+export async function createAndPropose(input: unknown): Promise<CreateAwardResult> {
+  const created = await createAwardDraft(input);
+  if (!created.ok) return created;
+
+  const transition = await transitionAward({ awardId: created.id, toStatus: 'PROPOSED' });
+  if (!transition.ok) {
+    return {
+      ok: false,
+      error: `Award créé en DRAFT mais soumission échouée : ${transition.error}`,
+    };
+  }
+  return created;
+}
+
+// ---------------------------------------------------------------------------
 // 5. cancelAward — wrapper transitionAward → CANCELLED
 // ---------------------------------------------------------------------------
 
