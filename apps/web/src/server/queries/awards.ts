@@ -1,4 +1,5 @@
 import 'server-only';
+import type { Json } from '@equity/shared';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 /**
@@ -221,5 +222,223 @@ export async function getPoolStatus(planId: string): Promise<PoolStatus | null> 
     poolSize,
     allocated,
     remaining: Math.max(0, poolSize - allocated),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// getAwardDetail — page détail /dashboard/awards/[id] — Module 3b B4
+// ---------------------------------------------------------------------------
+
+export type AwardDetailRow = {
+  award: {
+    id: string;
+    award_number: string | null;
+    status: string;
+    units_granted: number;
+    units_vested: number;
+    units_exercised: number;
+    units_settled: number;
+    units_cancelled: number;
+    units_outstanding: number | null;
+    exercise_price: number | null;
+    fair_value_per_unit: number | null;
+    total_fair_value: number | null;
+    grant_date: string;
+    vesting_start_date: string | null;
+    expiry_date: string | null;
+    acceptance_deadline: string | null;
+    accepted_at: string | null;
+    granted_at: string | null;
+    cancelled_at: string | null;
+    cancellation_reason: string | null;
+    plan_version: number | null;
+    has_modifications: boolean | null;
+    is_compliant: boolean | null;
+    compliance_warnings: Json;
+    vesting_schedule_snapshot: Json;
+    performance_conditions_snapshot: Json;
+    leaver_rules_snapshot: Json;
+    created_at: string;
+    updated_at: string;
+  };
+  plan: {
+    id: string;
+    name: string;
+    plan_type: string;
+    is_locked: boolean;
+    version: number;
+    parent_plan_id: string | null;
+  } | null;
+  beneficiary: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string;
+    beneficiary_type: string;
+    tax_residence_country: string | null;
+    hire_date: string | null;
+  } | null;
+  vestingEvents: Array<{
+    id: string;
+    tranche_id: string | null;
+    scheduled_date: string;
+    effective_date: string | null;
+    units_to_vest: number;
+    units_vested: number;
+    performance_multiplier: number | null;
+    status: string;
+    notification_sent_at: string | null;
+  }>;
+  modifications: Array<{
+    id: string;
+    modification_type: string;
+    effective_date: string;
+    incremental_fair_value: number | null;
+    approved_by: string | null;
+    approved_at: string | null;
+    reason: string | null;
+    before_snapshot: Json;
+    after_snapshot: Json;
+    created_at: string;
+  }>;
+  auditEvents: Array<{
+    id: string;
+    event_type: string;
+    metadata: Json;
+    user_email: string | null;
+    user_id: string | null;
+    occurred_at: string;
+  }>;
+  stats: {
+    totalGranted: number;
+    totalVested: number;
+    totalExercised: number;
+    totalCancelled: number;
+    totalOutstanding: number;
+    vestingProgress: number;
+  };
+};
+
+/**
+ * Charge tout le contexte nécessaire à la page détail d'un award en
+ * 6 queries parallèles (award + plan + beneficiary + vestingEvents +
+ * modifications + audit).
+ *
+ * Retourne null si l'award n'existe pas, est soft-deleted ou n'est pas
+ * accessible (RLS Pattern 1 filtre à l'org active).
+ */
+export async function getAwardDetail(awardId: string): Promise<AwardDetailRow | null> {
+  const supabase = await createSupabaseServerClient();
+
+  // 1. Charger l'award (RLS filtre par org_id)
+  const { data: award, error } = await supabase
+    .from('awards')
+    .select('*')
+    .eq('id', awardId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (error || !award) return null;
+
+  // 5 queries parallèles pour les données dépendantes
+  const [planRes, beneficiaryRes, vestingRes, modsRes, auditRes] = await Promise.all([
+    award.plan_id
+      ? supabase
+          .from('plans')
+          .select('id, name, plan_type, is_locked, version, parent_plan_id')
+          .eq('id', award.plan_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    award.beneficiary_id
+      ? supabase
+          .from('beneficiaries')
+          .select(
+            'id, first_name, last_name, email, beneficiary_type, tax_residence_country, hire_date',
+          )
+          .eq('id', award.beneficiary_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from('vesting_events')
+      .select(
+        'id, tranche_id, scheduled_date, effective_date, units_to_vest, units_vested, performance_multiplier, status, notification_sent_at',
+      )
+      .eq('award_id', awardId)
+      .order('scheduled_date', { ascending: true }),
+    supabase
+      .from('award_modifications')
+      .select(
+        'id, modification_type, effective_date, incremental_fair_value, approved_by, approved_at, reason, before_snapshot, after_snapshot, created_at',
+      )
+      .eq('award_id', awardId)
+      .order('effective_date', { ascending: false }),
+    supabase
+      .from('audit_events')
+      .select('id, event_type, metadata, user_email, user_id, occurred_at')
+      .eq('resource_id', awardId)
+      .like('event_type', 'award.%')
+      .order('occurred_at', { ascending: false })
+      .limit(50),
+  ]);
+
+  const vestingEvents = (vestingRes.data ?? []) as AwardDetailRow['vestingEvents'];
+  const totalVested = vestingEvents
+    .filter((v) => v.status === 'VESTED')
+    .reduce((s, v) => s + Number(v.units_vested ?? v.units_to_vest), 0);
+
+  const totalGranted = Number(award.units_granted);
+  const totalExercised = Number(award.units_exercised ?? 0);
+  const totalCancelled = Number(award.units_cancelled ?? 0);
+  const totalOutstanding = Number(
+    award.units_outstanding ?? totalGranted - totalExercised - totalCancelled,
+  );
+  const vestingProgress = totalGranted > 0 ? Math.round((totalVested / totalGranted) * 100) : 0;
+
+  return {
+    award: {
+      id: award.id,
+      award_number: award.award_number,
+      status: award.status,
+      units_granted: totalGranted,
+      units_vested: Number(award.units_vested ?? 0),
+      units_exercised: totalExercised,
+      units_settled: Number(award.units_settled ?? 0),
+      units_cancelled: totalCancelled,
+      units_outstanding: award.units_outstanding,
+      exercise_price: award.exercise_price != null ? Number(award.exercise_price) : null,
+      fair_value_per_unit:
+        award.fair_value_per_unit != null ? Number(award.fair_value_per_unit) : null,
+      total_fair_value: award.total_fair_value != null ? Number(award.total_fair_value) : null,
+      grant_date: award.grant_date,
+      vesting_start_date: award.vesting_start_date,
+      expiry_date: award.expiry_date,
+      acceptance_deadline: award.acceptance_deadline,
+      accepted_at: award.accepted_at,
+      granted_at: award.granted_at,
+      cancelled_at: award.cancelled_at,
+      cancellation_reason: award.cancellation_reason,
+      plan_version: award.plan_version,
+      has_modifications: award.has_modifications,
+      is_compliant: award.is_compliant,
+      compliance_warnings: award.compliance_warnings,
+      vesting_schedule_snapshot: award.vesting_schedule_snapshot,
+      performance_conditions_snapshot: award.performance_conditions_snapshot,
+      leaver_rules_snapshot: award.leaver_rules_snapshot,
+      created_at: award.created_at,
+      updated_at: award.updated_at,
+    },
+    plan: planRes.data ?? null,
+    beneficiary: beneficiaryRes.data ?? null,
+    vestingEvents,
+    modifications: (modsRes.data ?? []) as AwardDetailRow['modifications'],
+    auditEvents: (auditRes.data ?? []) as AwardDetailRow['auditEvents'],
+    stats: {
+      totalGranted,
+      totalVested,
+      totalExercised,
+      totalCancelled,
+      totalOutstanding,
+      vestingProgress,
+    },
   };
 }
