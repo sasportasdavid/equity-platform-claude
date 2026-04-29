@@ -296,6 +296,19 @@ on PR` ni `test on master push`. À mettre en place avant
     pour suivre les `valuation_runs` déclenchés par les
     modifications IFRS 2 (Module 11).
 
+12. **Trigger `enforce_beneficiary_self_update()` (Module 4 B1)** :
+    bloque les UPDATEs via SQL Editor Supabase Dashboard même pour
+    des admins légitimes. Le trigger check `user_has_permission
+('beneficiaries.update')` qui peut être null en contexte SQL
+    Editor (pas de session JWT). Symptôme : `UPDATE beneficiaries
+SET deleted_at = ...` rejeté en cleanup post-mortem.
+    Fix V2 : revoir la logique pour distinguer (a) bénéficiaire-self
+    (`user_id = auth.uid()`), (b) admin sans permission, (c)
+    contexte service_role / SQL Editor (ex: `current_setting
+('request.jwt.claims', true)` IS NULL → bypass enforce). Pour
+    l'instant, cleanup admin doit passer par le client Supabase
+    avec service_role ou via une Server Action `archiveBeneficiary`.
+
 ## Sécurité
 
 - [x] Rotation clé Resend après leak dans .env.example (date: \_\_\_)
