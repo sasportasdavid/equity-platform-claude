@@ -466,9 +466,14 @@ export const step6Schema = z.object({
       .min(PLAN_WIZARD_LIMITS.MIN_RISK_FREE_RATE)
       .max(PLAN_WIZARD_LIMITS.MAX_RISK_FREE_RATE),
   ),
+  // dividendYield : `.default(0)` car « pas de yield » est un cas légitime
+  // (startups non-distributantes). Si le user laisse le champ vide → 0 %
+  // injecté automatiquement, Black-Scholes interprète comme « pas de
+  // dividendes ». Le champ reste affiché comme requis dans l'UI mais ne
+  // bloque plus la soumission.
   dividendYield: z.preprocess(
     nanToUndef,
-    z.number().min(0).max(PLAN_WIZARD_LIMITS.MAX_DIVIDEND_YIELD),
+    z.number().min(0).max(PLAN_WIZARD_LIMITS.MAX_DIVIDEND_YIELD).default(0),
   ),
   dividendInputMode: z.enum(['percent', 'amount']).default('percent'),
   dividendAmount: z.preprocess(nanToUndef, z.number().optional()),
