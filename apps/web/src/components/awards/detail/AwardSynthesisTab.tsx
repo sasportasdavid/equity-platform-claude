@@ -10,7 +10,16 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Calendar, CheckCircle2, Coins, Euro, GitMerge, TrendingUp } from 'lucide-react';
+import {
+  AlertTriangle,
+  Calendar,
+  CheckCircle2,
+  Coins,
+  Euro,
+  GitMerge,
+  ShieldCheck,
+  TrendingUp,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AwardStatusBadge } from '@/components/awards/AwardStatusBadge';
@@ -57,6 +66,14 @@ export function AwardSynthesisTab({
     [stats],
   );
 
+  // Compliance warnings stockés à la transition PROPOSED (B7) — soft only,
+  // les hard errors bloquent et ne sont jamais persistés.
+  const complianceWarnings = useMemo(() => {
+    const raw = award.compliance_warnings;
+    if (!Array.isArray(raw)) return [];
+    return raw as Array<{ severity?: string; code?: string; message?: string }>;
+  }, [award.compliance_warnings]);
+
   return (
     <div className="space-y-4">
       {/* Row 1 : 3 cartes */}
@@ -65,6 +82,10 @@ export function AwardSynthesisTab({
         <DatesCard award={award} />
         <ValuationCard award={award} totalGranted={stats.totalGranted} />
       </div>
+
+      {complianceWarnings.length > 0 ? (
+        <ComplianceWarningsCard warnings={complianceWarnings} />
+      ) : null}
 
       {/* Row 2 : Workflow */}
       <Card>
@@ -276,6 +297,43 @@ function ValuationCard({
           La valorisation par award arrive en Module 11 (lien depuis le plan détail fonctionnel
           depuis Module 3a B5).
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ComplianceWarningsCard({
+  warnings,
+}: {
+  warnings: Array<{ severity?: string; code?: string; message?: string }>;
+}) {
+  return (
+    <Card className="border-amber-500/40 bg-amber-50/40 dark:bg-amber-500/5">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ShieldCheck className="size-4 text-amber-600" />
+          Conformité — avertissements
+        </CardTitle>
+        <CardDescription>
+          Avertissements soft (non-bloquants) émis à la soumission au workflow d&apos;approbation
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2 text-sm">
+          {warnings.map((w, i) => (
+            <li
+              key={`${w.code}-${i}`}
+              className="flex items-start gap-2"
+              data-testid={`synthesis-compliance-warning-${w.code}`}
+            >
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <div className="space-y-0.5">
+                <p className="font-mono text-[10px] uppercase opacity-60">{w.code}</p>
+                <p>{w.message}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
       </CardContent>
     </Card>
   );

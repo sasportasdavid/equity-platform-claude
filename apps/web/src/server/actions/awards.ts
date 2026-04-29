@@ -15,6 +15,7 @@ import {
   type BulkAwardImportInput,
 } from '@equity/shared';
 import { logAuditEvent } from '@/lib/audit';
+import { runComplianceChecks } from '@/lib/compliance/runChecks';
 import { hasPermission, requirePermission } from '@/lib/auth/rbac';
 import {
   canTransition,
@@ -50,7 +51,17 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 // ---------------------------------------------------------------------------
 
 export type ActionOk<T> = { ok: true } & T;
-export type ActionError = { ok: false; error: string; validationIssues?: number };
+export type ActionError = {
+  ok: false;
+  error: string;
+  validationIssues?: number;
+  /**
+   * Issues compliance (B7) — uniquement présent si la transition vers
+   * PROPOSED a été bloquée par `runComplianceChecks`. La modale les
+   * affiche côté client dans un Dialog secondaire.
+   */
+  complianceIssues?: import('@/lib/compliance/types').ComplianceIssue[];
+};
 /** Réponse void — pas de payload data. */
 export type ActionVoid = { ok: true } | ActionError;
 
@@ -301,7 +312,9 @@ export async function transitionAward(input: unknown): Promise<ActionVoid | Acti
   // les violations cohérence pool/lock).
   const { data: award } = await supabase
     .from('awards')
-    .select('id, status, plan_id, beneficiary_id, units_granted, units_vested, vesting_start_date')
+    .select(
+      'id, status, plan_id, beneficiary_id, units_granted, units_vested, vesting_start_date, grant_date',
+    )
     .eq('id', awardId)
     .maybeSingle();
   if (!award) return { ok: false, error: 'Award introuvable' };
@@ -318,6 +331,34 @@ export async function transitionAward(input: unknown): Promise<ActionVoid | Acti
   const requiredPerm = permissionForTransition(fromStatus, toStatus);
   const user = await requirePermission(requiredPerm as never);
   if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  // Compliance V1 — Module 3b B7. On ne check que sur la transition vers
+  // PROPOSED (= soumission au workflow d'approbation). Les autres
+  // transitions (GRANTED, FORFEITED, CANCELLED…) sont gouvernées par la
+  // state machine ou des RPCs dédiés.
+  if (toStatus === 'PROPOSED') {
+    const compliance = await runComplianceChecks('AWARD_PROPOSAL', {
+      planId: award.plan_id,
+      beneficiaryId: award.beneficiary_id,
+      unitsGranted: Number(award.units_granted),
+      grantDate: award.grant_date as unknown as string,
+    });
+    if (compliance.hasHardBlocks) {
+      return {
+        ok: false,
+        error: `Compliance check failed : ${compliance.errors.length} erreur(s) bloquante(s)`,
+        complianceIssues: compliance.errors,
+      };
+    }
+    // Soft warnings : on les stocke dans compliance_warnings de l'award
+    // pour affichage UI, mais on continue la transition.
+    if (compliance.warnings.length > 0) {
+      await supabase
+        .from('awards')
+        .update({ compliance_warnings: compliance.warnings as never })
+        .eq('id', awardId);
+    }
+  }
 
   // Side-effect GRANTED → matérialiser vesting_events
   if (toStatus === 'GRANTED') {

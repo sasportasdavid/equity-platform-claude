@@ -18,7 +18,9 @@ import { createAndPropose, createAwardDraft } from '@/server/actions/awards';
 import { upsertBeneficiary } from '@/server/actions/beneficiaries';
 import { getPoolStatusAction } from './get-pool-status-action';
 import { BeneficiaryCombobox, type SelectedBeneficiary } from './BeneficiaryCombobox';
+import { ComplianceIssuesDialog } from '@/components/shared/ComplianceIssuesDialog';
 import type { PlanForCreation } from '@/server/queries/awards';
+import type { ComplianceIssue } from '@/lib/compliance/types';
 
 /**
  * Modale création d'award — Module 3b B3.
@@ -66,6 +68,7 @@ export function CreateAwardModal({
   const [grantDate, setGrantDate] = useState<string>(today());
   const [vestingStartDate, setVestingStartDate] = useState<string>(today());
   const [expiryDate, setExpiryDate] = useState<string>('');
+  const [complianceBlock, setComplianceBlock] = useState<ComplianceIssue[] | null>(null);
 
   // Pool fetch sur changement de plan — async legit, set conditionnel
   useEffect(() => {
@@ -159,6 +162,13 @@ export function CreateAwardModal({
         resetForm();
         onSuccess();
         onOpenChange(false);
+      } else if (res.complianceIssues && res.complianceIssues.length > 0) {
+        // Bloqué par compliance — l'award peut avoir été créé en DRAFT (le
+        // call à createAwardDraft a réussi, c'est la transition vers PROPOSED
+        // qui a failé). On laisse la modale ouverte, on affiche le dialog
+        // détaillé, et on suggère le retour au statut DRAFT.
+        setComplianceBlock(res.complianceIssues);
+        toast.error(`Soumission bloquée : ${res.complianceIssues.length} règle(s) de conformité`);
       } else {
         toast.error(res.error);
       }
@@ -395,6 +405,13 @@ export function CreateAwardModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <ComplianceIssuesDialog
+        open={complianceBlock != null}
+        onOpenChange={(o) => !o && setComplianceBlock(null)}
+        issues={complianceBlock ?? []}
+        title="Soumission bloquée par la conformité"
+      />
     </Dialog>
   );
 }
