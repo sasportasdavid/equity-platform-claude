@@ -174,8 +174,8 @@ export function Sandbox({
           Dev · Beneficiary Lifecycle Sandbox
         </h1>
         <p className="text-muted-foreground text-sm">
-          Module 4 B2 — Tester toutes les transitions du lifecycle, l'invitation magic link, et
-          l'archive (avec/sans awards actifs). Page protégée par layout /dev/* en prod.
+          Module 4 B2 — Tester toutes les transitions du lifecycle, l&apos;invitation magic link, et
+          l&apos;archive (avec/sans awards actifs). Page protégée par layout /dev/* en prod.
         </p>
       </header>
 
