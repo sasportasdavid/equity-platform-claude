@@ -109,6 +109,30 @@ resource_type, resource_id, metadata })`.
 - Sidebar nav : ajouter le nouveau lien dès que la page existe
   (pas de placeholder "à venir")
 
+### Supabase Auth — pièges critiques côté Server Action
+
+- **`supabase.auth.signInWithOtp()` côté Server Action écrase la
+  session du caller** si on utilise le client SSR cookie-based
+  (`createSupabaseServerClient`). Symptôme : le mail magic link part
+  bien (200 OK), mais `Set-Cookie` remplace le token de session de
+  l'admin caller par celui de la cible. Les requêtes suivantes (RPC
+  qui dépendent de `auth.uid()`/`current_org_id()`, puis
+  `router.refresh()` côté client) échouent silencieusement ou avec
+  "TypeError: network error" en dev.
+- **Règle** : pour tout call `auth.*` qui agit sur un autre user que
+  le caller (invitation, magic link envoyé pour un tiers, reset
+  password admin), utiliser `getSupabaseAdminClient()` (service_role
+  - `persistSession: false`). Garder le client cookie-based pour les
+    RPC qui doivent voir l'identité du caller.
+- Référence : `inviteBeneficiary` dans
+  `apps/web/src/server/actions/beneficiaries.ts` (commit
+  `624f939`, fix Module 4 B5). Le bug avait shipé en B5 avant fix.
+- Pour générer un magic link sans envoyer de mail (Module 7 +
+  Resend custom), utiliser
+  `getSupabaseAdminClient().auth.admin.generateLink({ type:
+'magiclink', email })` puis envoyer via Resend. Cf. pattern dans
+  `apps/web/src/server/actions/auth.ts`.
+
 ### Base UI — pièges courants
 
 - **DropdownMenuLabel** doit être dans **DropdownMenuGroup** (sinon
@@ -340,3 +364,35 @@ Si une décision architecturale ou métier est ambiguë :
 Règle générale : un enum court (3-4 valeurs) = lowercase OK.
 Un enum long (5+) ou critique métier (workflow status) = UPPERCASE.
 Pour cohérence : suivre l'existant DB plutôt que la spec si écart.
+
+À ajouter à CLAUDE.md, section "Conventions de code"
+(sous-section "Server Actions") :
+
+### Supabase Auth — pièges critiques côté Server Action
+
+⚠️ supabase.auth.signInWithOtp() / signUp() / inviteUserByEmail()
+appelés sur le client SSR cookie-based écrasent la session du
+caller (admin) avec le token de l'utilisateur cible. Set-Cookie
+casse l'auth de l'admin pour les requêtes suivantes dans la
+même Server Action.
+
+Symptômes :
+
+- L'opération Auth réussit (mail envoyé)
+- Mais les RPC suivantes voient auth.uid()=null → throw
+- router.refresh() côté client plante avec "TypeError: network error"
+
+Fix : pour TOUTE opération Auth qui crée/identifie un USER
+DIFFÉRENT du caller, utiliser le client admin (service_role +
+persistSession:false) :
+
+import { getSupabaseAdminClient } from '@/lib/supabase/admin';
+
+const adminClient = getSupabaseAdminClient();
+await adminClient.auth.signInWithOtp({ email, options: {...} });
+// Cookie de session du caller préservé ✓
+
+Conserver le client cookie-based pour les RPC qui ont besoin
+de auth.uid() (audit, RLS).
+
+Référence : Module 4 B5 — bug fix `624f939`
