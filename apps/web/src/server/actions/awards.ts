@@ -366,18 +366,30 @@ export async function transitionAward(input: unknown): Promise<ActionVoid | Acti
 // 4 bis. createAndPropose — helper « créer + soumettre » (modale UI B3)
 // ---------------------------------------------------------------------------
 // Wrap createAwardDraft + transitionAward → PROPOSED en 1 appel.
-// Si la transition échoue, l'award reste en DRAFT (pas de rollback du
-// create — l'utilisateur peut re-soumettre depuis la page liste).
+//
+// Décision archi : on FORCE `initialStatus='DRAFT'` au create (même si
+// l'input demande 'PROPOSED'), puis on appelle transitionAward(_, 'PROPOSED').
+// Pourquoi : cohérence d'audit. La transition DRAFT → PROPOSED émet
+// systématiquement `award.status_changed`. Si on shortcut en créant
+// directement en PROPOSED, l'audit ne montre que `award.created` et un
+// futur dev sera surpris de ne pas voir l'event de soumission.
+//
+// Si la transition échoue (compliance, pool exceeded au PROPOSED, etc.),
+// l'award reste en DRAFT et l'utilisateur peut le reprendre depuis la liste.
 
 export async function createAndPropose(input: unknown): Promise<CreateAwardResult> {
-  const created = await createAwardDraft(input);
+  // Validation upfront pour pouvoir injecter initialStatus='DRAFT'
+  const parsed = createAwardSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+
+  const created = await createAwardDraft({ ...parsed.data, initialStatus: 'DRAFT' });
   if (!created.ok) return created;
 
   const transition = await transitionAward({ awardId: created.id, toStatus: 'PROPOSED' });
   if (!transition.ok) {
     return {
       ok: false,
-      error: `Award créé en DRAFT mais soumission échouée : ${transition.error}`,
+      error: `Award ${created.awardNumber} créé en DRAFT, soumission échouée : ${transition.error}. Vous pouvez le reprendre depuis la liste.`,
     };
   }
   return created;
