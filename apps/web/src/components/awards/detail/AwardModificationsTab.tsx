@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Eye, FileEdit, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,18 +14,33 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { JsonDiffViewer } from '@/components/shared/JsonDiffViewer';
+import { CreateModificationModal } from '@/components/awards/CreateModificationModal';
+import { isPostGrantStatus } from '@/lib/stateMachines/awardStateMachine';
 import type { AwardDetailRow } from '@/server/queries/awards';
-import type { Json } from '@equity/shared';
+import type { AwardStatus, Json } from '@equity/shared';
+
+const TYPE_BADGE_TONE: Record<string, string> = {
+  REPRICING: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  EXTENSION: 'border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-400',
+  ACCELERATION: 'border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-400',
+  ADDITIONAL_GRANT:
+    'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  CANCELLATION: 'border-destructive/40 bg-destructive/10 text-destructive',
+};
 
 /**
- * Onglet Modifications IFRS 2.27-28 — Module 3b B4.
+ * Onglet Modifications IFRS 2.27-28 — Module 3b B4 + B6 (modale activée).
  *
- * Empty state si aucune modification + bouton « Nouvelle modification »
- * disabled (Module 3b B6 livrera la modale CreateModificationModal).
+ * Bouton "Nouvelle modification" actif si :
+ *   - canModify (permission `awards.modify`)
+ *   - ET award status post-GRANTED (cf. isPostGrantStatus)
+ *   - ET status pas terminal (CANCELLED/EXPIRED/FORFEITED) — implicite via
+ *     la pré-condition côté RPC apply_award_modification, mais on filtre
+ *     aussi côté UI pour cacher le bouton.
  *
- * Sinon : table chronologique avec type, effective_date, incremental_fair_value,
- * approved_by, approved_at, action « Voir le diff » → Dialog JSON viewer
- * avant/après côte à côte.
+ * Sinon : table chronologique avec type (badge color-coded), effective_date,
+ * incremental_fair_value, approved_by, approved_at, action « Voir le diff »
+ * → Dialog JsonDiffViewer.
  */
 export function AwardModificationsTab({
   detail,
@@ -33,12 +49,18 @@ export function AwardModificationsTab({
   detail: AwardDetailRow;
   canModify: boolean;
 }) {
-  const { modifications } = detail;
+  const router = useRouter();
+  const { modifications, award, plan } = detail;
   const [diffOpen, setDiffOpen] = useState<{
     type: string;
     before: Json;
     after: Json;
   } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const status = award.status as AwardStatus;
+  const isTerminal = ['CANCELLED', 'EXPIRED', 'FORFEITED'].includes(status);
+  const canCreate = canModify && isPostGrantStatus(status) && !isTerminal;
 
   return (
     <>
@@ -58,12 +80,21 @@ export function AwardModificationsTab({
             </div>
             <Button
               size="sm"
-              disabled
-              title="Disponible en B6"
+              onClick={() => setCreateOpen(true)}
+              disabled={!canCreate}
+              title={
+                canCreate
+                  ? 'Créer une modification IFRS 2.27-28'
+                  : !canModify
+                    ? 'Permission awards.modify requise'
+                    : isTerminal
+                      ? `Award en statut ${status} — modifications non disponibles`
+                      : `Award en statut ${status} — modifications réservées au post-GRANTED`
+              }
               data-testid="new-modification-button"
             >
               <Plus className="mr-2 size-4" />
-              Nouvelle (B6)
+              Nouvelle modification
             </Button>
           </div>
         </CardHeader>
@@ -74,7 +105,7 @@ export function AwardModificationsTab({
               <p>Aucune modification enregistrée</p>
               <p className="mt-1 text-xs">
                 Les modifications IFRS 2.27-28 (REPRICING / EXTENSION / ACCELERATION /
-                ADDITIONAL_GRANT / CANCELLATION) arriveront en B6.
+                ADDITIONAL_GRANT / CANCELLATION) déclenchent un recalcul du fair value incrémental.
               </p>
               {!canModify ? (
                 <p className="text-muted-foreground/70 mt-2 text-xs">
@@ -103,7 +134,10 @@ export function AwardModificationsTab({
                         {formatDate(m.effective_date)}
                       </td>
                       <td className="px-3 py-2">
-                        <Badge variant="outline" className="font-medium">
+                        <Badge
+                          variant="outline"
+                          className={`font-medium ${TYPE_BADGE_TONE[m.modification_type] ?? ''}`}
+                        >
                           {m.modification_type}
                         </Badge>
                       </td>
@@ -155,6 +189,15 @@ export function AwardModificationsTab({
           {diffOpen ? <JsonDiffViewer before={diffOpen.before} after={diffOpen.after} /> : null}
         </DialogContent>
       </Dialog>
+
+      {canCreate ? (
+        <CreateModificationModal
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          award={{ ...award, plan_id: plan?.id }}
+          onSuccess={() => router.refresh()}
+        />
+      ) : null}
     </>
   );
 }

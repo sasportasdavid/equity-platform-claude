@@ -277,4 +277,111 @@ describe('Server Actions awards', () => {
       expect(res.error).toMatch(/non forfeitable/i);
     }
   });
+
+  // -------------------------------------------------------------------------
+  // 5. createAwardModification — IFRS 2.27-28 (B6)
+  // -------------------------------------------------------------------------
+  it('createAwardModification REPRICING : ok=true avec modificationId + valuationRunId', async () => {
+    mockState.rpcResult = {
+      data: { modification_id: 'modif-uuid', valuation_run_id: 'valrun-uuid' },
+      error: null,
+    };
+
+    const { createAwardModification } = await import('../awards');
+    const res = await createAwardModification({
+      awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+      type: 'REPRICING',
+      changes: { exercisePrice: 2.0 },
+      reason: 'Test repricing',
+      effectiveDate: '2026-04-28',
+    });
+
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.modificationId).toBe('modif-uuid');
+      expect(res.valuationRunId).toBe('valrun-uuid');
+    }
+  });
+
+  it('createAwardModification CANCELLATION : valuationRunId=null (pas de re-valuation)', async () => {
+    mockState.rpcResult = {
+      data: { modification_id: 'modif-uuid', valuation_run_id: null },
+      error: null,
+    };
+
+    const { createAwardModification } = await import('../awards');
+    const res = await createAwardModification({
+      awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+      type: 'CANCELLATION',
+      changes: { confirmIrreversible: true },
+      reason: 'Test cancellation post-grant — board approved on 2026-05-01',
+      effectiveDate: '2026-04-28',
+    });
+
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.modificationId).toBe('modif-uuid');
+      expect(res.valuationRunId).toBeNull();
+    }
+  });
+
+  it('createAwardModification CANCELLATION : reason < 20 chars → validation fail', async () => {
+    const { createAwardModification } = await import('../awards');
+    const res = await createAwardModification({
+      awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+      type: 'CANCELLATION',
+      changes: { confirmIrreversible: true },
+      reason: 'Short',
+      effectiveDate: '2026-04-28',
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.validationIssues).toBeGreaterThan(0);
+    }
+  });
+
+  it('createAwardModification CANCELLATION : confirmIrreversible=false → validation fail', async () => {
+    const { createAwardModification } = await import('../awards');
+    const res = await createAwardModification({
+      awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+      type: 'CANCELLATION',
+      changes: { confirmIrreversible: false },
+      reason: 'Test cancellation post-grant — board approved on 2026-05-01',
+    });
+
+    expect(res.ok).toBe(false);
+  });
+
+  it('createAwardModification ADDITIONAL_GRANT : RPC échec pool insuffisant → ok=false', async () => {
+    mockState.rpcResult = {
+      data: null,
+      error: { message: 'ADDITIONAL_GRANT : pool insuffisant (restant=50 < demandé=1000)' },
+    };
+
+    const { createAwardModification } = await import('../awards');
+    const res = await createAwardModification({
+      awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+      type: 'ADDITIONAL_GRANT',
+      changes: { unitsAdded: 1000 },
+      reason: 'Test pool exceeded',
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/pool insuffisant/i);
+    }
+  });
+
+  it('createAwardModification REPRICING : changes payload invalide (exercisePrice negative) → validation fail', async () => {
+    const { createAwardModification } = await import('../awards');
+    const res = await createAwardModification({
+      awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+      type: 'REPRICING',
+      changes: { exercisePrice: -5 },
+      reason: 'Test invalid',
+    });
+
+    expect(res.ok).toBe(false);
+  });
 });

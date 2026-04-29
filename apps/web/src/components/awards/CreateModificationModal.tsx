@@ -34,14 +34,6 @@ import type { CreateModificationInput } from '@equity/shared';
 type ModificationType = CreateModificationInput['type'];
 type Step = 1 | 2 | 3 | 'submitting' | 'done' | 'error';
 
-type ChangesByType = {
-  REPRICING: { exercisePrice: string };
-  EXTENSION: { expiryDate: string };
-  ACCELERATION: Record<string, never>;
-  ADDITIONAL_GRANT: { unitsAdded: string };
-  CANCELLATION: { confirmIrreversible: boolean };
-};
-
 type State = {
   step: Step;
   type: ModificationType | null;
@@ -562,7 +554,7 @@ function AccelerationForm() {
             immédiatement.
           </p>
           <p className="italic text-orange-800/60 dark:text-orange-200/60">
-            (Mode "tranches spécifiques" prévu en V2.)
+            (Mode &laquo;&nbsp;tranches spécifiques&nbsp;&raquo; prévu en V2.)
           </p>
         </div>
       </div>
