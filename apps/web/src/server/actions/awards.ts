@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import {
   AWARD_MODIFICATION_TYPES,
-  awardStatusSchema,
   bulkAwardImportSchema,
   cancelAwardSchema,
   createAwardSchema,
@@ -15,12 +14,6 @@ import {
   uuidSchema,
   type AwardStatus,
   type BulkAwardImportInput,
-  type CancelAwardInput,
-  type CreateAwardInput,
-  type CreateModificationInput,
-  type ForfeitAwardInput,
-  type TransitionAwardInput,
-  type UpdateAwardDraftInput,
 } from '@equity/shared';
 import { logAuditEvent } from '@/lib/audit';
 import { hasPermission, requirePermission } from '@/lib/auth/rbac';
@@ -599,16 +592,7 @@ export async function createAwardModification(
   return { ok: true, modificationId: insRow.id };
 }
 
-// ---------------------------------------------------------------------------
-// Re-exports utilitaires (pour Server Components qui veulent valider les inputs)
-// ---------------------------------------------------------------------------
-export {
-  awardStatusSchema,
-  type AwardStatus,
-  type CancelAwardInput,
-  type CreateAwardInput,
-  type CreateModificationInput,
-  type ForfeitAwardInput,
-  type TransitionAwardInput,
-  type UpdateAwardDraftInput,
-};
+// Pas de re-exports : Next.js interdit les exports non-async dans un fichier
+// 'use server'. Les schémas Zod et types sont importés directement depuis
+// `@equity/shared` côté composants client/server :
+//   import { createAwardSchema, awardStatusSchema, type AwardStatus } from '@equity/shared';
