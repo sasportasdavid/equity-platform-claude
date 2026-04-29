@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BSPCE_BENEFICIARY_TYPE_REVERSE,
   EMAIL_UNIQUE_IN_ORG,
   HIRE_DATE_REASONABLE,
   IBAN_FORMAT,
@@ -156,6 +157,50 @@ describe('IBAN_FORMAT', () => {
     const issue = await IBAN_FORMAT.check(
       { ...baseInput, iban: 'FR76 1234 5678 9012 3456 7890 123' },
       makeCtx(),
+    );
+    expect(issue).toBeNull();
+  });
+});
+
+describe('BSPCE_BENEFICIARY_TYPE_REVERSE', () => {
+  it('CONSULTANT avec 0 awards BSPCE → null', async () => {
+    const issue = await BSPCE_BENEFICIARY_TYPE_REVERSE.check(
+      { ...baseInput, id: 'me', beneficiaryType: 'CONSULTANT' },
+      makeCtx({ bspceActiveAwardsCount: 0 }),
+    );
+    expect(issue).toBeNull();
+  });
+
+  it('CONSULTANT avec 1 award BSPCE actif → ERROR', async () => {
+    const issue = await BSPCE_BENEFICIARY_TYPE_REVERSE.check(
+      { ...baseInput, id: 'me', beneficiaryType: 'CONSULTANT' },
+      makeCtx({ bspceActiveAwardsCount: 1 }),
+    );
+    expect(issue?.severity).toBe('ERROR');
+    expect(issue?.code).toBe('BSPCE_BENEFICIARY_TYPE_REVERSE');
+    expect(issue?.message).toMatch(/1 award/);
+  });
+
+  it('EXTERNAL avec count null (tous awards FULLY_EXERCISED → 0) → null', async () => {
+    const issue = await BSPCE_BENEFICIARY_TYPE_REVERSE.check(
+      { ...baseInput, id: 'me', beneficiaryType: 'EXTERNAL' },
+      makeCtx({ bspceActiveAwardsCount: 0 }),
+    );
+    expect(issue).toBeNull();
+  });
+
+  it('EMPLOYEE avec 5 awards BSPCE actifs → null (rule ne s’applique pas)', async () => {
+    const issue = await BSPCE_BENEFICIARY_TYPE_REVERSE.check(
+      { ...baseInput, id: 'me', beneficiaryType: 'EMPLOYEE' },
+      makeCtx({ bspceActiveAwardsCount: 5 }),
+    );
+    expect(issue).toBeNull();
+  });
+
+  it('OFFICER (dirigeant) avec 2 awards BSPCE actifs → null (rule ne s’applique pas)', async () => {
+    const issue = await BSPCE_BENEFICIARY_TYPE_REVERSE.check(
+      { ...baseInput, id: 'me', beneficiaryType: 'OFFICER' },
+      makeCtx({ bspceActiveAwardsCount: 2 }),
     );
     expect(issue).toBeNull();
   });
