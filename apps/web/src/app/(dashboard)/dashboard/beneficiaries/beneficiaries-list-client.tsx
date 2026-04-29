@@ -44,6 +44,7 @@ import { PageShell } from '@/components/shared/PageShell';
 import { BeneficiaryStatusBadge } from '@/components/shared/beneficiary-status-badge';
 import { BeneficiaryTypeBadge } from '@/components/shared/beneficiary-type-badge';
 import { TransitionLifecycleDialog } from '@/components/beneficiaries/TransitionLifecycleDialog';
+import { CreateBeneficiaryModal } from '@/components/beneficiaries/CreateBeneficiaryModal';
 import { archiveBeneficiary, inviteBeneficiary } from '@/server/actions/beneficiaries';
 import type { BeneficiaryListRow, ListBeneficiariesFilters } from '@/server/queries/beneficiaries';
 
@@ -99,6 +100,7 @@ export function BeneficiariesListClient({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
+  const [createOpen, setCreateOpen] = useState(false);
 
   function setParam(key: string, value: string | undefined) {
     const params = new URLSearchParams(searchParams.toString());
@@ -146,7 +148,7 @@ export function BeneficiariesListClient({
             </Button>
           ) : null}
           {perms.canCreate ? (
-            <Button disabled title="Disponible en B5" data-testid="new-beneficiary-button">
+            <Button onClick={() => setCreateOpen(true)} data-testid="new-beneficiary-button">
               <Plus className="mr-2 size-4" />
               Nouveau bénéficiaire
             </Button>
@@ -292,6 +294,15 @@ export function BeneficiariesListClient({
           </div>
         )}
       </div>
+
+      {/* Create modal — Module 4 B5 */}
+      {perms.canCreate ? (
+        <CreateBeneficiaryModal
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onSuccess={() => router.refresh()}
+        />
+      ) : null}
     </PageShell>
   );
 }
