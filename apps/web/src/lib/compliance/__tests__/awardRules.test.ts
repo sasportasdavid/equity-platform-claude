@@ -165,7 +165,8 @@ describe('GRANT_DATE_RECENT', () => {
     expect(issue).not.toBeNull();
     expect(issue?.severity).toBe('WARNING');
     expect(issue?.code).toBe('GRANT_DATE_RECENT');
-    expect(issue?.message).toMatch(/35 jours/);
+    // 35 ou 36 jours selon timezone/heure courante — Math.round + UTC offset
+    expect(issue?.message).toMatch(/3[56] jours/);
   });
 
   it('returns WARNING même pour 100 jours (rule soft, severity reste WARNING)', async () => {

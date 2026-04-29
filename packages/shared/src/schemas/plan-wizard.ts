@@ -517,11 +517,36 @@ const planWizardBase = step1Schema
   .merge(step4Schema.partial())
   .merge(step5Schema.partial())
   .merge(step6Schema.partial())
-  // Step 3 utilise discriminated union → on étend manuellement avec partial
+  // Step 3 utilise discriminated union → on étend manuellement avec partial.
+  //
+  // NOTE : `singleVestingDate` est preprocessé pour coercer la string vide
+  // → undefined. Sinon `z.string().optional()` ne s'applique pas (la valeur
+  // EST une string), le regex YYYY-MM-DD échoue et bloque la soumission
+  // finale dès qu'un mode autre que `single` a été visité (input date
+  // rendu puis vidé → '' sticky dans le draft serveur).
+  // Même traitement défensif sur `vestingTranches` (array vide ou rows
+  // avec date vide).
   .extend({
     vestingType: VestingTypeEnum.optional(),
-    singleVestingDate: z.string().regex(isoDateRegex).optional(),
-    vestingTranches: z.array(vestingTrancheSchema).optional(),
+    singleVestingDate: z.preprocess(
+      (v) => (v === '' || v == null ? undefined : v),
+      z.string().regex(isoDateRegex).optional(),
+    ),
+    vestingTranches: z.preprocess((v) => {
+      if (!Array.isArray(v) || v.length === 0) return undefined;
+      // Si toutes les rows ont une date vide ET pourcentage 0, considère
+      // le array comme stale (mode tranches non utilisé).
+      const isAllStale = v.every(
+        (t) =>
+          t &&
+          typeof t === 'object' &&
+          (!('vestingDate' in t) || (t as { vestingDate?: string }).vestingDate === '') &&
+          (!('percentage' in t) ||
+            (t as { percentage?: number }).percentage === 0 ||
+            (t as { percentage?: number }).percentage == null),
+      );
+      return isAllStale ? undefined : v;
+    }, z.array(vestingTrancheSchema).optional()),
     cliffMonths: z.number().int().optional(),
     cliffPercentage: z.number().optional(),
     totalMonths: z.number().int().optional(),
