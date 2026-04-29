@@ -236,6 +236,12 @@ apps/web/src/lib/supabase/database.types.ts`
      instance pas en place
    - Pas de plugin React JSX dans Vitest (les tests de composants
      React doivent passer par des helpers pure extraits)
+   - **CI GitHub Actions pas en place** — pas de workflow `test
+on PR` ni `test on master push`. À mettre en place avant
+     d'avoir plusieurs contributors ou avant la prod. Plus
+     efficace qu'un agent humain-like de surveillance. Gates
+     attendus : `pnpm typecheck`, `pnpm -F web lint`, `pnpm test`,
+     migration drift check (`supabase db lint --linked`).
 
 8. **Mini-table beneficiaries** : créée a minima pour Module 3b.
    CRUD complet + import RH + lifecycle au Module 4.
