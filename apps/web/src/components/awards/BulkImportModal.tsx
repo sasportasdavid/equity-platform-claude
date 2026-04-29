@@ -215,9 +215,7 @@ export function BulkImportModal({
 
         {state.step === 2 ? <Step2Preview state={state} /> : null}
 
-        {state.step === 3 ? (
-          <Step3Result state={state} pending={pending} onSuccessNav={onSuccess} />
-        ) : null}
+        {state.step === 3 ? <Step3Result state={state} pending={pending} /> : null}
 
         <DialogFooter className="flex-row justify-between gap-2">
           {state.step === 1 ? (
@@ -253,17 +251,15 @@ export function BulkImportModal({
             </>
           ) : null}
 
-          {state.step === 3 ? (
-            <Button
-              variant="outline"
-              onClick={() => {
+          {state.step === 3 && !pending ? (
+            <Step3Footer
+              state={state}
+              onClose={() => {
                 if (state.result?.kind === 'success') onSuccess();
                 handleClose();
               }}
-              disabled={pending}
-            >
-              Fermer
-            </Button>
+              onRestart={() => dispatch({ type: 'reset' })}
+            />
           ) : null}
         </DialogFooter>
       </DialogContent>
@@ -633,18 +629,10 @@ function Step2Footer({
 }
 
 // ---------------------------------------------------------------------------
-// Step 3 — Result (placeholder, contenu en step 4 commit)
+// Step 3 — Result
 // ---------------------------------------------------------------------------
 
-function Step3Result({
-  state,
-  pending,
-  onSuccessNav,
-}: {
-  state: State;
-  pending: boolean;
-  onSuccessNav: () => void;
-}) {
+function Step3Result({ state, pending }: { state: State; pending: boolean }) {
   if (pending || !state.result) {
     return (
       <div className="flex flex-col items-center gap-3 py-8">
@@ -694,6 +682,38 @@ function Step3Result({
       <p className="bg-destructive/10 text-destructive border-destructive/20 max-w-md rounded-md border p-2 text-center text-xs">
         {state.result.error}
       </p>
+      <p className="text-muted-foreground text-xs">
+        Aucune attribution n&apos;a été créée — la transaction a été annulée intégralement.
+      </p>
     </div>
+  );
+}
+
+function Step3Footer({
+  state,
+  onClose,
+  onRestart,
+}: {
+  state: State;
+  onClose: () => void;
+  onRestart: () => void;
+}) {
+  if (!state.result) return null;
+  if (state.result.kind === 'error') {
+    return (
+      <>
+        <Button variant="ghost" onClick={onClose} data-testid="bulk-import-close">
+          Fermer
+        </Button>
+        <Button onClick={onRestart} data-testid="bulk-import-restart">
+          Recommencer
+        </Button>
+      </>
+    );
+  }
+  return (
+    <Button onClick={onClose} data-testid="bulk-import-close">
+      Fermer et voir les awards
+    </Button>
   );
 }
