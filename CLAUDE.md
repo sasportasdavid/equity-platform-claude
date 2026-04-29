@@ -201,10 +201,23 @@ apps/web/src/lib/supabase/database.types.ts`
   - [x] B7 — Compliance V1 (4 rules + runChecks + UI dialogs) +
         closure module 3b complete
 
+- [x] Module 4 — Beneficiaries Management
+  - [x] B1 — Migrations 00025-00028 (~25 cols ALTER + 4 RPCs +
+        seed permissions + extension hook M2)
+  - [x] B2 — 9 Server Actions + Zod schemas + Compliance V1
+        (5 rules) + sandbox /dev/beneficiary-lifecycle
+  - [x] B3 — Page liste /dashboard/beneficiaries + 7 filtres
+        URL-shareable + row actions + sidebar
+  - [x] B4 — Page détail /dashboard/beneficiaries/[id] +
+        4 onglets + EditBeneficiaryModal
+  - [x] B5 — CreateBeneficiaryModal + BulkImportBeneficiariesModal
+        CSV (papaparse + wizard 3 steps) + fix Supabase Auth
+  - [x] B6 — Compliance V1 finalisé (6e rule
+        BSPCE_BENEFICIARY_TYPE_REVERSE) + closure module 4
+        complete
+
 ### À venir
 
-- [ ] Module 4 — Beneficiaries Management (CRUD complet, import
-      RH, lifecycle)
 - [ ] Module 5 — Approval Engine (workflow multi-étapes
       configurable)
 - [ ] Module 6 — Document Engine + Yousign
@@ -310,12 +323,21 @@ Si tu te demandes "comment faire X", chercher d'abord :
   `apps/web/src/components/shared/data-table.tsx`
 - **Modale de création + sub-form** : voir
   `apps/web/src/components/awards/CreateAwardModal.tsx`
+- **Modale create/edit partagée (mode prop + alias)** : voir
+  `apps/web/src/components/beneficiaries/BeneficiaryFormModal.tsx`
+  (avec aliases `CreateBeneficiaryModal` + `EditBeneficiaryModal`)
 - **Modale wizard multi-step (useReducer)** : voir
   `apps/web/src/components/awards/BulkImportModal.tsx` ou
   `CreateModificationModal.tsx`
+- **Helpers CSV parsing (papaparse + Zod safeParse)** : voir
+  `apps/web/src/components/beneficiaries/bulk-import-helpers.ts`
+  (mapping snake→camelCase, summary, extractValidEmails)
 - **Compliance rule pure function + runner** : voir
   `apps/web/src/lib/compliance/rules/awardRules.ts` +
   `runChecks.ts`
+- **Compliance rule async avec ctx pré-chargé** : voir
+  `BSPCE_BENEFICIARY_TYPE_REVERSE` dans `beneficiaryRules.ts` —
+  count chargé conditionnellement dans `runChecks.ts`
 - **JSON diff viewer 2 colonnes** : voir
   `apps/web/src/components/shared/JsonDiffViewer.tsx`
 - **Discriminated union Zod par variant** : voir
