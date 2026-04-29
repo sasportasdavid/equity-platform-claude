@@ -97,7 +97,7 @@ export async function upsertBeneficiary(input: unknown): Promise<UpsertResult> {
       first_name: firstName,
       last_name: lastName,
       beneficiary_type: data.type,
-      status: 'ACTIVE',
+      status: 'active',
       tax_residence_country: data.taxResidence,
     })
     .select('id, first_name, last_name, email')

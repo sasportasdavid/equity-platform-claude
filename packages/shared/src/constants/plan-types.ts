@@ -42,7 +42,9 @@ export const BENEFICIARY_TYPES = [
 ] as const;
 export type BeneficiaryType = (typeof BENEFICIARY_TYPES)[number];
 
-export const BENEFICIARY_STATUSES = ['ACTIVE', 'FORMER', 'ARCHIVED'] as const;
+// Module 4 B1 : enum lowercase migré depuis ['ACTIVE','FORMER','ARCHIVED'] (Module 1).
+// Mapping legacy : FORMER+ARCHIVED → terminated.
+export const BENEFICIARY_STATUSES = ['active', 'on_leave', 'terminated'] as const;
 export type BeneficiaryStatus = (typeof BENEFICIARY_STATUSES)[number];
 
 export const LEAVER_TYPES = [

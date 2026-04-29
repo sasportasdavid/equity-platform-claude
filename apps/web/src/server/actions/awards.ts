@@ -614,7 +614,7 @@ export async function bulkCreateAwards(input: unknown): Promise<BulkResult> {
         first_name: firstName,
         last_name: lastName,
         beneficiary_type: CSV_TYPE_TO_DB[info.type],
-        status: 'ACTIVE' as const,
+        status: 'active' as const,
         tax_residence_country: 'FR',
       };
     });
