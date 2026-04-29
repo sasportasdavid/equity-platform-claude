@@ -45,6 +45,7 @@ import { BeneficiaryStatusBadge } from '@/components/shared/beneficiary-status-b
 import { BeneficiaryTypeBadge } from '@/components/shared/beneficiary-type-badge';
 import { TransitionLifecycleDialog } from '@/components/beneficiaries/TransitionLifecycleDialog';
 import { CreateBeneficiaryModal } from '@/components/beneficiaries/CreateBeneficiaryModal';
+import { BulkImportBeneficiariesModal } from '@/components/beneficiaries/BulkImportBeneficiariesModal';
 import { archiveBeneficiary, inviteBeneficiary } from '@/server/actions/beneficiaries';
 import type { BeneficiaryListRow, ListBeneficiariesFilters } from '@/server/queries/beneficiaries';
 
@@ -101,6 +102,7 @@ export function BeneficiariesListClient({
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [createOpen, setCreateOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   function setParam(key: string, value: string | undefined) {
     const params = new URLSearchParams(searchParams.toString());
@@ -142,7 +144,11 @@ export function BeneficiariesListClient({
       actions={
         <div className="flex gap-2">
           {perms.canBulkImport ? (
-            <Button variant="outline" disabled title="Disponible en B5">
+            <Button
+              variant="outline"
+              onClick={() => setBulkOpen(true)}
+              data-testid="bulk-bene-button"
+            >
               <FileSpreadsheet className="mr-2 size-4" />
               Import CSV
             </Button>
@@ -300,6 +306,15 @@ export function BeneficiariesListClient({
         <CreateBeneficiaryModal
           open={createOpen}
           onOpenChange={setCreateOpen}
+          onSuccess={() => router.refresh()}
+        />
+      ) : null}
+
+      {/* Bulk import modal — Module 4 B5 */}
+      {perms.canBulkImport ? (
+        <BulkImportBeneficiariesModal
+          open={bulkOpen}
+          onOpenChange={setBulkOpen}
           onSuccess={() => router.refresh()}
         />
       ) : null}
