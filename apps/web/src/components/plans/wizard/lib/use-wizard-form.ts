@@ -42,7 +42,7 @@ export function useWizardForm(initial: WizardStepId = 1) {
 
   const next = useCallback(async () => {
     if (currentStep >= TOTAL_STEPS) return false;
-    const fields = getStepFields(currentStep);
+    const fields = getStepFields(currentStep, getValues());
     setIsValidating(true);
     try {
       const ok = fields.length === 0 ? true : await trigger(fields);
@@ -55,7 +55,7 @@ export function useWizardForm(initial: WizardStepId = 1) {
     } finally {
       setIsValidating(false);
     }
-  }, [currentStep, trigger]);
+  }, [currentStep, trigger, getValues]);
 
   const prev = useCallback(() => {
     if (currentStep <= 1) return;
@@ -89,8 +89,9 @@ export function useWizardForm(initial: WizardStepId = 1) {
    */
   const getCanProceed = useCallback(
     (step: WizardStepId): boolean => {
-      if (isStepLogicallyEmpty(step, getValues())) return true;
-      const fields = getStepFields(step);
+      const data = getValues();
+      if (isStepLogicallyEmpty(step, data)) return true;
+      const fields = getStepFields(step, data);
       const errors = formState.errors as Record<string, unknown>;
       return !fields.some((f) => errors[f] != null);
     },
