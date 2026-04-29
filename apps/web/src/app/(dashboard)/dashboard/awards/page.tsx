@@ -33,12 +33,13 @@ export default async function Page({
     status: parseStatusFilter(sp.status),
   };
 
-  const [awards, plans, canPropose, canCancel, canModify] = await Promise.all([
+  const [awards, plans, canPropose, canCancel, canModify, canBulkImport] = await Promise.all([
     listAwards(filters),
     listPlansForAwardCreation(),
     hasPermission('awards.propose'),
     hasPermission('awards.cancel'),
     hasPermission('awards.modify'),
+    hasPermission('awards.bulk_import'),
   ]);
 
   return (
@@ -49,6 +50,7 @@ export default async function Page({
       canPropose={canPropose}
       canCancel={canCancel}
       canModify={canModify}
+      canBulkImport={canBulkImport}
     />
   );
 }

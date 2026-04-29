@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { FileX, FilterX, Plus, Search } from 'lucide-react';
+import { FileSpreadsheet, FileX, FilterX, Plus, Search } from 'lucide-react';
 import { PlanTypeBadge } from '@/components/plans/shared/PlanTypeBadge';
 import { PageShell } from '@/components/shared/PageShell';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import {
 } from '@/components/awards/AwardStatusBadge';
 import { AwardRowActions } from '@/components/awards/AwardRowActions';
 import { CreateAwardModal } from '@/components/awards/CreateAwardModal';
+import { BulkImportModal } from '@/components/awards/BulkImportModal';
 import type { AwardListRow, PlanForCreation } from '@/server/queries/awards';
 import type { AwardStatus } from '@equity/shared';
 
@@ -43,6 +44,7 @@ export function AwardsListClient({
   canPropose,
   canCancel,
   canModify,
+  canBulkImport,
 }: {
   awards: AwardListRow[];
   plans: PlanForCreation[];
@@ -55,12 +57,14 @@ export function AwardsListClient({
   canPropose: boolean;
   canCancel: boolean;
   canModify: boolean;
+  canBulkImport: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [createOpen, setCreateOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   // Update searchParams helper (debounced search via direct call onChange)
   function setParam(key: string, value: string | undefined) {
@@ -87,9 +91,16 @@ export function AwardsListClient({
       description={`${awards.length} attribution${awards.length > 1 ? 's' : ''} affichée${awards.length > 1 ? 's' : ''}`}
       actions={
         <div className="flex gap-2">
-          <Button variant="outline" disabled title="Disponible en B5">
-            Import CSV
-          </Button>
+          {canBulkImport ? (
+            <Button
+              variant="outline"
+              onClick={() => setBulkOpen(true)}
+              data-testid="bulk-import-button"
+            >
+              <FileSpreadsheet className="mr-2 size-4" />
+              Import CSV
+            </Button>
+          ) : null}
           {canPropose ? (
             <Button onClick={() => setCreateOpen(true)} data-testid="new-award-button">
               <Plus className="mr-2 size-4" />
@@ -236,6 +247,16 @@ export function AwardsListClient({
         <CreateAwardModal
           open={createOpen}
           onOpenChange={setCreateOpen}
+          plans={plans}
+          onSuccess={() => router.refresh()}
+        />
+      ) : null}
+
+      {/* Modale bulk import — Module 3b B5 */}
+      {canBulkImport ? (
+        <BulkImportModal
+          open={bulkOpen}
+          onOpenChange={setBulkOpen}
           plans={plans}
           onSuccess={() => router.refresh()}
         />
