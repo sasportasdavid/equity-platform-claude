@@ -49,7 +49,7 @@ export async function devUpsertBeneficiary(input: {
       first_name: firstName,
       last_name: lastName,
       beneficiary_type: 'EMPLOYEE',
-      status: 'ACTIVE',
+      status: 'active',
       tax_residence_country: 'FR',
     })
     .select('id')

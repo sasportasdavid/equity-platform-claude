@@ -1,0 +1,5 @@
+email,first_name,last_name,beneficiary_type,contract_type,job_title,department,tax_residence,is_tax_resident_france,hire_date
+jean.dupont@example.com,Jean,Dupont,EMPLOYEE,CDI,Software Engineer,Engineering,FR,true,2024-01-15
+marie.martin@example.com,Marie,Martin,EMPLOYEE,CDI,Product Manager,Product,FR,true,2023-06-01
+john.smith@example.com,John,Smith,CONSULTANT,CONSULTANT,External Advisor,Strategy,US,false,2025-03-01
+sarah.chen@example.com,Sarah,Chen,OFFICER,MANDATAIRE_SOCIAL,CTO,Tech,FR,true,2022-09-15

@@ -17,14 +17,15 @@ import { cn } from '@/lib/utils';
  *
  * Items :
  *  - Tableau de bord (/dashboard)
- *  - Plans (/dashboard/plans) — actif (B4)
- *  - Bénéficiaires (placeholder /dashboard/beneficiaries)
+ *  - Plans (/dashboard/plans) — actif (Module 3a B4)
+ *  - Attributions (/dashboard/awards) — actif (Module 3b B3)
+ *  - Bénéficiaires (/dashboard/beneficiaries) — actif (Module 4 B3)
  *  - Valorisations (placeholder /dashboard/valuations)
  *  - Cap table (placeholder /dashboard/captable)
  *  - Paramètres (/dashboard/settings)
  *
- * Placeholders : pages 404 friendly servies par /dashboard/beneficiaries/page.tsx
- * etc. avec le message « Disponible dans un module à venir ».
+ * Placeholders restants : pages 404 friendly avec message « Disponible
+ * dans un module à venir ».
  *
  * Active state : matché par préfixe (ex : /dashboard/plans/[id] active aussi
  * « Plans »). Exception pour /dashboard exact (sinon tout est actif tout
@@ -50,12 +51,7 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   },
   { href: '/dashboard/plans', label: 'Plans', icon: <FileText className="size-4" /> },
   { href: '/dashboard/awards', label: 'Attributions', icon: <Users className="size-4" /> },
-  {
-    href: '/dashboard/beneficiaries',
-    label: 'Bénéficiaires',
-    icon: <Users className="size-4" />,
-    comingSoon: true,
-  },
+  { href: '/dashboard/beneficiaries', label: 'Bénéficiaires', icon: <Users className="size-4" /> },
   {
     href: '/dashboard/valuations',
     label: 'Valorisations',

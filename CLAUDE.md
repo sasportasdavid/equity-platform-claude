@@ -109,6 +109,30 @@ resource_type, resource_id, metadata })`.
 - Sidebar nav : ajouter le nouveau lien dès que la page existe
   (pas de placeholder "à venir")
 
+### Supabase Auth — pièges critiques côté Server Action
+
+- **`supabase.auth.signInWithOtp()` côté Server Action écrase la
+  session du caller** si on utilise le client SSR cookie-based
+  (`createSupabaseServerClient`). Symptôme : le mail magic link part
+  bien (200 OK), mais `Set-Cookie` remplace le token de session de
+  l'admin caller par celui de la cible. Les requêtes suivantes (RPC
+  qui dépendent de `auth.uid()`/`current_org_id()`, puis
+  `router.refresh()` côté client) échouent silencieusement ou avec
+  "TypeError: network error" en dev.
+- **Règle** : pour tout call `auth.*` qui agit sur un autre user que
+  le caller (invitation, magic link envoyé pour un tiers, reset
+  password admin), utiliser `getSupabaseAdminClient()` (service_role
+  - `persistSession: false`). Garder le client cookie-based pour les
+    RPC qui doivent voir l'identité du caller.
+- Référence : `inviteBeneficiary` dans
+  `apps/web/src/server/actions/beneficiaries.ts` (commit
+  `624f939`, fix Module 4 B5). Le bug avait shipé en B5 avant fix.
+- Pour générer un magic link sans envoyer de mail (Module 7 +
+  Resend custom), utiliser
+  `getSupabaseAdminClient().auth.admin.generateLink({ type:
+'magiclink', email })` puis envoyer via Resend. Cf. pattern dans
+  `apps/web/src/server/actions/auth.ts`.
+
 ### Base UI — pièges courants
 
 - **DropdownMenuLabel** doit être dans **DropdownMenuGroup** (sinon
@@ -177,10 +201,23 @@ apps/web/src/lib/supabase/database.types.ts`
   - [x] B7 — Compliance V1 (4 rules + runChecks + UI dialogs) +
         closure module 3b complete
 
+- [x] Module 4 — Beneficiaries Management
+  - [x] B1 — Migrations 00025-00028 (~25 cols ALTER + 4 RPCs +
+        seed permissions + extension hook M2)
+  - [x] B2 — 9 Server Actions + Zod schemas + Compliance V1
+        (5 rules) + sandbox /dev/beneficiary-lifecycle
+  - [x] B3 — Page liste /dashboard/beneficiaries + 7 filtres
+        URL-shareable + row actions + sidebar
+  - [x] B4 — Page détail /dashboard/beneficiaries/[id] +
+        4 onglets + EditBeneficiaryModal
+  - [x] B5 — CreateBeneficiaryModal + BulkImportBeneficiariesModal
+        CSV (papaparse + wizard 3 steps) + fix Supabase Auth
+  - [x] B6 — Compliance V1 finalisé (6e rule
+        BSPCE_BENEFICIARY_TYPE_REVERSE) + closure module 4
+        complete
+
 ### À venir
 
-- [ ] Module 4 — Beneficiaries Management (CRUD complet, import
-      RH, lifecycle)
 - [ ] Module 5 — Approval Engine (workflow multi-étapes
       configurable)
 - [ ] Module 6 — Document Engine + Yousign
@@ -286,12 +323,21 @@ Si tu te demandes "comment faire X", chercher d'abord :
   `apps/web/src/components/shared/data-table.tsx`
 - **Modale de création + sub-form** : voir
   `apps/web/src/components/awards/CreateAwardModal.tsx`
+- **Modale create/edit partagée (mode prop + alias)** : voir
+  `apps/web/src/components/beneficiaries/BeneficiaryFormModal.tsx`
+  (avec aliases `CreateBeneficiaryModal` + `EditBeneficiaryModal`)
 - **Modale wizard multi-step (useReducer)** : voir
   `apps/web/src/components/awards/BulkImportModal.tsx` ou
   `CreateModificationModal.tsx`
+- **Helpers CSV parsing (papaparse + Zod safeParse)** : voir
+  `apps/web/src/components/beneficiaries/bulk-import-helpers.ts`
+  (mapping snake→camelCase, summary, extractValidEmails)
 - **Compliance rule pure function + runner** : voir
   `apps/web/src/lib/compliance/rules/awardRules.ts` +
   `runChecks.ts`
+- **Compliance rule async avec ctx pré-chargé** : voir
+  `BSPCE_BENEFICIARY_TYPE_REVERSE` dans `beneficiaryRules.ts` —
+  count chargé conditionnellement dans `runChecks.ts`
 - **JSON diff viewer 2 colonnes** : voir
   `apps/web/src/components/shared/JsonDiffViewer.tsx`
 - **Discriminated union Zod par variant** : voir
@@ -326,3 +372,49 @@ Si une décision architecturale ou métier est ambiguë :
 2. Faire un choix conservateur (le moins risqué pour la
    cohérence DB et l'audit)
 3. Pinger l'utilisateur dans le récap final pour validation
+
+## Conventions de casing pour enums DB
+
+- Beneficiaries.status = lowercase ('active', 'on_leave', 'terminated')
+  Lifecycle court avec peu de valeurs, lowercase plus lisible
+- Beneficiaries.beneficiary_type = UPPERCASE ('EMPLOYEE', 'CONSULTANT',
+  'DIRIGEANT', 'EXTERNAL')
+  Aligné Module 3b, évite re-migration
+- Awards.status = UPPERCASE (16 valeurs)
+- Plans.status = UPPERCASE ('DRAFT', 'ACTIVE', 'CLOSED')
+
+Règle générale : un enum court (3-4 valeurs) = lowercase OK.
+Un enum long (5+) ou critique métier (workflow status) = UPPERCASE.
+Pour cohérence : suivre l'existant DB plutôt que la spec si écart.
+
+À ajouter à CLAUDE.md, section "Conventions de code"
+(sous-section "Server Actions") :
+
+### Supabase Auth — pièges critiques côté Server Action
+
+⚠️ supabase.auth.signInWithOtp() / signUp() / inviteUserByEmail()
+appelés sur le client SSR cookie-based écrasent la session du
+caller (admin) avec le token de l'utilisateur cible. Set-Cookie
+casse l'auth de l'admin pour les requêtes suivantes dans la
+même Server Action.
+
+Symptômes :
+
+- L'opération Auth réussit (mail envoyé)
+- Mais les RPC suivantes voient auth.uid()=null → throw
+- router.refresh() côté client plante avec "TypeError: network error"
+
+Fix : pour TOUTE opération Auth qui crée/identifie un USER
+DIFFÉRENT du caller, utiliser le client admin (service_role +
+persistSession:false) :
+
+import { getSupabaseAdminClient } from '@/lib/supabase/admin';
+
+const adminClient = getSupabaseAdminClient();
+await adminClient.auth.signInWithOtp({ email, options: {...} });
+// Cookie de session du caller préservé ✓
+
+Conserver le client cookie-based pour les RPC qui ont besoin
+de auth.uid() (audit, RLS).
+
+Référence : Module 4 B5 — bug fix `624f939`

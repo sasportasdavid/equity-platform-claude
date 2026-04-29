@@ -1,12 +1,54 @@
 import 'server-only';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { AWARD_RULES } from './rules/awardRules';
+import { BENEFICIARY_RULES } from './rules/beneficiaryRules';
 import type {
   AwardCheckContext,
   AwardCheckInput,
+  BeneficiaryCheckContext,
+  BeneficiaryCheckInput,
   ComplianceCheckResult,
   ComplianceIssue,
+  ComplianceRule,
 } from './types';
+
+/**
+ * Helper interne — exécute une liste de rules en parallèle, agrège.
+ * Mutualise la logique entre `runComplianceChecks` (awards) et
+ * `runBeneficiaryComplianceChecks` (Module 4 B2).
+ */
+async function runRules<TData, TCtx>(
+  rules: ComplianceRule<TData, TCtx>[],
+  data: TData,
+  ctx: TCtx,
+): Promise<ComplianceCheckResult> {
+  const results = await Promise.all(
+    rules.map(async (rule) => {
+      try {
+        const issue = await rule.check(data, ctx);
+        return { rule, issue };
+      } catch (err) {
+        return {
+          rule,
+          issue: {
+            severity: 'WARNING' as const,
+            code: `${rule.code}_INTERNAL_ERROR`,
+            message: `Rule ${rule.code} a échoué : ${err instanceof Error ? err.message : 'unknown'}`,
+          },
+        };
+      }
+    }),
+  );
+
+  const errors: ComplianceIssue[] = [];
+  const warnings: ComplianceIssue[] = [];
+  for (const { rule, issue } of results) {
+    if (!issue) continue;
+    if (rule.enforcement === 'hard') errors.push(issue);
+    else warnings.push(issue);
+  }
+  return { errors, warnings, hasHardBlocks: errors.length > 0 };
+}
 
 /**
  * Helper compliance — Module 3b B7.
@@ -92,38 +134,58 @@ export async function runComplianceChecks(
     (rule) => rule.appliesTo.includes('*') || rule.appliesTo.includes(ctx.plan.plan_type),
   );
 
-  // Lance toutes les rules en parallèle (Promise.all OK — chacune est légère)
-  const results = await Promise.all(
-    applicableRules.map(async (rule) => {
-      try {
-        const issue = await rule.check(input, ctx);
-        return { rule, issue };
-      } catch (err) {
-        // Une rule qui throw ne doit pas bloquer les autres. On la log
-        // comme warning interne (pas une erreur métier visible user).
-        return {
-          rule,
-          issue: {
-            severity: 'WARNING' as const,
-            code: `${rule.code}_INTERNAL_ERROR`,
-            message: `Rule ${rule.code} a échoué : ${err instanceof Error ? err.message : 'unknown'}`,
-          },
-        };
-      }
-    }),
-  );
+  return runRules(applicableRules, input, ctx);
+}
 
-  const errors: ComplianceIssue[] = [];
-  const warnings: ComplianceIssue[] = [];
-  for (const { rule, issue } of results) {
-    if (!issue) continue;
-    if (rule.enforcement === 'hard') errors.push(issue);
-    else warnings.push(issue);
-  }
+// ---------------------------------------------------------------------------
+// Module 4 B2 — Compliance bénéficiaires
+// ---------------------------------------------------------------------------
 
-  return {
-    errors,
-    warnings,
-    hasHardBlocks: errors.length > 0,
+/**
+ * Helper compliance bénéficiaires — Module 4 B2.
+ *
+ * Charge le ctx serveur (collision email intra-org) puis exécute les 5 rules
+ * BENEFICIARY_RULES en parallèle. Appelé depuis createBeneficiary +
+ * updateBeneficiary (Server Actions). Pas dans bulkCreateBeneficiaries (V1).
+ */
+export async function runBeneficiaryComplianceChecks(
+  input: BeneficiaryCheckInput,
+  orgId: string,
+): Promise<ComplianceCheckResult> {
+  const supabase = await createSupabaseServerClient();
+
+  // Charge la collision email intra-org (pour EMAIL_UNIQUE_IN_ORG) +
+  // optionnellement le count BSPCE actifs (Module 4 B6 — uniquement si on
+  // update vers un type risqué CONSULTANT/EXTERNAL).
+  const needsBspceCheck =
+    input.id != null &&
+    (input.beneficiaryType === 'CONSULTANT' || input.beneficiaryType === 'EXTERNAL');
+
+  const [existingRes, bspceRes] = await Promise.all([
+    supabase
+      .from('beneficiaries')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('email', input.email.toLowerCase())
+      .is('deleted_at', null)
+      .maybeSingle(),
+    needsBspceCheck
+      ? supabase
+          .from('awards')
+          .select('id, plans!inner(plan_type)', { count: 'exact', head: true })
+          .eq('beneficiary_id', input.id!)
+          .eq('plans.plan_type', 'BSPCE')
+          .not('status', 'in', '(CANCELLED,FORFEITED,EXPIRED,FULLY_EXERCISED)')
+          .is('deleted_at', null)
+      : Promise.resolve({ count: null as number | null }),
+  ]);
+
+  const ctx: BeneficiaryCheckContext = {
+    orgId,
+    beneficiary: input.id ? { id: input.id, email: input.email } : null,
+    emailCollisionId: existingRes.data?.id ?? null,
+    bspceActiveAwardsCount: needsBspceCheck ? (bspceRes.count ?? 0) : null,
   };
+
+  return runRules(BENEFICIARY_RULES, input, ctx);
 }

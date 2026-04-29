@@ -53,16 +53,58 @@ export type AwardCheckContext = {
   companyTotalShares?: number | null;
 };
 
-export type ComplianceRule = {
+/**
+ * Règle de compliance générique. Génériquée sur le type d'input + ctx
+ * pour supporter awards (Module 3b B7) et beneficiaries (Module 4 B2).
+ *
+ * Le `data` arrive du caller (Server Action input post-validation Zod), le
+ * `ctx` est chargé par `runComplianceChecks` (Server-side queries).
+ */
+export type ComplianceRule<TData = AwardCheckInput, TCtx = AwardCheckContext> = {
   code: string;
   description: string;
-  /** `['*']` = applique à tous les types de plans, sinon liste explicite. */
+  /** `['*']` = applique à toutes les variantes (plan_type pour awards, etc.). */
   appliesTo: string[];
   enforcement: ComplianceEnforcement;
-  check: (
-    data: AwardCheckInput,
-    ctx: AwardCheckContext,
-  ) => Promise<ComplianceIssue | null> | ComplianceIssue | null;
+  check: (data: TData, ctx: TCtx) => Promise<ComplianceIssue | null> | ComplianceIssue | null;
+};
+
+// ---------------------------------------------------------------------------
+// Module 4 B2 — Beneficiaries
+// ---------------------------------------------------------------------------
+
+export type BeneficiaryCheckInput = {
+  /**
+   * `id` est NULL si on est en cours de création (createBeneficiary).
+   * Sinon présent (updateBeneficiary).
+   */
+  id?: string | null;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  beneficiaryType: string; // EMPLOYEE | OFFICER | ...
+  taxResidence: string; // ISO-3166-1 alpha-2
+  isTaxResidentFrance: boolean;
+  hireDate?: string | null; // YYYY-MM-DD
+  managerId?: string | null;
+  iban?: string | null;
+};
+
+export type BeneficiaryCheckContext = {
+  orgId: string;
+  /** Présent si on update un bénéficiaire existant (pour MANAGER_NOT_SELF). */
+  beneficiary?: { id: string; email?: string | null } | null;
+  /**
+   * Email collisions intra-org (vérifié dans runChecks). Plein si déjà existant
+   * dans l'org sous un autre id (ou null si on update et qu'aucune collision).
+   */
+  emailCollisionId?: string | null;
+  /**
+   * Count des awards BSPCE actifs portés par le bénéficiaire (Module 4 B6).
+   * Calculé uniquement en update si le nouveau type est CONSULTANT/EXTERNAL.
+   * `null` = check non lancé (ex: création, ou nouveau type compatible BSPCE).
+   */
+  bspceActiveAwardsCount?: number | null;
 };
 
 export type ComplianceCheckResult = {

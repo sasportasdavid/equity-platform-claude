@@ -634,8 +634,16 @@ export type Database = {
       beneficiaries: {
         Row: {
           address_encrypted: string | null
+          address_line_1: string | null
+          address_line_2: string | null
+          bank_account_holder_name: string | null
+          bank_name: string | null
           beneficiary_type: string
+          bic: string | null
+          city: string | null
           company_id: string | null
+          contract_type: string | null
+          country: string | null
           created_at: string
           created_by: string | null
           custom_fields: Json
@@ -643,17 +651,29 @@ export type Database = {
           deleted_at: string | null
           department: string | null
           email: string
+          first_login_at: string | null
           first_name: string
+          gender: string | null
           hire_date: string | null
+          iban: string | null
           id: string
           identity_document_url: string | null
+          invitation_count: number | null
+          invited_at: string | null
+          is_tax_resident_france: boolean | null
           job_title: string | null
           last_name: string
+          lifecycle_change_reason: string | null
+          lifecycle_changed_at: string | null
+          manager_id: string | null
           nationality: string
           org_id: string
           phone_encrypted: string | null
+          postal_code: string | null
+          preferred_name: string | null
           social_security_number: string | null
           status: string
+          tax_id: string | null
           tax_residence_country: string
           termination_date: string | null
           termination_reason: string | null
@@ -662,8 +682,16 @@ export type Database = {
         }
         Insert: {
           address_encrypted?: string | null
+          address_line_1?: string | null
+          address_line_2?: string | null
+          bank_account_holder_name?: string | null
+          bank_name?: string | null
           beneficiary_type: string
+          bic?: string | null
+          city?: string | null
           company_id?: string | null
+          contract_type?: string | null
+          country?: string | null
           created_at?: string
           created_by?: string | null
           custom_fields?: Json
@@ -671,17 +699,29 @@ export type Database = {
           deleted_at?: string | null
           department?: string | null
           email: string
+          first_login_at?: string | null
           first_name: string
+          gender?: string | null
           hire_date?: string | null
+          iban?: string | null
           id?: string
           identity_document_url?: string | null
+          invitation_count?: number | null
+          invited_at?: string | null
+          is_tax_resident_france?: boolean | null
           job_title?: string | null
           last_name: string
+          lifecycle_change_reason?: string | null
+          lifecycle_changed_at?: string | null
+          manager_id?: string | null
           nationality?: string
           org_id: string
           phone_encrypted?: string | null
+          postal_code?: string | null
+          preferred_name?: string | null
           social_security_number?: string | null
           status?: string
+          tax_id?: string | null
           tax_residence_country?: string
           termination_date?: string | null
           termination_reason?: string | null
@@ -690,8 +730,16 @@ export type Database = {
         }
         Update: {
           address_encrypted?: string | null
+          address_line_1?: string | null
+          address_line_2?: string | null
+          bank_account_holder_name?: string | null
+          bank_name?: string | null
           beneficiary_type?: string
+          bic?: string | null
+          city?: string | null
           company_id?: string | null
+          contract_type?: string | null
+          country?: string | null
           created_at?: string
           created_by?: string | null
           custom_fields?: Json
@@ -699,17 +747,29 @@ export type Database = {
           deleted_at?: string | null
           department?: string | null
           email?: string
+          first_login_at?: string | null
           first_name?: string
+          gender?: string | null
           hire_date?: string | null
+          iban?: string | null
           id?: string
           identity_document_url?: string | null
+          invitation_count?: number | null
+          invited_at?: string | null
+          is_tax_resident_france?: boolean | null
           job_title?: string | null
           last_name?: string
+          lifecycle_change_reason?: string | null
+          lifecycle_changed_at?: string | null
+          manager_id?: string | null
           nationality?: string
           org_id?: string
           phone_encrypted?: string | null
+          postal_code?: string | null
+          preferred_name?: string | null
           social_security_number?: string | null
           status?: string
+          tax_id?: string | null
           tax_residence_country?: string
           termination_date?: string | null
           termination_reason?: string | null
@@ -722,6 +782,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "beneficiaries_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "beneficiaries"
             referencedColumns: ["id"]
           },
           {
@@ -3172,6 +3239,7 @@ export type Database = {
         Returns: Json
       }
       bulk_create_awards: { Args: { p_rows: Json }; Returns: Json }
+      bulk_create_beneficiaries: { Args: { p_rows: Json }; Returns: Json }
       create_award_full: { Args: { p_data: Json }; Returns: string }
       create_plan_full: {
         Args: {
@@ -3256,6 +3324,10 @@ export type Database = {
         Returns: boolean
       }
       is_org_member: { Args: { org_id_param: string }; Returns: boolean }
+      link_beneficiary_to_user: {
+        Args: { p_email: string; p_user_id: string }
+        Returns: undefined
+      }
       list_my_plan_drafts: {
         Args: never
         Returns: {
@@ -3267,11 +3339,24 @@ export type Database = {
         }[]
       }
       load_plan_draft: { Args: { p_draft_id: string }; Returns: Json }
+      mark_beneficiary_invited: {
+        Args: { p_beneficiary_id: string }
+        Returns: string
+      }
       materialize_vesting_events: {
         Args: { p_award_id: string }
         Returns: number
       }
       next_award_number: { Args: { p_org_id: string }; Returns: string }
+      transition_beneficiary_lifecycle: {
+        Args: {
+          p_beneficiary_id: string
+          p_reason: string
+          p_termination_date?: string
+          p_to_status: string
+        }
+        Returns: string
+      }
       upsert_plan_draft: { Args: { p_data: Json }; Returns: Json }
       user_all_permissions: { Args: never; Returns: string[] }
       user_has_permission: { Args: { p_perm: string }; Returns: boolean }
