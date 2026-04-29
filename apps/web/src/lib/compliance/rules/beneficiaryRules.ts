@@ -1,16 +1,19 @@
 import type { BeneficiaryCheckContext, BeneficiaryCheckInput, ComplianceRule } from '../types';
 
 /**
- * Règles compliance V1 pour bénéficiaires — Module 4 B2.
+ * Règles compliance V1 pour bénéficiaires — Module 4 B2 + B6.
  *
  * Spec : docs/MODULE_04_BENEFICIARIES_MANAGEMENT.md §6.
  *
- * 5 règles V1 :
+ * 6 règles V1 :
  *   1. EMAIL_UNIQUE_IN_ORG               (hard) — duplicat DB pour UX
  *   2. TAX_RESIDENCE_FRANCE_CONSISTENCY  (hard) — taxResidence ≠ FR + isFR=true → ERROR
  *   3. HIRE_DATE_REASONABLE               (soft pour futur, hard si année < 1900)
  *   4. MANAGER_NOT_SELF                   (hard) — managerId ne peut pas être soi
  *   5. IBAN_FORMAT                        (soft) — regex basique (2 lettres + 2 chiffres + alphanum)
+ *   6. BSPCE_BENEFICIARY_TYPE_REVERSE    (hard) — passer un bénéficiaire avec
+ *      des awards BSPCE actifs en CONSULTANT/EXTERNAL est interdit (BSPCE
+ *      réservés employees + dirigeants par CGI art. 163 bis G).
  *
  * V2 (Module 12) : configurables par org. Pour V1, hardcodés.
  */
@@ -122,10 +125,46 @@ export const IBAN_FORMAT: BenRule = {
   },
 };
 
+/**
+ * Module 4 B6 — BSPCE_BENEFICIARY_TYPE_REVERSE.
+ *
+ * Bloque le passage d'un bénéficiaire en CONSULTANT/EXTERNAL s'il porte
+ * encore des awards BSPCE actifs. Les BSPCE sont réservés aux salariés et
+ * dirigeants par le CGI art. 163 bis G : un consultant/externe ne peut pas
+ * en détenir. Si on tente le changement, l'admin doit d'abord canceller les
+ * awards (transition CANCELLED ou FORFEITED) ou les laisser expirer.
+ *
+ * Le count est chargé par `runBeneficiaryComplianceChecks` uniquement si
+ * `data.id` est présent (update) ET que le nouveau type est risqué — sinon
+ * `ctx.bspceActiveAwardsCount` reste null et la rule retourne null.
+ */
+const RISKY_TYPES_FOR_BSPCE = new Set(['CONSULTANT', 'EXTERNAL']);
+
+export const BSPCE_BENEFICIARY_TYPE_REVERSE: BenRule = {
+  code: 'BSPCE_BENEFICIARY_TYPE_REVERSE',
+  description:
+    "Empêche de changer un bénéficiaire en CONSULTANT/EXTERNAL s'il a des awards BSPCE actifs",
+  appliesTo: ['*'],
+  enforcement: 'hard',
+  check: (data, ctx) => {
+    if (!RISKY_TYPES_FOR_BSPCE.has(data.beneficiaryType)) return null;
+    const count = ctx.bspceActiveAwardsCount;
+    if (count == null || count === 0) return null;
+    return {
+      severity: 'ERROR',
+      code: 'BSPCE_BENEFICIARY_TYPE_REVERSE',
+      message: `Ce bénéficiaire a ${count} award(s) BSPCE actif(s). Seuls les salariés et dirigeants peuvent détenir des BSPCE. Annuler les awards avant de changer le type.`,
+      suggestedAction:
+        'Canceller ou faire expirer les awards BSPCE (transition CANCELLED/FORFEITED) avant de basculer le type.',
+    };
+  },
+};
+
 export const BENEFICIARY_RULES: BenRule[] = [
   EMAIL_UNIQUE_IN_ORG,
   TAX_RESIDENCE_FRANCE_CONSISTENCY,
   HIRE_DATE_REASONABLE,
   MANAGER_NOT_SELF,
   IBAN_FORMAT,
+  BSPCE_BENEFICIARY_TYPE_REVERSE,
 ];

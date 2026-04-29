@@ -154,19 +154,37 @@ export async function runBeneficiaryComplianceChecks(
 ): Promise<ComplianceCheckResult> {
   const supabase = await createSupabaseServerClient();
 
-  // Charge la collision email intra-org (pour EMAIL_UNIQUE_IN_ORG)
-  const { data: existing } = await supabase
-    .from('beneficiaries')
-    .select('id')
-    .eq('org_id', orgId)
-    .eq('email', input.email.toLowerCase())
-    .is('deleted_at', null)
-    .maybeSingle();
+  // Charge la collision email intra-org (pour EMAIL_UNIQUE_IN_ORG) +
+  // optionnellement le count BSPCE actifs (Module 4 B6 — uniquement si on
+  // update vers un type risqué CONSULTANT/EXTERNAL).
+  const needsBspceCheck =
+    input.id != null &&
+    (input.beneficiaryType === 'CONSULTANT' || input.beneficiaryType === 'EXTERNAL');
+
+  const [existingRes, bspceRes] = await Promise.all([
+    supabase
+      .from('beneficiaries')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('email', input.email.toLowerCase())
+      .is('deleted_at', null)
+      .maybeSingle(),
+    needsBspceCheck
+      ? supabase
+          .from('awards')
+          .select('id, plans!inner(plan_type)', { count: 'exact', head: true })
+          .eq('beneficiary_id', input.id!)
+          .eq('plans.plan_type', 'BSPCE')
+          .not('status', 'in', '(CANCELLED,FORFEITED,EXPIRED,FULLY_EXERCISED)')
+          .is('deleted_at', null)
+      : Promise.resolve({ count: null as number | null }),
+  ]);
 
   const ctx: BeneficiaryCheckContext = {
     orgId,
     beneficiary: input.id ? { id: input.id, email: input.email } : null,
-    emailCollisionId: existing?.id ?? null,
+    emailCollisionId: existingRes.data?.id ?? null,
+    bspceActiveAwardsCount: needsBspceCheck ? (bspceRes.count ?? 0) : null,
   };
 
   return runRules(BENEFICIARY_RULES, input, ctx);

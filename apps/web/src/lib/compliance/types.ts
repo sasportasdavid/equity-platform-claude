@@ -99,6 +99,12 @@ export type BeneficiaryCheckContext = {
    * dans l'org sous un autre id (ou null si on update et qu'aucune collision).
    */
   emailCollisionId?: string | null;
+  /**
+   * Count des awards BSPCE actifs portés par le bénéficiaire (Module 4 B6).
+   * Calculé uniquement en update si le nouveau type est CONSULTANT/EXTERNAL.
+   * `null` = check non lancé (ex: création, ou nouveau type compatible BSPCE).
+   */
+  bspceActiveAwardsCount?: number | null;
 };
 
 export type ComplianceCheckResult = {
