@@ -35,6 +35,9 @@ export const PERMISSIONS = [
   'beneficiaries.update',
   'beneficiaries.delete',
   'beneficiaries.invite', // M2 — envoi d'invitation au portail
+  'beneficiaries.lifecycle', // M4 — transition active/on_leave/terminated
+  'beneficiaries.bulk_import', // M4 — import CSV
+  'beneficiaries.export', // M4 — export CSV (Module 13 préemptif)
 
   // Cap table
   'captable.read',
