@@ -106,19 +106,28 @@ function WizardInner({
 }) {
   const wizard = useWizardForm();
   const persistence = useWizardPersistence({ saveDraft, loadServerDraft });
-  const { trigger, getValues } = useFormContext<PlanWizardData>();
+  const { trigger, getValues, formState } = useFormContext<PlanWizardData>();
 
   /**
    * Soumission finale : trigger() global qui force toute la validation
    * Zod (incluant les superRefine cross-field), puis appelle la Server
    * Action `onSubmit` si tout est OK.
+   *
+   * Sur échec : on liste les fields en erreur dans le banner pour que
+   * l'utilisateur sache où aller corriger (vs un message générique
+   * « il y a des erreurs » qui force du devinage).
    */
   const handleFinalSubmit = async () => {
     const ok = await trigger();
     if (!ok) {
+      const errorFields = collectErrorFieldPaths(formState.errors);
+      const summary =
+        errorFields.length > 0
+          ? `Le formulaire contient encore des erreurs sur : ${errorFields.slice(0, 6).join(', ')}${errorFields.length > 6 ? `, +${errorFields.length - 6}` : ''}.`
+          : 'Le formulaire contient encore des erreurs — corrigez-les avant de créer le plan.';
       setSubmitState({
         isSubmitting: false,
-        error: 'Le formulaire contient encore des erreurs — corrigez-les avant de créer le plan.',
+        error: summary,
         planId: null,
       });
       return;
@@ -236,4 +245,26 @@ function CurrentStepRenderer({ stepId }: { stepId: WizardStepId }) {
       {stepId === 7 ? <Step7Review /> : null}
     </article>
   );
+}
+
+/**
+ * Walk récursif dans `formState.errors` pour collecter tous les paths
+ * (champs RHF) qui ont une erreur. Affiché dans le banner d'erreur de
+ * `handleFinalSubmit` pour aider l'utilisateur à localiser le problème
+ * sans devoir parcourir toutes les étapes.
+ */
+function collectErrorFieldPaths(errors: unknown, parentPath = ''): string[] {
+  if (!errors || typeof errors !== 'object') return [];
+  const paths: string[] = [];
+  for (const [key, value] of Object.entries(errors as Record<string, unknown>)) {
+    const path = parentPath ? `${parentPath}.${key}` : key;
+    if (value && typeof value === 'object' && 'message' in value && 'type' in value) {
+      // Leaf RHF FieldError { type, message, ref? }
+      paths.push(path);
+    } else if (value && typeof value === 'object') {
+      // Nested object (array index, sub-form, etc.)
+      paths.push(...collectErrorFieldPaths(value, path));
+    }
+  }
+  return paths;
 }

@@ -1,0 +1,5 @@
+beneficiary_email,beneficiary_full_name,beneficiary_type,units_granted,exercise_price,grant_date,vesting_start_date
+jean.dupont@example.com,Jean Dupont,employee,1000,1.50,2026-05-01,2026-05-01
+marie.martin@example.com,Marie Martin,employee,500,1.50,2026-05-01,2026-05-01
+sarah.chen@example.com,Sarah Chen,dirigeant,2000,1.50,2026-05-01,2026-05-01
+pierre.dubois@example.com,Pierre Dubois,consultant,250,2.00,2026-05-01,

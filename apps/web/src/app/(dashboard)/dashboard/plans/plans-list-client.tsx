@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -249,7 +250,9 @@ function RowActions({
         <MoreHorizontal className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenuLabel>{plan.name}</DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{plan.name}</DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => router.push(`/dashboard/plans/${plan.id}`)}>
           <Eye className="mr-2 size-4" />

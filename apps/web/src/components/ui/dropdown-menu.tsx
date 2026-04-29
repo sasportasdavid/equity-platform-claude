@@ -53,6 +53,16 @@ function DropdownMenuGroup({ ...props }: MenuPrimitive.Group.Props) {
   return <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />;
 }
 
+// HACK Base UI : MenuPrimitive.GroupLabel exige un MenuPrimitive.Group
+// parent (sinon throw "MenuGroupRootContext is missing"). Pour éviter le
+// piège récurrent côté call-sites, on wrappe systématiquement le Label
+// dans un Group "stand-alone". L'overhead est nul (Group ne rend qu'un
+// <div role="group">) et ça respecte la convention Base UI.
+//
+// Si tu as déjà un <DropdownMenuGroup> parent autour de plusieurs Items
+// + Label, le double-wrap reste valide (Group imbriqué = OK Base UI).
+//
+// Documenté dans CLAUDE.md (Conventions › UI › Base UI — pièges courants).
 function DropdownMenuLabel({
   className,
   inset,
@@ -61,15 +71,17 @@ function DropdownMenuLabel({
   inset?: boolean;
 }) {
   return (
-    <MenuPrimitive.GroupLabel
-      data-slot="dropdown-menu-label"
-      data-inset={inset}
-      className={cn(
-        'text-muted-foreground data-inset:pl-7 px-1.5 py-1 text-xs font-medium',
-        className,
-      )}
-      {...props}
-    />
+    <MenuPrimitive.Group data-slot="dropdown-menu-label-group">
+      <MenuPrimitive.GroupLabel
+        data-slot="dropdown-menu-label"
+        data-inset={inset}
+        className={cn(
+          'text-muted-foreground data-inset:pl-7 px-1.5 py-1 text-xs font-medium',
+          className,
+        )}
+        {...props}
+      />
+    </MenuPrimitive.Group>
   );
 }
 

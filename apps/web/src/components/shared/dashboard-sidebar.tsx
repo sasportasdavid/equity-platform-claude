@@ -49,6 +49,7 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
     exact: true,
   },
   { href: '/dashboard/plans', label: 'Plans', icon: <FileText className="size-4" /> },
+  { href: '/dashboard/awards', label: 'Attributions', icon: <Users className="size-4" /> },
   {
     href: '/dashboard/beneficiaries',
     label: 'Bénéficiaires',

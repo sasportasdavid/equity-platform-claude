@@ -446,6 +446,35 @@ export type Database = {
           },
         ]
       }
+      award_number_counters: {
+        Row: {
+          current_seq: number
+          current_year: number
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          current_seq?: number
+          current_year?: number
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          current_seq?: number
+          current_year?: number
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "award_number_counters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       awards: {
         Row: {
           acceptance_deadline: string | null
@@ -2133,6 +2162,7 @@ export type Database = {
           grant_date: string
           id: string
           is_locked: boolean
+          locked_at: string | null
           name: string
           org_id: string
           parent_plan_id: string | null
@@ -2166,6 +2196,7 @@ export type Database = {
           grant_date: string
           id?: string
           is_locked?: boolean
+          locked_at?: string | null
           name: string
           org_id: string
           parent_plan_id?: string | null
@@ -2199,6 +2230,7 @@ export type Database = {
           grant_date?: string
           id?: string
           is_locked?: boolean
+          locked_at?: string | null
           name?: string
           org_id?: string
           parent_plan_id?: string | null
@@ -3129,6 +3161,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_award_modification: {
+        Args: {
+          p_award_id: string
+          p_changes: Json
+          p_effective_date?: string
+          p_modification_type: string
+          p_reason: string
+        }
+        Returns: Json
+      }
+      bulk_create_awards: { Args: { p_rows: Json }; Returns: Json }
+      create_award_full: { Args: { p_data: Json }; Returns: string }
       create_plan_full: {
         Args: {
           p_company_id: string
@@ -3223,6 +3267,11 @@ export type Database = {
         }[]
       }
       load_plan_draft: { Args: { p_draft_id: string }; Returns: Json }
+      materialize_vesting_events: {
+        Args: { p_award_id: string }
+        Returns: number
+      }
+      next_award_number: { Args: { p_org_id: string }; Returns: string }
       upsert_plan_draft: { Args: { p_data: Json }; Returns: Json }
       user_all_permissions: { Args: never; Returns: string[] }
       user_has_permission: { Args: { p_perm: string }; Returns: boolean }
@@ -3358,4 +3407,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

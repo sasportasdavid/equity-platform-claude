@@ -23,7 +23,24 @@ export type WizardStepDef = {
   fields: ReadonlyArray<keyof PlanWizardData>;
 };
 
-export function getStepFields(stepId: WizardStepId): ReadonlyArray<keyof PlanWizardData> {
+export function getStepFields(
+  stepId: WizardStepId,
+  data?: Partial<PlanWizardData>,
+): ReadonlyArray<keyof PlanWizardData> {
+  // Step 3 — discriminated union par `vestingType` : ne pas valider les fields
+  // des autres modes (sinon une string vide stockée par un mode visité
+  // précédemment fait échouer `regex(isoDateRegex)` et bloque « Suivant »
+  // alors que le mode courant est valide).
+  if (stepId === 3) {
+    const mode = data?.vestingType;
+    if (mode === 'single') return ['vestingType', 'singleVestingDate'];
+    if (mode === 'tranches') return ['vestingType', 'vestingTranches'];
+    if (mode === 'cliff_linear') {
+      return ['vestingType', 'cliffMonths', 'cliffPercentage', 'totalMonths', 'frequency'];
+    }
+    // Pas encore de mode choisi → on bloque sur la sélection
+    return ['vestingType'];
+  }
   return WIZARD_STEPS.find((s) => s.id === stepId)?.fields ?? [];
 }
 
