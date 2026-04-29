@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { JsonDiffViewer } from '@/components/shared/JsonDiffViewer';
 import type { AwardDetailRow } from '@/server/queries/awards';
 import type { Json } from '@equity/shared';
 
@@ -151,22 +152,7 @@ export function AwardModificationsTab({
               Snapshots avant / après la modification (JSON brut côte à côte).
             </DialogDescription>
           </DialogHeader>
-          {diffOpen ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <h4 className="text-muted-foreground text-xs font-medium uppercase">Avant</h4>
-                <pre className="bg-muted/40 max-h-96 overflow-auto rounded p-3 font-mono text-[10px]">
-                  {JSON.stringify(diffOpen.before, null, 2)}
-                </pre>
-              </div>
-              <div className="space-y-1">
-                <h4 className="text-muted-foreground text-xs font-medium uppercase">Après</h4>
-                <pre className="bg-muted/40 max-h-96 overflow-auto rounded p-3 font-mono text-[10px]">
-                  {JSON.stringify(diffOpen.after, null, 2)}
-                </pre>
-              </div>
-            </div>
-          ) : null}
+          {diffOpen ? <JsonDiffViewer before={diffOpen.before} after={diffOpen.after} /> : null}
         </DialogContent>
       </Dialog>
     </>
