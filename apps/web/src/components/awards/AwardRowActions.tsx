@@ -26,6 +26,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -156,7 +157,9 @@ export function AwardRowActions({
           }
         />
         <DropdownMenuContent align="end" className="min-w-[200px]">
-          <DropdownMenuLabel>Award</DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Award</DropdownMenuLabel>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
 
           <DropdownMenuItem
@@ -170,9 +173,11 @@ export function AwardRowActions({
           {canPropose && transitions.length > 0 ? (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-muted-foreground text-[10px] uppercase">
-                Forcer transition (debug)
-              </DropdownMenuLabel>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-muted-foreground text-[10px] uppercase">
+                  Forcer transition (debug)
+                </DropdownMenuLabel>
+              </DropdownMenuGroup>
               {transitions.map((to) => (
                 <DropdownMenuItem
                   key={to}

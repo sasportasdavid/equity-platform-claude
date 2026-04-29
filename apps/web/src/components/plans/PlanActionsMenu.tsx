@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -117,7 +118,9 @@ export function PlanActionsMenu({
           }
         />
         <DropdownMenuContent align="end" className="min-w-[200px]">
-          <DropdownMenuLabel>Plan</DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Plan</DropdownMenuLabel>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
 
           {canUpdate ? (

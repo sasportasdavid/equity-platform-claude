@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -110,7 +111,9 @@ export function MembersTable({
                       }
                     />
                     <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      </DropdownMenuGroup>
                       <DropdownMenuSeparator />
                       <EditMemberRolesDialog
                         membershipId={m.id}

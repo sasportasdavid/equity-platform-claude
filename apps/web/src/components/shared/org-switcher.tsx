@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -90,7 +91,9 @@ export function OrgSwitcher({
         }
       />
       <DropdownMenuContent align="start" className="min-w-[260px]">
-        <DropdownMenuLabel>Changer d’organisation</DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Changer d’organisation</DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         {orgs.map((org) => (
           <DropdownMenuItem
