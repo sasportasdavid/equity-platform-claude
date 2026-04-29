@@ -481,33 +481,154 @@ export async function forfeitAward(input: unknown): Promise<ActionVoid | ActionE
 
 export type BulkResult = ActionOk<{ created: number; awardIds: string[] }> | ActionError;
 
+/**
+ * Mapping CSV beneficiary_type → DB beneficiary_type enum.
+ *   employee   → EMPLOYEE
+ *   consultant → CONSULTANT
+ *   dirigeant  → OFFICER
+ *   external   → OTHER
+ *
+ * Cohérent avec MODULE_03B §5.3 (CSV format) et la table beneficiaries
+ * (Module 1 — enum DB).
+ */
+const CSV_TYPE_TO_DB: Record<
+  BulkAwardImportInput['rows'][number]['beneficiaryType'],
+  'EMPLOYEE' | 'OFFICER' | 'CONSULTANT' | 'ADVISOR' | 'OTHER'
+> = {
+  employee: 'EMPLOYEE',
+  consultant: 'CONSULTANT',
+  dirigeant: 'OFFICER',
+  external: 'OTHER',
+};
+
+/**
+ * Bulk import CSV — Module 3b B5.
+ *
+ * Pipeline :
+ *   1. Validation Zod du payload (planId + array de rows pré-parsées)
+ *   2. requirePermission('awards.bulk_import')
+ *   3. Résolution email → beneficiary_id par upsert (déduplication intra-CSV
+ *      pour minimiser les round-trips)
+ *   4. Appel RPC bulk_create_awards avec un array de payloads create_award_full
+ *      enrichis du beneficiaryId résolu
+ *   5. Revalidate la liste
+ *
+ * Atomicité : le RPC est ROLLBACK-total — soit les N awards sont créés, soit
+ * aucun. Les beneficiaries upsertés en amont restent en cas d'échec RPC : c'est
+ * acceptable (idempotents sur email, pas de pollution data — un retry de
+ * l'import les réutilisera).
+ *
+ * Audit : `award.bulk_imported` est inséré par le RPC lui-même (cf.
+ * migration 00021), pas besoin de logAuditEvent côté Server Action.
+ */
 export async function bulkCreateAwards(input: unknown): Promise<BulkResult> {
   const parsed = bulkAwardImportSchema.safeParse(input);
   if (!parsed.success) return validationError(parsed.error);
 
+  const data = parsed.data as BulkAwardImportInput;
   const user = await requirePermission('awards.bulk_import');
   if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
 
   const supabase = await createSupabaseServerClient();
-  // Pour V1, le RPC bulk_create_awards reçoit un array de payloads
-  // create_award_full directement (pas de upsert beneficiaries — Module 4).
-  // La spec §5.3 dit que le RPC fait l'upsert beneficiary par email ; on
-  // l'implémentera quand le RPC `upsert_beneficiary` arrive (Module 4).
-  // Pour l'instant : la rangée doit déjà avoir beneficiaryId (UUID) résolu
-  // côté caller (la transformation email→id se fera côté Server Action B6).
-  const rows = (parsed.data as BulkAwardImportInput).rows.map((r) => ({
-    planId: parsed.data.planId,
-    // ⚠️ V1 : on suppose les bénéficiaires déjà créés. B6 fera l'upsert email→id.
-    beneficiaryId: '', // À remplacer côté caller B6 après upsert
-    unitsGranted: r.unitsGranted,
-    exercisePrice: r.exercisePrice ?? '',
-    grantDate: r.grantDate,
-    vestingStartDate: r.vestingStartDate ?? '',
-    initialStatus: 'DRAFT',
-  }));
 
+  // 1. Déduplication des emails (un même bénéficiaire peut apparaître plusieurs
+  //    fois dans le CSV avec des awards différents — un seul upsert suffit).
+  const emailIndex = new Map<
+    string,
+    { fullName: string; type: BulkAwardImportInput['rows'][number]['beneficiaryType'] }
+  >();
+  for (const row of data.rows) {
+    const key = row.beneficiaryEmail.toLowerCase();
+    if (!emailIndex.has(key)) {
+      emailIndex.set(key, { fullName: row.beneficiaryFullName, type: row.beneficiaryType });
+    }
+  }
+
+  // 2. Upsert beneficiaries inline (SELECT par email + INSERT si absent).
+  //    Pas d'appel à upsertBeneficiary() pour éviter N×requirePermission +
+  //    N×audit_event "beneficiary.created" individuels — on batch tout ici.
+  const emailToId = new Map<string, string>();
+
+  // 2a. SELECT en bulk les bénéficiaires déjà existants
+  const lowerEmails = Array.from(emailIndex.keys());
+  const { data: existing } = await supabase
+    .from('beneficiaries')
+    .select('id, email')
+    .eq('org_id', user.activeOrgId)
+    .in('email', lowerEmails)
+    .is('deleted_at', null);
+  for (const ben of existing ?? []) {
+    emailToId.set(ben.email.toLowerCase(), ben.id);
+  }
+
+  // 2b. INSERT les bénéficiaires manquants
+  const toInsert = Array.from(emailIndex.entries())
+    .filter(([email]) => !emailToId.has(email))
+    .map(([email, info]) => {
+      const parts = info.fullName.trim().split(/\s+/);
+      const firstName = parts[0] ?? info.fullName;
+      const lastName = parts.slice(1).join(' ') || '—';
+      return {
+        org_id: user.activeOrgId!,
+        email,
+        first_name: firstName,
+        last_name: lastName,
+        beneficiary_type: CSV_TYPE_TO_DB[info.type],
+        status: 'ACTIVE' as const,
+        tax_residence_country: 'FR',
+      };
+    });
+
+  if (toInsert.length > 0) {
+    const { data: inserted, error: insErr } = await supabase
+      .from('beneficiaries')
+      .insert(toInsert)
+      .select('id, email');
+    if (insErr || !inserted) {
+      return { ok: false, error: `Échec upsert bénéficiaires : ${insErr?.message ?? 'inconnu'}` };
+    }
+    for (const ben of inserted) {
+      emailToId.set(ben.email.toLowerCase(), ben.id);
+    }
+    // Audit per beneficiary created — best-effort, non-bloquant.
+    await Promise.allSettled(
+      inserted.map((ben) =>
+        logAuditEvent({
+          eventType: 'beneficiary.created',
+          resourceType: 'BENEFICIARY',
+          resourceId: ben.id,
+          metadata: { source: 'bulk_import_csv', email: ben.email },
+          userId: user.id,
+          userEmail: user.email,
+          orgId: user.activeOrgId!,
+        }),
+      ),
+    );
+  }
+
+  // 3. Mapping des rows CSV vers les payloads create_award_full
+  const rpcRows = data.rows.map((r) => {
+    const benId = emailToId.get(r.beneficiaryEmail.toLowerCase());
+    if (!benId) {
+      // Ne devrait jamais arriver (étape 2 a tout résolu), defense-in-depth.
+      throw new Error(`Bénéficiaire non résolu pour ${r.beneficiaryEmail}`);
+    }
+    return {
+      planId: data.planId,
+      beneficiaryId: benId,
+      unitsGranted: r.unitsGranted,
+      exercisePrice: r.exercisePrice ?? '',
+      grantDate: r.grantDate,
+      vestingStartDate: r.vestingStartDate ?? '',
+      expiryDate: '',
+      acceptanceDeadline: '',
+      initialStatus: 'DRAFT',
+    };
+  });
+
+  // 4. Appel RPC atomique. Si UNE row échoue, ROLLBACK total côté DB.
   const { data: rpcResult, error } = await supabase.rpc('bulk_create_awards', {
-    p_rows: rows as never,
+    p_rows: rpcRows as never,
   });
   if (error) return { ok: false, error: error.message };
   const result = rpcResult as { created: number; award_ids: string[] } | null;
