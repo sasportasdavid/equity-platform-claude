@@ -3161,6 +3161,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_award_modification: {
+        Args: {
+          p_award_id: string
+          p_changes: Json
+          p_effective_date?: string
+          p_modification_type: string
+          p_reason: string
+        }
+        Returns: Json
+      }
       bulk_create_awards: { Args: { p_rows: Json }; Returns: Json }
       create_award_full: { Args: { p_data: Json }; Returns: string }
       create_plan_full: {
@@ -3397,4 +3407,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

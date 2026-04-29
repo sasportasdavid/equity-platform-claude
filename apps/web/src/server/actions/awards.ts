@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import {
-  AWARD_MODIFICATION_TYPES,
   bulkAwardImportSchema,
   cancelAwardSchema,
   createAwardSchema,
@@ -642,9 +641,29 @@ export async function bulkCreateAwards(input: unknown): Promise<BulkResult> {
 // 8. createAwardModification — IFRS 2.27-28 modifications post-grant
 // ---------------------------------------------------------------------------
 
+/**
+ * Crée une modification IFRS 2.27-28 sur un award post-GRANTED.
+ *
+ * Refactor B6 : délègue tout à la RPC `apply_award_modification` (atomicité
+ * + lock row FOR UPDATE + dispatch sur les 5 types + insert valuation_run +
+ * audit_event en SQL).
+ *
+ * 5 types supportés via discriminated union Zod (cf. createModificationSchema) :
+ *   - REPRICING        : changes = { exercisePrice }
+ *   - EXTENSION        : changes = { expiryDate }
+ *   - ACCELERATION     : changes = {} (V1 : "all PENDING tranches")
+ *   - ADDITIONAL_GRANT : changes = { unitsAdded }, check pool restant
+ *   - CANCELLATION     : changes = { confirmIrreversible: true }
+ *
+ * Pour les 4 premiers : un valuation_run est inséré en QUEUED, son ID est
+ * retourné au caller pour affichage. Pour CANCELLATION : valuationRunId=null.
+ *
+ * Pas d'audit côté Server Action (le RPC l'insère lui-même — single source
+ * of truth + atomique avec le reste).
+ */
 export async function createAwardModification(
   input: unknown,
-): Promise<ActionOk<{ modificationId: string }> | ActionError> {
+): Promise<ActionOk<{ modificationId: string; valuationRunId: string | null }> | ActionError> {
   const parsed = createModificationSchema.safeParse(input);
   if (!parsed.success) return validationError(parsed.error);
   const { awardId, type, changes, reason, effectiveDate } = parsed.data;
@@ -653,76 +672,27 @@ export async function createAwardModification(
   if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
 
   const supabase = await createSupabaseServerClient();
-
-  // before_snapshot : SELECT row complet de l'award au moment T
-  const { data: before } = await supabase
-    .from('awards')
-    .select('*')
-    .eq('id', awardId)
-    .maybeSingle();
-  if (!before) return { ok: false, error: 'Award introuvable' };
-
-  // after_snapshot : projection des `changes` sur le before
-  const after = { ...before, ...changes };
-
-  const { data: insRow, error: insError } = await supabase
-    .from('award_modifications')
-    .insert({
-      org_id: user.activeOrgId,
-      award_id: awardId,
-      modification_type: type,
-      effective_date: effectiveDate ?? new Date().toISOString().slice(0, 10),
-      before_snapshot: before as never,
-      after_snapshot: after as never,
-      reason,
-    })
-    .select('id')
-    .single();
-  if (insError || !insRow) {
-    return { ok: false, error: insError?.message ?? 'Insert award_modifications échoué' };
-  }
-
-  // has_modifications flag sur l'award
-  await supabase.from('awards').update({ has_modifications: true }).eq('id', awardId);
-
-  // Pour REPRICING / EXTENSION / ACCELERATION / ADDITIONAL_GRANT : trigger un
-  // valuation_run en QUEUED (le moteur Python recalcule l'incremental fair value).
-  // CANCELLATION : pas de re-valuation, c'est juste un soft-delete avec impact IFRS 2.
-  const requiresRevaluation = (
-    [
-      'REPRICING',
-      'EXTENSION',
-      'ACCELERATION',
-      'ADDITIONAL_GRANT',
-    ] as readonly (typeof AWARD_MODIFICATION_TYPES)[number][]
-  ).includes(type);
-  if (requiresRevaluation && before.plan_id) {
-    await supabase.from('valuation_runs').insert({
-      org_id: user.activeOrgId,
-      plan_id: before.plan_id,
-      status: 'QUEUED',
-      triggered_by: user.id,
-    });
-  }
-
-  await logAuditEvent({
-    eventType: 'award.modified',
-    resourceType: 'AWARD',
-    resourceId: awardId,
-    metadata: {
-      modification_id: insRow.id,
-      modification_type: type,
-      changes,
-      reason,
-      revaluation_queued: requiresRevaluation,
-    },
-    userId: user.id,
-    userEmail: user.email,
-    orgId: user.activeOrgId,
+  const { data: rpcResult, error: rpcError } = await supabase.rpc('apply_award_modification', {
+    p_award_id: awardId,
+    p_modification_type: type,
+    p_changes: changes as never,
+    p_reason: reason,
+    p_effective_date: effectiveDate ?? new Date().toISOString().slice(0, 10),
   });
 
+  if (rpcError) return { ok: false, error: rpcError.message };
+  const result = rpcResult as { modification_id: string; valuation_run_id: string | null } | null;
+  if (!result?.modification_id) {
+    return { ok: false, error: 'Réponse apply_award_modification inattendue' };
+  }
+
   revalidatePath('/dashboard/awards');
-  return { ok: true, modificationId: insRow.id };
+  revalidatePath(`/dashboard/awards/${awardId}`);
+  return {
+    ok: true,
+    modificationId: result.modification_id,
+    valuationRunId: result.valuation_run_id ?? null,
+  };
 }
 
 // Pas de re-exports : Next.js interdit les exports non-async dans un fichier

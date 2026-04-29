@@ -160,11 +160,49 @@ export const AWARD_MODIFICATION_TYPES = [
   'CANCELLATION',
 ] as const;
 
-export const createModificationSchema = z.object({
+/**
+ * Discriminated union par type de modification — validation forte des
+ * `changes` côté client + serveur. La RPC `apply_award_modification`
+ * re-valide en SQL (defense in depth).
+ *
+ *   REPRICING        → { exercisePrice: number ≥ 0 }
+ *   EXTENSION        → { expiryDate: YYYY-MM-DD }
+ *   ACCELERATION     → {}  (V1 : "all PENDING tranches")
+ *   ADDITIONAL_GRANT → { unitsAdded: integer > 0 }
+ *   CANCELLATION     → { confirmIrreversible: true }  (front-only checkbox)
+ */
+const modificationCommon = {
   awardId: z.string().uuid(),
-  type: z.enum(AWARD_MODIFICATION_TYPES),
-  changes: z.record(z.string(), z.unknown()),
   reason: z.string().min(1).max(500),
   effectiveDate: isoDate.optional(),
-});
+};
+
+export const createModificationSchema = z.discriminatedUnion('type', [
+  z.object({
+    ...modificationCommon,
+    type: z.literal('REPRICING'),
+    changes: z.object({ exercisePrice: z.number().nonnegative() }),
+  }),
+  z.object({
+    ...modificationCommon,
+    type: z.literal('EXTENSION'),
+    changes: z.object({ expiryDate: isoDate }),
+  }),
+  z.object({
+    ...modificationCommon,
+    type: z.literal('ACCELERATION'),
+    changes: z.object({}).strict(),
+  }),
+  z.object({
+    ...modificationCommon,
+    type: z.literal('ADDITIONAL_GRANT'),
+    changes: z.object({ unitsAdded: z.number().int().positive() }),
+  }),
+  z.object({
+    ...modificationCommon,
+    type: z.literal('CANCELLATION'),
+    reason: z.string().min(20).max(500),
+    changes: z.object({ confirmIrreversible: z.literal(true) }),
+  }),
+]);
 export type CreateModificationInput = z.infer<typeof createModificationSchema>;
