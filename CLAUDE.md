@@ -326,3 +326,17 @@ Si une décision architecturale ou métier est ambiguë :
 2. Faire un choix conservateur (le moins risqué pour la
    cohérence DB et l'audit)
 3. Pinger l'utilisateur dans le récap final pour validation
+
+## Conventions de casing pour enums DB
+
+- Beneficiaries.status = lowercase ('active', 'on_leave', 'terminated')
+  Lifecycle court avec peu de valeurs, lowercase plus lisible
+- Beneficiaries.beneficiary_type = UPPERCASE ('EMPLOYEE', 'CONSULTANT',
+  'DIRIGEANT', 'EXTERNAL')
+  Aligné Module 3b, évite re-migration
+- Awards.status = UPPERCASE (16 valeurs)
+- Plans.status = UPPERCASE ('DRAFT', 'ACTIVE', 'CLOSED')
+
+Règle générale : un enum court (3-4 valeurs) = lowercase OK.
+Un enum long (5+) ou critique métier (workflow status) = UPPERCASE.
+Pour cohérence : suivre l'existant DB plutôt que la spec si écart.
