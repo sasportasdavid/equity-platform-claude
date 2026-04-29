@@ -64,6 +64,15 @@ vi.mock('@/lib/supabase/server', () => ({
     rpc: vi.fn().mockImplementation(() => Promise.resolve(mockState.rpcResult)),
     auth: {
       getUser: vi.fn().mockImplementation(() => Promise.resolve(mockState.authUser)),
+    },
+  }),
+}));
+
+// Le client admin (service_role) est utilisé par inviteBeneficiary pour
+// signInWithOtp sans écraser les cookies du caller — voir commentaire du Server Action.
+vi.mock('@/lib/supabase/admin', () => ({
+  getSupabaseAdminClient: () => ({
+    auth: {
       signInWithOtp: vi.fn().mockResolvedValue({ error: null }),
     },
   }),

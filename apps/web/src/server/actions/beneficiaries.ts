@@ -14,6 +14,7 @@ import { logAuditEvent } from '@/lib/audit';
 import { hasPermission, requirePermission } from '@/lib/auth/rbac';
 import { runBeneficiaryComplianceChecks } from '@/lib/compliance/runChecks';
 import type { ComplianceIssue } from '@/lib/compliance/types';
+import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 /**
@@ -505,8 +506,14 @@ export async function inviteBeneficiary(
   }
 
   // 2. Magic link Supabase Auth (V1 — Module 7 personnalisera via Resend)
+  // ⚠️ On utilise le client admin (service_role, persistSession:false) et NON
+  // le client cookie-based : sinon signInWithOtp écrase la session du caller
+  // (admin) avec un nouveau token côté Set-Cookie, ce qui casse les requêtes
+  // suivantes (RPC mark_beneficiary_invited, puis router.refresh client) avec
+  // une "TypeError: network error" en dev Next.js.
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  const { error: authErr } = await supabase.auth.signInWithOtp({
+  const adminClient = getSupabaseAdminClient();
+  const { error: authErr } = await adminClient.auth.signInWithOtp({
     email: bene.email,
     options: { emailRedirectTo: `${appUrl}/dashboard` },
   });
