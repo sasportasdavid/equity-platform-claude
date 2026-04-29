@@ -37,22 +37,29 @@ export function AwardVestingTab({
 }) {
   const { vestingEvents } = detail;
 
-  // Données chart : pour chaque event, somme cumulée Programmé vs Acquis
+  // Données chart : pour chaque event, somme cumulée Programmé vs Acquis.
+  // Pattern reduce avec tuple [accProgrammé, accAcquis, rows] pour ne pas
+  // muter de let après render (React 19 / react-compiler).
   const chartData = useMemo(() => {
-    let cumulProgrammed = 0;
-    let cumulVested = 0;
-    return vestingEvents.map((ev) => {
-      const toVest = Number(ev.units_to_vest);
-      cumulProgrammed += toVest;
-      if (ev.status === 'VESTED') {
-        cumulVested += Number(ev.units_vested ?? toVest);
-      }
-      return {
-        date: ev.scheduled_date,
-        Programmé: cumulProgrammed,
-        Acquis: cumulVested,
-      };
-    });
+    const result = vestingEvents.reduce<{
+      accP: number;
+      accV: number;
+      rows: Array<{ date: string; Programmé: number; Acquis: number }>;
+    }>(
+      (acc, ev) => {
+        const toVest = Number(ev.units_to_vest);
+        const newP = acc.accP + toVest;
+        const newV =
+          ev.status === 'VESTED' ? acc.accV + Number(ev.units_vested ?? toVest) : acc.accV;
+        return {
+          accP: newP,
+          accV: newV,
+          rows: [...acc.rows, { date: ev.scheduled_date, Programmé: newP, Acquis: newV }],
+        };
+      },
+      { accP: 0, accV: 0, rows: [] },
+    );
+    return result.rows;
   }, [vestingEvents]);
 
   if (vestingEvents.length === 0) {
