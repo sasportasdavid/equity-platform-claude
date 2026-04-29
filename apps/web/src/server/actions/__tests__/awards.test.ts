@@ -33,6 +33,15 @@ vi.mock('@/lib/audit', () => ({
   logAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Mock runComplianceChecks (B7) — par défaut "no issues" pour ne pas
+// casser les tests existants. Les tests dédiés compliance sont dans
+// src/lib/compliance/__tests__/runChecks.test.ts.
+vi.mock('@/lib/compliance/runChecks', () => ({
+  runComplianceChecks: vi
+    .fn()
+    .mockResolvedValue({ errors: [], warnings: [], hasHardBlocks: false }),
+}));
+
 // Mock Supabase server client — chainable builder qui renvoie ce qu'on veut
 type MockBuilder = {
   data?: unknown;
