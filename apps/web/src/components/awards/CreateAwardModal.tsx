@@ -41,11 +41,17 @@ export function CreateAwardModal({
   onOpenChange,
   plans,
   onSuccess,
+  initialBeneficiary,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   plans: PlanForCreation[];
   onSuccess: () => void;
+  /**
+   * Pré-remplit le bénéficiaire à l'ouverture (Module 4 B4 — bouton
+   * « Nouvelle attribution » depuis la page détail bénéficiaire).
+   */
+  initialBeneficiary?: SelectedBeneficiary;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -57,7 +63,9 @@ export function CreateAwardModal({
     allocated: number;
     poolSize: number;
   } | null>(null);
-  const [beneficiary, setBeneficiary] = useState<SelectedBeneficiary | null>(null);
+  const [beneficiary, setBeneficiary] = useState<SelectedBeneficiary | null>(
+    initialBeneficiary ?? null,
+  );
   const [createMode, setCreateMode] = useState<{ email: string } | null>(null);
   const [newBenName, setNewBenName] = useState('');
   const [newBenType, setNewBenType] = useState<
