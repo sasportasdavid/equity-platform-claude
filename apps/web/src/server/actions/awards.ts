@@ -303,7 +303,7 @@ function permissionForTransition(_from: AwardStatus, to: AwardStatus): string {
 export async function transitionAward(input: unknown): Promise<ActionVoid | ActionError> {
   const parsed = transitionAwardSchema.safeParse(input);
   if (!parsed.success) return validationError(parsed.error);
-  const { awardId, toStatus, reason } = parsed.data;
+  const { awardId, toStatus, reason, skipApprovalHook } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
 
@@ -397,6 +397,30 @@ export async function transitionAward(input: unknown): Promise<ActionVoid | Acti
     orgId: user.activeOrgId,
   });
 
+  // Module 5 B2 — Hook approval workflow.
+  // À la transition vers PROPOSED, on tente de démarrer le workflow
+  // configuré (attaché au plan ou default org pour AWARD_GRANT). Si un
+  // workflow existe → re-transition automatique vers PENDING_APPROVAL avec
+  // skipApprovalHook=true pour éviter la récursion. Sinon (legacy) → reste
+  // en PROPOSED, l'admin flippe manuellement.
+  if (toStatus === 'PROPOSED' && !skipApprovalHook) {
+    const { data: workflowResult } = await supabase.rpc('start_approval_workflow', {
+      p_award_id: awardId,
+      p_workflow_id: undefined,
+    });
+
+    const requestId = (workflowResult as { request_id?: string | null } | null)?.request_id;
+    if (requestId) {
+      const auto = await transitionAward({
+        awardId,
+        toStatus: 'PENDING_APPROVAL',
+        reason: 'Auto-transitioned by approval workflow',
+        skipApprovalHook: true,
+      });
+      if (!auto.ok) return auto;
+    }
+  }
+
   revalidatePath('/dashboard/awards');
   if (award.plan_id) revalidatePath(`/dashboard/plans/${award.plan_id}`);
   return { ok: true };
@@ -458,7 +482,23 @@ export async function cancelAward(input: unknown): Promise<ActionVoid | ActionEr
     };
   }
 
-  return transitionAward({ awardId, toStatus: 'CANCELLED', reason });
+  // Module 5 B2 — Hook : si l'award a un approval workflow IN_PROGRESS,
+  // l'annuler avant de cancel l'award (cohérence des audit events).
+  const { data: pendingRequest } = await supabase
+    .from('approval_requests')
+    .select('id')
+    .eq('award_id', awardId)
+    .eq('status', 'IN_PROGRESS')
+    .maybeSingle();
+
+  if (pendingRequest?.id) {
+    await supabase.rpc('cancel_approval_request', {
+      p_request_id: pendingRequest.id,
+      p_reason: `Award cancelled : ${reason}`,
+    });
+  }
+
+  return transitionAward({ awardId, toStatus: 'CANCELLED', reason, skipApprovalHook: true });
 }
 
 // ---------------------------------------------------------------------------
