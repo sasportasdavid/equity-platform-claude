@@ -28,7 +28,16 @@ vi.mock('@/lib/auth/rbac', () => ({
 vi.mock('@/lib/audit', () => ({ logAuditEvent: vi.fn().mockResolvedValue(undefined) }));
 
 // Mock compliance runners (par défaut = pas d'issue)
-const mockCompliance = {
+type MockComplianceResult = {
+  errors: Array<{ severity: string; code: string; message: string }>;
+  warnings: Array<{ severity: string; code: string; message: string }>;
+  hasHardBlocks: boolean;
+};
+const mockCompliance: {
+  workflow: MockComplianceResult;
+  decision: MockComplianceResult;
+  award: MockComplianceResult;
+} = {
   workflow: { errors: [], warnings: [], hasHardBlocks: false },
   decision: { errors: [], warnings: [], hasHardBlocks: false },
   award: { errors: [], warnings: [], hasHardBlocks: false },
