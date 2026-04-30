@@ -5,18 +5,17 @@ import { Sandbox } from './sandbox';
 export const metadata = { title: 'Dev — Document Engine' };
 
 /**
- * Sandbox /dev/document-engine — Module 6 B2.
+ * Sandbox /dev/document-engine — Module 6 B2 + B3.
  *
- * Permet de tester la génération PDF des 3 templates avant l'intégration
- * Yousign B3. Charge les awards récents + templates seedés + derniers
- * documents générés.
+ * B2 : génération PDF (3 templates), preview iframe.
+ * B3 : envoi pour signature Yousign + statuses des sig requests en cours.
  */
 export default async function Page() {
   const user = await requirePermission('documents.send_for_signature');
   if (!user.activeOrgId) return null;
   const supabase = await createSupabaseServerClient();
 
-  const [awardsRes, templatesRes, docsRes] = await Promise.all([
+  const [awardsRes, templatesRes, docsRes, sigReqsRes] = await Promise.all([
     supabase
       .from('awards')
       .select('id, award_number, status, plan_id, beneficiary_id')
@@ -33,9 +32,17 @@ export default async function Page() {
       .order('code'),
     supabase
       .from('document_instances')
-      .select('id, document_number, status, generated_at, storage_path, related_entity_id')
+      .select(
+        'id, document_number, status, generated_at, storage_path, related_entity_id, related_entity_type',
+      )
       .eq('org_id', user.activeOrgId)
       .order('created_at', { ascending: false })
+      .limit(10),
+    supabase
+      .from('signature_requests')
+      .select('id, status, yousign_procedure_id, document_id, sent_at, completed_at, expiry_date')
+      .eq('org_id', user.activeOrgId)
+      .order('sent_at', { ascending: false, nullsFirst: false })
       .limit(10),
   ]);
 
@@ -44,6 +51,8 @@ export default async function Page() {
       awards={(awardsRes.data ?? []) as never}
       templates={(templatesRes.data ?? []) as never}
       recentDocs={(docsRes.data ?? []) as never}
+      recentSigRequests={(sigReqsRes.data ?? []) as never}
+      currentUserEmail={user.email ?? ''}
     />
   );
 }
