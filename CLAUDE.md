@@ -379,6 +379,30 @@ approval_workflow`. Module 7 (Resend) consommera ces rows pour
     et `7f56d666` (sasportasdavid+test) pour permettre les tests
     E2E B2-B5. Cleanup possible si plus utiles.
 
+18-30. **Dettes Module 6 B2/B3/B4** : voir
+`memory/module_6_b2_complete.md`,
+`memory/module_6_b3_complete.md`,
+`memory/module_6_b4_complete.md`.
+Notable : #29 STATUSES_ALLOWING_GENERATE hard-codé,
+#28 pas de "Voir Yousign Dashboard" link.
+
+31-39. **Dettes E2E Module 5+6 (session 2026-04-30)** : - #31 bouton "Proposer" sans guard double-clic crée 2
+approval_requests - #32 notifications PENDING orphelines après cancel - #33 hook `custom_access_token_hook` doit être enrolled
+manuellement dans Supabase Dashboard (sinon JWT n'a pas
+`active_org_id`/`active_roles`) - #34 `approveDecision` Server Action throws "Failed to
+fetch" côté UI (workaround : RPC SQL direct) - #35 trigger `enforce_award_beneficiary_update` bloque
+INSERT audit_events RLS sans JWT context - #36 (closed) `formatNumber` rendait `1/200` (U+202F glyph
+absent Helvetica) → fix `b7ad3e8` normalize → U+00A0 - #37 (closed) Yousign V3 rejette `expiration_date` ISO avec
+millisecondes → fix `5643e5b` use `YYYY-MM-DD` - #38 (closed) Yousign V3 rejette `fields[0].page = -1`
+(`>=1` requis) → fix `5643e5b` `page: 1` (mono-page V1) - #39 (closed) Yousign V3 webhook header
+`x-yousign-signature-256` (pas `-signature`) + event names
+`signer.done`/`signature_request.done` → fix `6a11862` - #40 form login Capiwise n'envoie pas magic link aux users
+sans row `user_profiles` (silent return) → fix avec INSERT
+user_profiles + dette ouvert pour ajouter trigger AFTER
+INSERT auth.users - #41 pas de mécanisme replay webhook Yousign si Dashboard
+mal configuré au moment de l'envoi (workaround : Yousign
+Dashboard Replay button OU script CLI à créer)
+
 ## Sécurité
 
 - [x] Rotation clé Resend après leak dans .env.example (date: \_\_\_)
@@ -389,6 +413,14 @@ approval_workflow`. Module 7 (Resend) consommera ces rows pour
       sur les Server Actions, à confirmer)
 
 ## Patterns récurrents (anti-doublons)
+
+> **Webhooks externes** : valider les NOMS DE HEADER et NOMS
+> D'EVENTS via un test E2E réel (pas juste la doc). La spec
+> peut être obsolète. Cf. Module 6 B3 Yousign V3 :
+> `x-yousign-signature` (V2) → `x-yousign-signature-256` (V3),
+> `signer_request.signed` (V2) → `signer.done` (V3). Pattern
+> de fix : OR-conditions sur les 2 nommages + log diagnostic
+> (header_len, listing des x-vendor-\* headers reçus).
 
 Si tu te demandes "comment faire X", chercher d'abord :
 
