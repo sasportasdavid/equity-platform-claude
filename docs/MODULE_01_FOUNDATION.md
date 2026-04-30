@@ -1822,11 +1822,11 @@ Flags V1 :
 | #   | Nom                            | Statut         |
 | --- | ------------------------------ | -------------- |
 | 1   | **Foundation & Architecture**  | ✅ Ce document |
-| 2   | Identity & Roles               | À écrire       |
-| 3   | Plans & Awards Lifecycle       | À écrire       |
-| 4   | Beneficiaries Management       | À écrire       |
-| 5   | Approval Engine                | À écrire       |
-| 6   | Document Engine & Signatures   | À écrire       |
+| 2   | Identity & Roles               | ✅ Livré       |
+| 3   | Plans & Awards Lifecycle       | ✅ Livré       |
+| 4   | Beneficiaries Management       | ✅ Livré       |
+| 5   | Approval Engine                | ✅ Livré       |
+| 6   | Document Engine & Signatures   | ✅ Livré       |
 | 7   | Notifications                  | À écrire       |
 | 8   | Beneficiary Portal             | À écrire       |
 | 9   | Exercise Workflow              | À écrire       |
