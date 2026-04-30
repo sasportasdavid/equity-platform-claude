@@ -7,6 +7,7 @@ import {
   APPROVAL_DECISION_RULES,
   APPROVAL_WORKFLOW_RULES,
 } from './rules/approvalRules';
+import { DOCUMENT_GENERATION_RULES, DOCUMENT_SIGNATURE_RULES } from './rules/documentRules';
 import type {
   ApprovalAwardCheckContext,
   ApprovalAwardCheckInput,
@@ -21,6 +22,10 @@ import type {
   ComplianceCheckResult,
   ComplianceIssue,
   ComplianceRule,
+  DocumentGenerationCheckContext,
+  DocumentGenerationCheckInput,
+  DocumentSignatureCheckContext,
+  DocumentSignatureCheckInput,
 } from './types';
 
 /**
@@ -334,4 +339,33 @@ export async function runApprovalWorkflowComplianceChecks(
 
   const ctx: ApprovalWorkflowCheckContext = { userExistsMap, roleUserCountMap };
   return runRules(APPROVAL_WORKFLOW_RULES, input, ctx);
+}
+
+// ---------------------------------------------------------------------------
+// Module 6 B2 — Compliance documents
+// ---------------------------------------------------------------------------
+
+/**
+ * FMV_RECENT_ENOUGH — appelé depuis generateAwardDocument.
+ * V1 : la colonne plans.fmv_set_at n'existe pas encore (Module 11), donc
+ * ctx.fmvSetAt est null par défaut → la rule retourne null (no-op). Le
+ * caller peut passer un `fmvSetAt` explicite si on a la donnée ailleurs.
+ */
+export async function runDocumentGenerationComplianceChecks(
+  input: DocumentGenerationCheckInput,
+  fmvSetAt?: string | null,
+): Promise<ComplianceCheckResult> {
+  const ctx: DocumentGenerationCheckContext = { fmvSetAt: fmvSetAt ?? null };
+  return runRules(DOCUMENT_GENERATION_RULES, input, ctx);
+}
+
+/**
+ * SIGNERS_COMPLETE_INFO + DOCUMENT_NOT_VOIDED — appelé depuis
+ * sendDocumentForSignature (B3). Pas de ctx async nécessaire (toutes les
+ * données sont déjà dans l'input).
+ */
+export async function runDocumentSignatureComplianceChecks(
+  input: DocumentSignatureCheckInput,
+): Promise<ComplianceCheckResult> {
+  return runRules(DOCUMENT_SIGNATURE_RULES, input, {} as DocumentSignatureCheckContext);
 }
