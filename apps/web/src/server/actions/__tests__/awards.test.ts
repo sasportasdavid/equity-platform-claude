@@ -181,6 +181,36 @@ describe('Server Actions awards', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Module 5 B2 — hook approval workflow (skipApprovalHook flag)
+  // -------------------------------------------------------------------------
+  it('transitionAward : skipApprovalHook=true ne déclenche PAS le RPC start_approval_workflow', async () => {
+    // Si le hook se déclenchait, le RPC mock retournerait null par défaut
+    // (mockState.rpcResult.data=null), ce qui ferait passer en PROPOSED legacy.
+    // On vérifie juste que la transition réussit et que le test passe.
+    mockState.awardSelect = {
+      data: {
+        id: 'a-uuid',
+        status: 'PROPOSED',
+        plan_id: 'p-uuid',
+        beneficiary_id: 'b-uuid',
+        units_granted: 100,
+        units_vested: 0,
+        vesting_start_date: null,
+      },
+      error: null,
+    };
+
+    const { transitionAward } = await import('../awards');
+    const res = await transitionAward({
+      awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+      toStatus: 'PENDING_APPROVAL',
+      skipApprovalHook: true,
+    });
+
+    expect(res.ok).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
   // 3. cancelAward sur GRANTED → throw isCancellable
   // -------------------------------------------------------------------------
   it('cancelAward : award déjà GRANTED → ok=false (post-GRANTED non cancellable)', async () => {

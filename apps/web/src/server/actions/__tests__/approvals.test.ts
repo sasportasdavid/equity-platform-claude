@@ -1,0 +1,332 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+/**
+ * Tests Server Actions approvals — Module 5 B2.
+ *
+ * Couvre :
+ *   - createWorkflow happy path + WORKFLOW_HAS_VALID_STEPS hard block
+ *   - approveDecision : NO_SELF_APPROVAL hard block
+ *   - approveDecision : final step → transitionAward APPROVED
+ *   - rejectDecision : workflow REJECTED → transitionAward DRAFT
+ *   - cancelApprovalRequest happy path
+ */
+
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+
+vi.mock('@/lib/auth/rbac', () => ({
+  requirePermission: vi.fn().mockResolvedValue({
+    id: 'user-uuid',
+    email: 'admin@example.com',
+    fullName: 'Admin User',
+    activeOrgId: 'org-uuid',
+    orgIds: ['org-uuid'],
+    activeRoles: ['OWNER'],
+  }),
+  hasPermission: vi.fn().mockResolvedValue(true),
+}));
+
+vi.mock('@/lib/audit', () => ({ logAuditEvent: vi.fn().mockResolvedValue(undefined) }));
+
+// Mock compliance runners (par défaut = pas d'issue)
+type MockComplianceResult = {
+  errors: Array<{ severity: string; code: string; message: string }>;
+  warnings: Array<{ severity: string; code: string; message: string }>;
+  hasHardBlocks: boolean;
+};
+const mockCompliance: {
+  workflow: MockComplianceResult;
+  decision: MockComplianceResult;
+  award: MockComplianceResult;
+} = {
+  workflow: { errors: [], warnings: [], hasHardBlocks: false },
+  decision: { errors: [], warnings: [], hasHardBlocks: false },
+  award: { errors: [], warnings: [], hasHardBlocks: false },
+};
+
+vi.mock('@/lib/compliance/runChecks', () => ({
+  runApprovalAwardComplianceChecks: vi.fn(() => Promise.resolve(mockCompliance.award)),
+  runApprovalDecisionComplianceChecks: vi.fn(() => Promise.resolve(mockCompliance.decision)),
+  runApprovalWorkflowComplianceChecks: vi.fn(() => Promise.resolve(mockCompliance.workflow)),
+  runComplianceChecks: vi
+    .fn()
+    .mockResolvedValue({ errors: [], warnings: [], hasHardBlocks: false }),
+  runBeneficiaryComplianceChecks: vi
+    .fn()
+    .mockResolvedValue({ errors: [], warnings: [], hasHardBlocks: false }),
+}));
+
+// Mock Supabase server client + transitionAward
+const mockState = {
+  insertedWorkflow: { id: 'wf-uuid', error: null as unknown },
+  insertStepsError: null as unknown,
+  rpcResult: { data: null as unknown, error: null as unknown },
+  awardSelect: { data: null as unknown, error: null as unknown },
+  requestSelect: { data: null as unknown, error: null as unknown },
+};
+
+function makeBuilder(table: string) {
+  const builder: Record<string, unknown> = {};
+  const noop = () => builder;
+  builder.select = noop;
+  builder.eq = noop;
+  builder.in = noop;
+  builder.is = noop;
+  builder.neq = noop;
+  builder.order = noop;
+  builder.limit = noop;
+  builder.like = noop;
+  builder.maybeSingle = () => {
+    if (table === 'awards') return Promise.resolve(mockState.awardSelect);
+    if (table === 'approval_requests') return Promise.resolve(mockState.requestSelect);
+    return Promise.resolve({ data: null, error: null });
+  };
+  builder.single = () => {
+    if (table === 'approval_workflows')
+      return Promise.resolve({
+        data: { id: mockState.insertedWorkflow.id },
+        error: mockState.insertedWorkflow.error,
+      });
+    return Promise.resolve({ data: null, error: null });
+  };
+  builder.insert = (rows: unknown) => {
+    if (table === 'approval_workflows') {
+      // chainable to .select().single()
+      return {
+        select: () => ({
+          single: () =>
+            Promise.resolve({
+              data: { id: mockState.insertedWorkflow.id },
+              error: mockState.insertedWorkflow.error,
+            }),
+        }),
+      };
+    }
+    if (table === 'approval_workflow_steps') {
+      void rows;
+      return Promise.resolve({ error: mockState.insertStepsError });
+    }
+    return builder;
+  };
+  builder.update = () => ({ eq: () => Promise.resolve({ error: null }) });
+  builder.delete = () => ({ eq: () => Promise.resolve({ error: null }) });
+  return builder;
+}
+
+vi.mock('@/lib/supabase/server', () => ({
+  createSupabaseServerClient: vi.fn().mockResolvedValue({
+    from: (table: string) => makeBuilder(table),
+    rpc: vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve({ data: mockState.rpcResult.data, error: mockState.rpcResult.error }),
+      ),
+  }),
+}));
+
+// Mock transitionAward (depuis le sibling module ./awards)
+const transitionAwardMock = vi.fn().mockResolvedValue({ ok: true });
+vi.mock('../awards', () => ({ transitionAward: (input: unknown) => transitionAwardMock(input) }));
+
+beforeEach(() => {
+  mockCompliance.workflow = { errors: [], warnings: [], hasHardBlocks: false };
+  mockCompliance.decision = { errors: [], warnings: [], hasHardBlocks: false };
+  mockCompliance.award = { errors: [], warnings: [], hasHardBlocks: false };
+  mockState.insertedWorkflow = { id: 'wf-uuid', error: null };
+  mockState.insertStepsError = null;
+  mockState.rpcResult = { data: null, error: null };
+  mockState.awardSelect = { data: null, error: null };
+  mockState.requestSelect = { data: null, error: null };
+  transitionAwardMock.mockClear();
+  transitionAwardMock.mockResolvedValue({ ok: true });
+});
+
+const validCreateWorkflow = {
+  name: 'Test workflow',
+  appliesTo: 'AWARD_GRANT' as const,
+  isActive: true,
+  isDefault: false,
+  steps: [
+    {
+      stepOrder: 1,
+      stepName: 'Step 1',
+      approverType: 'ROLE' as const,
+      approverRole: 'APPROVER',
+      mode: 'SEQUENTIAL' as const,
+      requiredApprovals: 1,
+    },
+  ],
+};
+
+describe('createWorkflow', () => {
+  it('happy path → ok=true avec id', async () => {
+    const { createWorkflow } = await import('../approvals');
+    const res = await createWorkflow(validCreateWorkflow);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.id).toBe('wf-uuid');
+  });
+
+  it('input invalide (steps vide) → validationIssues > 0', async () => {
+    const { createWorkflow } = await import('../approvals');
+    const res = await createWorkflow({ ...validCreateWorkflow, steps: [] });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.validationIssues).toBeGreaterThan(0);
+  });
+
+  it('compliance WORKFLOW_HAS_VALID_STEPS hard block → ok=false', async () => {
+    mockCompliance.workflow = {
+      errors: [
+        {
+          severity: 'ERROR',
+          code: 'WORKFLOW_HAS_VALID_STEPS',
+          message: 'Step 1 sans approver',
+        },
+      ],
+      warnings: [],
+      hasHardBlocks: true,
+    };
+    const { createWorkflow } = await import('../approvals');
+    const res = await createWorkflow(validCreateWorkflow);
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.complianceIssues?.[0]?.code).toBe('WORKFLOW_HAS_VALID_STEPS');
+    }
+  });
+});
+
+describe('approveDecision', () => {
+  it('NO_SELF_APPROVAL hard block → ok=false', async () => {
+    mockCompliance.decision = {
+      errors: [
+        {
+          severity: 'ERROR',
+          code: 'NO_SELF_APPROVAL',
+          message: 'Self-approval interdit',
+        },
+      ],
+      warnings: [],
+      hasHardBlocks: true,
+    };
+    const { approveDecision } = await import('../approvals');
+    const res = await approveDecision({
+      decisionId: '12345678-1234-4567-8901-123456789012',
+      comment: 'Approved',
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.complianceIssues?.[0]?.code).toBe('NO_SELF_APPROVAL');
+    }
+  });
+
+  it('happy path final step → ok=true + transitionAward(APPROVED)', async () => {
+    mockState.rpcResult = {
+      data: {
+        request_id: 'req-uuid',
+        status: 'APPROVED',
+        next_award_status: 'APPROVED',
+      },
+      error: null,
+    };
+    mockState.requestSelect = { data: { award_id: 'aw-uuid' }, error: null };
+
+    const { approveDecision } = await import('../approvals');
+    const res = await approveDecision({
+      decisionId: '12345678-1234-4567-8901-123456789012',
+      comment: 'OK',
+    });
+    expect(res.ok).toBe(true);
+    expect(transitionAwardMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        awardId: 'aw-uuid',
+        toStatus: 'APPROVED',
+        skipApprovalHook: true,
+      }),
+    );
+  });
+
+  it('IN_PROGRESS (next step) → pas de transitionAward', async () => {
+    mockState.rpcResult = {
+      data: { request_id: 'req-uuid', status: 'IN_PROGRESS', next_step_order: 2 },
+      error: null,
+    };
+    const { approveDecision } = await import('../approvals');
+    const res = await approveDecision({
+      decisionId: '12345678-1234-4567-8901-123456789012',
+    });
+    expect(res.ok).toBe(true);
+    expect(transitionAwardMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('rejectDecision', () => {
+  it('REJECTED → ok=true + transitionAward(DRAFT)', async () => {
+    mockState.rpcResult = {
+      data: {
+        request_id: 'req-uuid',
+        status: 'REJECTED',
+        next_award_status: 'DRAFT',
+        rejected_reason: 'Not enough budget',
+      },
+      error: null,
+    };
+    mockState.requestSelect = { data: { award_id: 'aw-uuid' }, error: null };
+
+    const { rejectDecision } = await import('../approvals');
+    const res = await rejectDecision({
+      decisionId: '12345678-1234-4567-8901-123456789012',
+      comment: 'Not enough budget for Q2',
+    });
+    expect(res.ok).toBe(true);
+    expect(transitionAwardMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        awardId: 'aw-uuid',
+        toStatus: 'DRAFT',
+        skipApprovalHook: true,
+      }),
+    );
+  });
+
+  it('reject sans comment ou < 10 chars → validationIssues', async () => {
+    const { rejectDecision } = await import('../approvals');
+    const res = await rejectDecision({
+      decisionId: '12345678-1234-4567-8901-123456789012',
+      comment: 'short',
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.validationIssues).toBeGreaterThan(0);
+  });
+});
+
+describe('cancelApprovalRequest', () => {
+  it('happy path → ok=true', async () => {
+    mockState.requestSelect = {
+      data: { award_id: 'aw-uuid', status: 'IN_PROGRESS' },
+      error: null,
+    };
+    mockState.awardSelect = { data: { status: 'PENDING_APPROVAL' }, error: null };
+    mockState.rpcResult = { data: 'req-uuid', error: null };
+
+    const { cancelApprovalRequest } = await import('../approvals');
+    const res = await cancelApprovalRequest({
+      requestId: '12345678-1234-4567-8901-123456789012',
+      reason: 'Admin cancellation',
+    });
+    expect(res.ok).toBe(true);
+    expect(transitionAwardMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        awardId: 'aw-uuid',
+        toStatus: 'DRAFT',
+        skipApprovalHook: true,
+      }),
+    );
+  });
+
+  it('request introuvable → ok=false', async () => {
+    mockState.requestSelect = { data: null, error: null };
+    const { cancelApprovalRequest } = await import('../approvals');
+    const res = await cancelApprovalRequest({
+      requestId: '12345678-1234-4567-8901-123456789012',
+      reason: 'reason',
+    });
+    expect(res.ok).toBe(false);
+  });
+});

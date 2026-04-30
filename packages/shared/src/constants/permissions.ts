@@ -61,6 +61,7 @@ export const PERMISSIONS = [
   'approvals.delegate',
   'approvals.act', // M2 — alias combiné approve/reject
   'approvals.configure', // M2 — workflows
+  'approvals.attach', // M5 — attach workflow to plan / set default org
 
   // Valuations
   'valuations.run',

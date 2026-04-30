@@ -5,8 +5,9 @@ import { DashboardSidebar } from '@/components/shared/dashboard-sidebar';
 import { OrgSwitcher } from '@/components/shared/org-switcher';
 import { ThemeToggle } from '@/components/shared/theme-toggle';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { requireUser } from '@/lib/auth/rbac';
+import { hasPermission, requireUser } from '@/lib/auth/rbac';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
+import { getMyPendingApprovalsCount } from '@/server/queries/approvals';
 import { logout } from '@/server/actions/auth';
 import { cn } from '@/lib/utils';
 
@@ -24,6 +25,14 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       .eq('id', user.activeOrgId)
       .single();
     activeOrgName = org?.name ?? null;
+  }
+
+  // Module 5 B4 — badge "Approbations (N)" sur la sidebar.
+  // Ne charge le count que si user a la perm approvals.act (sinon le lien
+  // n'est pas critique pour ce rôle).
+  let pendingApprovalsCount = 0;
+  if (user.id && (await hasPermission('approvals.act'))) {
+    pendingApprovalsCount = await getMyPendingApprovalsCount(user.id);
   }
 
   return (
@@ -60,7 +69,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
         </nav>
       </header>
       <div className="flex flex-1">
-        <DashboardSidebar />
+        <DashboardSidebar pendingApprovalsCount={pendingApprovalsCount} />
         <main className="min-w-0 flex-1 px-6 py-10 lg:px-8">{children}</main>
       </div>
     </div>

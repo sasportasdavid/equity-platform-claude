@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Building2, User, Users } from 'lucide-react';
+import { Building2, ShieldCheck, User, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +23,11 @@ const ITEMS: Item[] = [
     href: '/dashboard/settings/organization',
     label: 'Organisation',
     icon: <Building2 className="size-4" />,
+  },
+  {
+    href: '/dashboard/settings/approvals',
+    label: 'Approbations',
+    icon: <ShieldCheck className="size-4" />,
   },
 ];
 
