@@ -165,6 +165,36 @@ apps/web/src/lib/supabase/database.types.ts`
 - Layout `/dev/layout.tsx` protège en production via
   `process.env.ENABLE_DEV_SANDBOX !== 'true'`
 
+### Variables env Yousign (Module 6 B3)
+
+Côté Next.js (`.env.local`) :
+
+- `YOUSIGN_API_KEY` — clé API récupérée Dashboard Yousign
+- `YOUSIGN_API_BASE_URL` — `https://api-sandbox.yousign.app/v3`
+  en dev/staging, `https://api.yousign.app/v3` en prod
+- `YOUSIGN_WEBHOOK_SECRET` — HMAC secret partagé avec le
+  Dashboard Yousign (Webhooks). DOIT être configuré côté
+  Edge Function aussi (`supabase secrets set
+YOUSIGN_WEBHOOK_SECRET=...`)
+- `YOUSIGN_ENVIRONMENT` — `sandbox` ou `production`, tracé
+  dans `signature_requests.yousign_environment`
+
+Côté Edge Function `yousign-webhook` (Supabase secrets) :
+
+```bash
+supabase secrets set \
+  YOUSIGN_API_KEY=xxx \
+  YOUSIGN_API_BASE_URL=https://api-sandbox.yousign.app/v3 \
+  YOUSIGN_WEBHOOK_SECRET=xxx
+```
+
+Webhook URL à déclarer dans le Dashboard Yousign :
+`https://{project-ref}.supabase.co/functions/v1/yousign-webhook`
+
+Events à activer côté Yousign : `signer_request.viewed`,
+`signer_request.signed`, `signer_request.declined`,
+`signature_request.completed`.
+
 ## État actuel
 
 ### Modules livrés
@@ -349,6 +379,57 @@ approval_workflow`. Module 7 (Resend) consommera ces rows pour
     et `7f56d666` (sasportasdavid+test) pour permettre les tests
     E2E B2-B5. Cleanup possible si plus utiles.
 
+18-30. **Dettes Module 6 B2/B3/B4** : voir
+`memory/module_6_b2_complete.md`,
+`memory/module_6_b3_complete.md`,
+`memory/module_6_b4_complete.md`.
+Notable : #29 STATUSES_ALLOWING_GENERATE hard-codé,
+#28 pas de "Voir Yousign Dashboard" link.
+
+44. **Doublon de types Supabase** (Module 6 B5) :
+    `apps/web/src/lib/supabase/database.types.ts` et
+    `packages/shared/src/types/database.ts` sont 2 copies du
+    même fichier généré par `supabase gen types`. Server client
+    importe depuis `@equity/shared`, donc une seule génération
+    ne suffit pas — il faut copier MANUELLEMENT le fichier dans
+    le shared package après chaque migration. À consolider en
+    V2 : ne garder qu'une seule source dans `packages/shared`
+    - re-export dans apps/web.
+
+45. **Vitest sans plugin React JSX** (Module 6 B5) :
+    `approvals.ts` doit utiliser `await import('./documents')`
+    pour éviter le transform Vitest qui plante sur le JSX de
+    `pdf/render.tsx`. À résoudre en V2 : (a) ajouter
+    `@vitejs/plugin-react` à vitest config, ou (b) extraire
+    `generateAwardDocument` core (sans render PDF) dans un
+    helper pure-TS importable. Pour l'instant, dynamic import
+    = workaround acceptable.
+
+31-43. **Dettes E2E Module 5+6 (session 2026-04-30)** : - #31 bouton "Proposer" sans guard double-clic crée 2
+approval_requests - #32 notifications PENDING orphelines après cancel - #33 hook `custom_access_token_hook` doit être enrolled
+manuellement dans Supabase Dashboard (sinon JWT n'a pas
+`active_org_id`/`active_roles`) - #34 `approveDecision` Server Action throws "Failed to
+fetch" côté UI (workaround : RPC SQL direct) - #35 trigger `enforce_award_beneficiary_update` bloque
+INSERT audit_events RLS sans JWT context - #36 (closed) `formatNumber` rendait `1/200` (U+202F glyph
+absent Helvetica) → fix `b7ad3e8` normalize → U+00A0 - #37 (closed) Yousign V3 rejette `expiration_date` ISO avec
+millisecondes → fix `5643e5b` use `YYYY-MM-DD` - #38 (closed) Yousign V3 rejette `fields[0].page = -1`
+(`>=1` requis) → fix `5643e5b` `page: 1` (mono-page V1) - #39 (closed) Yousign V3 webhook header
+`x-yousign-signature-256` (pas `-signature`) + event names
+`signer.done`/`signature_request.done` → fix `6a11862` - #40 form login Capiwise n'envoie pas magic link aux users
+sans row `user_profiles` (silent return) → fix avec INSERT
+user_profiles + dette ouvert pour ajouter trigger AFTER
+INSERT auth.users - #41 pas de mécanisme replay webhook Yousign si Dashboard
+mal configuré au moment de l'envoi (workaround : Yousign
+Dashboard Replay button OU script CLI à créer) - #42 (closed) Yousign V3 webhook payload n'inclut pas
+`signature_request.documents[]` → fetch via API
+`GET /signature_requests/{id}/documents` (fix EF v5
+commit `3f91eb9`) - #43 (closed) `signature_request.done` handler timeout
+côté Yousign Dashboard (5 s) car processing sync (4 HTTP
+calls + 2 uploads ≈ 2-10 s) → fix EF v6 :
+ack 200 immédiat puis processing en background via
+`EdgeRuntime.waitUntil()`. Idempotence préservée par
+pré-check `status === 'COMPLETED'` (Yousign retry safe).
+
 ## Sécurité
 
 - [x] Rotation clé Resend après leak dans .env.example (date: \_\_\_)
@@ -359,6 +440,25 @@ approval_workflow`. Module 7 (Resend) consommera ces rows pour
       sur les Server Actions, à confirmer)
 
 ## Patterns récurrents (anti-doublons)
+
+> **Webhooks externes** : valider les NOMS DE HEADER et NOMS
+> D'EVENTS via un test E2E réel (pas juste la doc). La spec
+> peut être obsolète. Cf. Module 6 B3 Yousign V3 :
+> `x-yousign-signature` (V2) → `x-yousign-signature-256` (V3),
+> `signer_request.signed` (V2) → `signer.done` (V3). Pattern
+> de fix : OR-conditions sur les 2 nommages + log diagnostic
+> (header_len, listing des x-vendor-\* headers reçus).
+
+> **Webhooks externes — temps de réponse** : la plupart des
+> providers (Stripe, Yousign, etc.) timeout à 5-10 s. Si le
+> handler doit faire du I/O lourd (download, upload, RPCs en
+> chaîne), pattern obligatoire : ack 200 immédiat + processing
+> en background via `EdgeRuntime.waitUntil(promise)` (Supabase
+> Deno EF). Sinon le provider retry ce qui produit des doublons
+> côté Storage et des "400 timeout" côté Dashboard. Cf. EF
+> `yousign-webhook` v6 (handler `signature_request.done`).
+> Garder un pré-check d'idempotence (status COMPLETED → ack
+> sous 100 ms) pour les retries quand même reçus.
 
 Si tu te demandes "comment faire X", chercher d'abord :
 

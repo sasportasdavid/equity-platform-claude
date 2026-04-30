@@ -171,3 +171,28 @@ export type ApprovalWorkflowCheckContext = {
    */
   roleUserCountMap: Map<string, number>;
 };
+
+// ---------------------------------------------------------------------------
+// Module 6 B2 — Documents
+// ---------------------------------------------------------------------------
+
+export type DocumentGenerationCheckInput = {
+  awardId: string;
+  planId: string;
+};
+
+export type DocumentGenerationCheckContext = {
+  /** Date ISO de la dernière mise à jour de la FMV du plan. NULL si jamais setté. */
+  fmvSetAt: string | null;
+};
+
+export type DocumentSignatureCheckInput = {
+  documentId: string;
+  documentStatus: string;
+  signers: Array<{
+    fullName: string;
+    email: string;
+  }>;
+};
+
+export type DocumentSignatureCheckContext = Record<string, never>;

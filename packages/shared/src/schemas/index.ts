@@ -5,3 +5,4 @@ export * from './plan-wizard';
 export * from './award';
 export * from './beneficiary';
 export * from './approval';
+export * from './document';
