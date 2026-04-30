@@ -1262,17 +1262,23 @@ export type Database = {
           category: string
           created_at: string
           document_number: string | null
+          file_size_bytes: number | null
           generated_at: string | null
           generated_by: string | null
           id: string
           org_id: string
+          proof_certificate_url: string | null
           related_entity_id: string | null
           related_entity_type: string | null
           rendered_html: string | null
           rendered_pdf_hash: string | null
           rendered_pdf_url: string | null
           signed_at: string | null
+          signed_pdf_storage_path: string | null
+          signed_pdf_url: string | null
           status: string
+          storage_bucket: string | null
+          storage_path: string | null
           template_id: string | null
           template_version: number | null
           title: string
@@ -1286,17 +1292,23 @@ export type Database = {
           category: string
           created_at?: string
           document_number?: string | null
+          file_size_bytes?: number | null
           generated_at?: string | null
           generated_by?: string | null
           id?: string
           org_id: string
+          proof_certificate_url?: string | null
           related_entity_id?: string | null
           related_entity_type?: string | null
           rendered_html?: string | null
           rendered_pdf_hash?: string | null
           rendered_pdf_url?: string | null
           signed_at?: string | null
+          signed_pdf_storage_path?: string | null
+          signed_pdf_url?: string | null
           status?: string
+          storage_bucket?: string | null
+          storage_path?: string | null
           template_id?: string | null
           template_version?: number | null
           title: string
@@ -1310,17 +1322,23 @@ export type Database = {
           category?: string
           created_at?: string
           document_number?: string | null
+          file_size_bytes?: number | null
           generated_at?: string | null
           generated_by?: string | null
           id?: string
           org_id?: string
+          proof_certificate_url?: string | null
           related_entity_id?: string | null
           related_entity_type?: string | null
           rendered_html?: string | null
           rendered_pdf_hash?: string | null
           rendered_pdf_url?: string | null
           signed_at?: string | null
+          signed_pdf_storage_path?: string | null
+          signed_pdf_url?: string | null
           status?: string
+          storage_bucket?: string | null
+          storage_path?: string | null
           template_id?: string | null
           template_version?: number | null
           title?: string
@@ -1351,6 +1369,7 @@ export type Database = {
           applies_to_plan_types: string[] | null
           available_variables: Json | null
           category: string
+          code: string | null
           content: Json
           content_format: string
           created_at: string
@@ -1365,6 +1384,8 @@ export type Database = {
           parent_template_id: string | null
           pdf_style: Json | null
           signature_workflow: Json | null
+          supported_languages: string[] | null
+          template_engine: string
           updated_at: string
           version: number
         }
@@ -1372,6 +1393,7 @@ export type Database = {
           applies_to_plan_types?: string[] | null
           available_variables?: Json | null
           category: string
+          code?: string | null
           content: Json
           content_format?: string
           created_at?: string
@@ -1386,6 +1408,8 @@ export type Database = {
           parent_template_id?: string | null
           pdf_style?: Json | null
           signature_workflow?: Json | null
+          supported_languages?: string[] | null
+          template_engine?: string
           updated_at?: string
           version?: number
         }
@@ -1393,6 +1417,7 @@ export type Database = {
           applies_to_plan_types?: string[] | null
           available_variables?: Json | null
           category?: string
+          code?: string | null
           content?: Json
           content_format?: string
           created_at?: string
@@ -1407,6 +1432,8 @@ export type Database = {
           parent_template_id?: string | null
           pdf_style?: Json | null
           signature_workflow?: Json | null
+          supported_languages?: string[] | null
+          template_engine?: string
           updated_at?: string
           version?: number
         }
@@ -2671,10 +2698,13 @@ export type Database = {
           proof_certificate_url: string | null
           reminder_settings: Json | null
           sent_at: string | null
+          signing_order: string | null
           status: string
           webhook_payload_history: Json
+          yousign_environment: string | null
           yousign_procedure_id: string | null
           yousign_signature_request_id: string | null
+          yousign_workflow_status: string | null
         }
         Insert: {
           completed_at?: string | null
@@ -2686,10 +2716,13 @@ export type Database = {
           proof_certificate_url?: string | null
           reminder_settings?: Json | null
           sent_at?: string | null
+          signing_order?: string | null
           status?: string
           webhook_payload_history?: Json
+          yousign_environment?: string | null
           yousign_procedure_id?: string | null
           yousign_signature_request_id?: string | null
+          yousign_workflow_status?: string | null
         }
         Update: {
           completed_at?: string | null
@@ -2701,10 +2734,13 @@ export type Database = {
           proof_certificate_url?: string | null
           reminder_settings?: Json | null
           sent_at?: string | null
+          signing_order?: string | null
           status?: string
           webhook_payload_history?: Json
+          yousign_environment?: string | null
           yousign_procedure_id?: string | null
           yousign_signature_request_id?: string | null
+          yousign_workflow_status?: string | null
         }
         Relationships: [
           {
@@ -3362,7 +3398,30 @@ export type Database = {
         Args: { p_reason: string; p_request_id: string }
         Returns: string
       }
+      cancel_signature_request: {
+        Args: { p_reason: string; p_request_id: string }
+        Returns: string
+      }
+      complete_signature_request: {
+        Args: {
+          p_proof_certificate_url: string
+          p_request_id: string
+          p_signed_pdf_storage_path: string
+        }
+        Returns: string
+      }
       create_award_full: { Args: { p_data: Json }; Returns: string }
+      create_document_for_award: {
+        Args: {
+          p_award_id: string
+          p_file_size_bytes: number
+          p_pdf_hash: string
+          p_storage_path: string
+          p_template_code: string
+          p_variables_used: Json
+        }
+        Returns: string
+      }
       create_plan_full: {
         Args: {
           p_company_id: string
@@ -3377,6 +3436,17 @@ export type Database = {
           p_volatility: Json
         }
         Returns: Json
+      }
+      create_signature_request_full: {
+        Args: {
+          p_document_id: string
+          p_expiry_date: string
+          p_signers: Json
+          p_signing_order: string
+          p_yousign_environment: string
+          p_yousign_procedure_id: string
+        }
+        Returns: string
       }
       current_org_id: { Args: never; Returns: string }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
@@ -3482,12 +3552,24 @@ export type Database = {
         Args: { p_award_id: string; p_workflow_id?: string }
         Returns: Json
       }
+      transition_award_to_granted_after_signature: {
+        Args: { p_award_id: string }
+        Returns: string
+      }
       transition_beneficiary_lifecycle: {
         Args: {
           p_beneficiary_id: string
           p_reason: string
           p_termination_date?: string
           p_to_status: string
+        }
+        Returns: string
+      }
+      update_signer_from_webhook: {
+        Args: {
+          p_event_type: string
+          p_metadata: Json
+          p_yousign_signer_id: string
         }
         Returns: string
       }
