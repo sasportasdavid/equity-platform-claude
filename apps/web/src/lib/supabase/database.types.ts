@@ -3528,6 +3528,10 @@ export type Database = {
           updated_at: string;
         }[];
       };
+      load_award_document_context: {
+        Args: { p_award_id: string };
+        Returns: Json;
+      };
       load_plan_draft: { Args: { p_draft_id: string }; Returns: Json };
       mark_beneficiary_invited: {
         Args: { p_beneficiary_id: string };
