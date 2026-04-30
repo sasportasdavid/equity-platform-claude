@@ -499,7 +499,11 @@ export async function sendDocumentForSignature(input: unknown): Promise<
   const pdfBuffer = Buffer.from(await pdfBlob.arrayBuffer());
 
   const yousignEnv = process.env.YOUSIGN_ENVIRONMENT ?? 'sandbox';
-  const expiryDate = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString();
+  // Yousign V3 rejects ISO with milliseconds ("2026-05-30T17:38:00.000Z").
+  // Use YYYY-MM-DD format (date-only) for the API. DB stores full TIMESTAMPTZ.
+  const expiryDateFull = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
+  const expiryDateForYousign = expiryDateFull.toISOString().slice(0, 10);
+  const expiryDate = expiryDateFull.toISOString();
 
   // 4. Yousign : create signature request
   let sigReq: { id: string };
@@ -509,7 +513,7 @@ export async function sendDocumentForSignature(input: unknown): Promise<
       name: `Signature ${doc.document_number ?? doc.id.slice(0, 8)}`,
       delivery_mode: 'email',
       ordered_signers: signingOrder === 'SEQUENTIAL',
-      expiration_date: expiryDate,
+      expiration_date: expiryDateForYousign,
     });
 
     // 5. Upload PDF
@@ -565,7 +569,11 @@ export async function sendDocumentForSignature(input: unknown): Promise<
           {
             document_id: yousignDocId,
             type: 'signature',
-            page: -1,
+            // Yousign V3 exige page >= 1 (rejette les valeurs négatives type -1
+            // pour "dernière page"). V1 PDF est mono-page (lettre d'attribution),
+            // donc page=1 marche pour BSPCE/AGA/SO templates. À refacto si
+            // template multi-page Module 6 V2.
+            page: 1,
             x: 100,
             y: 100,
           },
