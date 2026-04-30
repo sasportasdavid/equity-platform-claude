@@ -10,6 +10,8 @@ import { AwardStatusBadge } from '@/components/awards/AwardStatusBadge';
 import { AwardDetailClient } from './award-detail-client';
 import { hasPermission, requirePermission } from '@/lib/auth/rbac';
 import { getAwardDetail } from '@/server/queries/awards';
+import { getApprovalRequestForAward } from '@/server/queries/approvals';
+import { AwardApprovalCard } from '@/components/approvals/AwardApprovalCard';
 import type { AwardStatus } from '@equity/shared';
 
 export const metadata: Metadata = { title: 'Attribution · Capiwise' };
@@ -27,7 +29,7 @@ export const metadata: Metadata = { title: 'Attribution · Capiwise' };
  *      PlanRules/Audit)
  */
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-  await requirePermission('awards.read.all');
+  const user = await requirePermission('awards.read.all');
 
   const { id: rawId } = await params;
   const idCheck = uuidSchema.safeParse(rawId);
@@ -36,10 +38,11 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const detail = await getAwardDetail(idCheck.data);
   if (!detail) notFound();
 
-  const [canCancel, canModify, canPropose] = await Promise.all([
+  const [canCancel, canModify, canPropose, approvalRequest] = await Promise.all([
     hasPermission('awards.cancel'),
     hasPermission('awards.modify'),
     hasPermission('awards.propose'),
+    getApprovalRequestForAward(idCheck.data, user.id),
   ]);
 
   const planLocked = detail.plan?.is_locked ?? false;
@@ -85,6 +88,17 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         </Link>
       }
     >
+      {approvalRequest ? (
+        <AwardApprovalCard
+          request={approvalRequest}
+          award={{
+            number: detail.award.award_number,
+            beneficiaryName,
+            planName: detail.plan?.name ?? null,
+            unitsGranted: Number(detail.award.units_granted ?? 0) || null,
+          }}
+        />
+      ) : null}
       <AwardDetailClient
         detail={detail}
         canCancel={canCancel}
