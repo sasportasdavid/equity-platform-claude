@@ -386,7 +386,7 @@ approval_workflow`. Module 7 (Resend) consommera ces rows pour
 Notable : #29 STATUSES_ALLOWING_GENERATE hard-codé,
 #28 pas de "Voir Yousign Dashboard" link.
 
-31-39. **Dettes E2E Module 5+6 (session 2026-04-30)** : - #31 bouton "Proposer" sans guard double-clic crée 2
+31-43. **Dettes E2E Module 5+6 (session 2026-04-30)** : - #31 bouton "Proposer" sans guard double-clic crée 2
 approval_requests - #32 notifications PENDING orphelines après cancel - #33 hook `custom_access_token_hook` doit être enrolled
 manuellement dans Supabase Dashboard (sinon JWT n'a pas
 `active_org_id`/`active_roles`) - #34 `approveDecision` Server Action throws "Failed to
@@ -401,7 +401,15 @@ sans row `user_profiles` (silent return) → fix avec INSERT
 user_profiles + dette ouvert pour ajouter trigger AFTER
 INSERT auth.users - #41 pas de mécanisme replay webhook Yousign si Dashboard
 mal configuré au moment de l'envoi (workaround : Yousign
-Dashboard Replay button OU script CLI à créer)
+Dashboard Replay button OU script CLI à créer) - #42 (closed) Yousign V3 webhook payload n'inclut pas
+`signature_request.documents[]` → fetch via API
+`GET /signature_requests/{id}/documents` (fix EF v5
+commit `3f91eb9`) - #43 (closed) `signature_request.done` handler timeout
+côté Yousign Dashboard (5 s) car processing sync (4 HTTP
+calls + 2 uploads ≈ 2-10 s) → fix EF v6 :
+ack 200 immédiat puis processing en background via
+`EdgeRuntime.waitUntil()`. Idempotence préservée par
+pré-check `status === 'COMPLETED'` (Yousign retry safe).
 
 ## Sécurité
 
@@ -421,6 +429,17 @@ Dashboard Replay button OU script CLI à créer)
 > `signer_request.signed` (V2) → `signer.done` (V3). Pattern
 > de fix : OR-conditions sur les 2 nommages + log diagnostic
 > (header_len, listing des x-vendor-\* headers reçus).
+
+> **Webhooks externes — temps de réponse** : la plupart des
+> providers (Stripe, Yousign, etc.) timeout à 5-10 s. Si le
+> handler doit faire du I/O lourd (download, upload, RPCs en
+> chaîne), pattern obligatoire : ack 200 immédiat + processing
+> en background via `EdgeRuntime.waitUntil(promise)` (Supabase
+> Deno EF). Sinon le provider retry ce qui produit des doublons
+> côté Storage et des "400 timeout" côté Dashboard. Cf. EF
+> `yousign-webhook` v6 (handler `signature_request.done`).
+> Garder un pré-check d'idempotence (status COMPLETED → ack
+> sous 100 ms) pour les retries quand même reçus.
 
 Si tu te demandes "comment faire X", chercher d'abord :
 
