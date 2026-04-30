@@ -122,17 +122,96 @@ export type Database = {
           },
         ];
       };
+      approval_decisions: {
+        Row: {
+          approver_role: string | null;
+          approver_user_id: string | null;
+          comment: string | null;
+          created_at: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          id: string;
+          notified_at: string | null;
+          org_id: string;
+          request_id: string;
+          status: string;
+          step_id: string;
+          step_order: number;
+          updated_at: string;
+        };
+        Insert: {
+          approver_role?: string | null;
+          approver_user_id?: string | null;
+          comment?: string | null;
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          id?: string;
+          notified_at?: string | null;
+          org_id: string;
+          request_id: string;
+          status?: string;
+          step_id: string;
+          step_order: number;
+          updated_at?: string;
+        };
+        Update: {
+          approver_role?: string | null;
+          approver_user_id?: string | null;
+          comment?: string | null;
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          id?: string;
+          notified_at?: string | null;
+          org_id?: string;
+          request_id?: string;
+          status?: string;
+          step_id?: string;
+          step_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'approval_decisions_org_id_fkey';
+            columns: ['org_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'approval_decisions_request_id_fkey';
+            columns: ['request_id'];
+            isOneToOne: false;
+            referencedRelation: 'approval_requests';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'approval_decisions_step_id_fkey';
+            columns: ['step_id'];
+            isOneToOne: false;
+            referencedRelation: 'approval_workflow_steps';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       approval_requests: {
         Row: {
+          award_id: string | null;
           created_at: string;
           current_step_id: string | null;
+          current_step_order: number | null;
           id: string;
           org_id: string;
+          plan_id: string | null;
+          rejected_reason: string | null;
           request_message: string | null;
           requested_by: string | null;
           resolution: string | null;
           resolution_message: string | null;
           resolved_at: string | null;
+          started_at: string | null;
+          started_by: string | null;
           status: string;
           subject_id: string;
           subject_snapshot: Json | null;
@@ -141,15 +220,21 @@ export type Database = {
           workflow_id: string | null;
         };
         Insert: {
+          award_id?: string | null;
           created_at?: string;
           current_step_id?: string | null;
+          current_step_order?: number | null;
           id?: string;
           org_id: string;
+          plan_id?: string | null;
+          rejected_reason?: string | null;
           request_message?: string | null;
           requested_by?: string | null;
           resolution?: string | null;
           resolution_message?: string | null;
           resolved_at?: string | null;
+          started_at?: string | null;
+          started_by?: string | null;
           status?: string;
           subject_id: string;
           subject_snapshot?: Json | null;
@@ -158,15 +243,21 @@ export type Database = {
           workflow_id?: string | null;
         };
         Update: {
+          award_id?: string | null;
           created_at?: string;
           current_step_id?: string | null;
+          current_step_order?: number | null;
           id?: string;
           org_id?: string;
+          plan_id?: string | null;
+          rejected_reason?: string | null;
           request_message?: string | null;
           requested_by?: string | null;
           resolution?: string | null;
           resolution_message?: string | null;
           resolved_at?: string | null;
+          started_at?: string | null;
+          started_by?: string | null;
           status?: string;
           subject_id?: string;
           subject_snapshot?: Json | null;
@@ -175,6 +266,13 @@ export type Database = {
           workflow_id?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: 'approval_requests_award_id_fkey';
+            columns: ['award_id'];
+            isOneToOne: false;
+            referencedRelation: 'awards';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'approval_requests_current_step_id_fkey';
             columns: ['current_step_id'];
@@ -187,6 +285,13 @@ export type Database = {
             columns: ['org_id'];
             isOneToOne: false;
             referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'approval_requests_plan_id_fkey';
+            columns: ['plan_id'];
+            isOneToOne: false;
+            referencedRelation: 'plans';
             referencedColumns: ['id'];
           },
           {
@@ -257,7 +362,9 @@ export type Database = {
       approval_workflows: {
         Row: {
           applies_to: string;
+          attach_to_plan_id: string | null;
           created_at: string;
+          deleted_at: string | null;
           description: string | null;
           id: string;
           is_active: boolean;
@@ -269,7 +376,9 @@ export type Database = {
         };
         Insert: {
           applies_to: string;
+          attach_to_plan_id?: string | null;
           created_at?: string;
+          deleted_at?: string | null;
           description?: string | null;
           id?: string;
           is_active?: boolean;
@@ -281,7 +390,9 @@ export type Database = {
         };
         Update: {
           applies_to?: string;
+          attach_to_plan_id?: string | null;
           created_at?: string;
+          deleted_at?: string | null;
           description?: string | null;
           id?: string;
           is_active?: boolean;
@@ -292,6 +403,13 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: 'approval_workflows_attach_to_plan_id_fkey';
+            columns: ['attach_to_plan_id'];
+            isOneToOne: false;
+            referencedRelation: 'plans';
+            referencedColumns: ['id'];
+          },
           {
             foreignKeyName: 'approval_workflows_org_id_fkey';
             columns: ['org_id'];
@@ -3234,6 +3352,10 @@ export type Database = {
       };
       bulk_create_awards: { Args: { p_rows: Json }; Returns: Json };
       bulk_create_beneficiaries: { Args: { p_rows: Json }; Returns: Json };
+      cancel_approval_request: {
+        Args: { p_reason: string; p_request_id: string };
+        Returns: string;
+      };
       create_award_full: { Args: { p_data: Json }; Returns: string };
       create_plan_full: {
         Args: {
@@ -3258,6 +3380,10 @@ export type Database = {
         Returns: Json;
       };
       encrypt_sensitive: { Args: { plaintext: string }; Returns: string };
+      evaluate_approval_request: {
+        Args: { p_request_id: string };
+        Returns: Json;
+      };
       get_beneficiary_decrypted: {
         Args: { p_id: string };
         Returns: {
@@ -3342,6 +3468,14 @@ export type Database = {
         Returns: number;
       };
       next_award_number: { Args: { p_org_id: string }; Returns: string };
+      record_approval_decision: {
+        Args: { p_comment: string; p_decision_id: string; p_status: string };
+        Returns: Json;
+      };
+      start_approval_workflow: {
+        Args: { p_award_id: string; p_workflow_id?: string };
+        Returns: Json;
+      };
       transition_beneficiary_lifecycle: {
         Args: {
           p_beneficiary_id: string;
