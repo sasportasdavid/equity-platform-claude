@@ -11,6 +11,7 @@ import { AwardDetailClient } from './award-detail-client';
 import { hasPermission, requirePermission } from '@/lib/auth/rbac';
 import { getAwardDetail } from '@/server/queries/awards';
 import { getApprovalRequestForAward } from '@/server/queries/approvals';
+import { getDocumentsForAward, listCompanyRepresentativeOptions } from '@/server/queries/documents';
 import { AwardApprovalCard } from '@/components/approvals/AwardApprovalCard';
 import type { AwardStatus } from '@equity/shared';
 
@@ -38,11 +39,24 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const detail = await getAwardDetail(idCheck.data);
   if (!detail) notFound();
 
-  const [canCancel, canModify, canPropose, approvalRequest] = await Promise.all([
+  const [
+    canCancel,
+    canModify,
+    canPropose,
+    canGenerateDoc,
+    canVoidDoc,
+    approvalRequest,
+    documents,
+    companyRepresentatives,
+  ] = await Promise.all([
     hasPermission('awards.cancel'),
     hasPermission('awards.modify'),
     hasPermission('awards.propose'),
+    hasPermission('documents.send_for_signature'),
+    hasPermission('documents.void'),
     getApprovalRequestForAward(idCheck.data, user.id),
+    getDocumentsForAward(idCheck.data),
+    user.activeOrgId ? listCompanyRepresentativeOptions(user.activeOrgId) : Promise.resolve([]),
   ]);
 
   const planLocked = detail.plan?.is_locked ?? false;
@@ -104,6 +118,16 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         canCancel={canCancel}
         canModify={canModify}
         canPropose={canPropose}
+        canGenerateDoc={canGenerateDoc}
+        canVoidDoc={canVoidDoc}
+        documents={documents}
+        companyRepresentatives={companyRepresentatives}
+        beneficiary={{
+          id: detail.beneficiary?.id ?? '',
+          fullName: beneficiaryName,
+          email: detail.beneficiary?.email ?? '',
+          phone: null,
+        }}
       />
     </PageShell>
   );

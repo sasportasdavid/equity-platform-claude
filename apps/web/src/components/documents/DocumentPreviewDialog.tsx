@@ -51,13 +51,11 @@ export function DocumentPreviewDialog({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) {
-      setSignedUrl(null);
-      setError(null);
-      return;
-    }
+    if (!open) return;
+    let cancelled = false;
     startTransition(async () => {
       const res = await getDocumentPreviewUrl({ documentId, variant });
+      if (cancelled) return;
       if (res.ok) {
         setSignedUrl(res.signedUrl);
       } else {
@@ -65,10 +63,21 @@ export function DocumentPreviewDialog({
         toast.error(res.error);
       }
     });
+    return () => {
+      cancelled = true;
+    };
   }, [open, documentId, variant]);
 
+  function handleOpenChange(o: boolean) {
+    if (!o) {
+      setSignedUrl(null);
+      setError(null);
+    }
+    onOpenChange(o);
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex max-h-[90vh] max-w-5xl flex-col">
         <DialogHeader>
           <DialogTitle>
@@ -122,7 +131,7 @@ export function DocumentPreviewDialog({
                 <Download className="mr-2 size-4" /> Télécharger
               </a>
             ) : null}
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            <Button variant="ghost" onClick={() => handleOpenChange(false)}>
               Fermer
             </Button>
           </div>
