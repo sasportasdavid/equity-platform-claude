@@ -2,7 +2,18 @@ import 'server-only';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { AWARD_RULES } from './rules/awardRules';
 import { BENEFICIARY_RULES } from './rules/beneficiaryRules';
+import {
+  APPROVAL_AWARD_RULES,
+  APPROVAL_DECISION_RULES,
+  APPROVAL_WORKFLOW_RULES,
+} from './rules/approvalRules';
 import type {
+  ApprovalAwardCheckContext,
+  ApprovalAwardCheckInput,
+  ApprovalDecisionCheckContext,
+  ApprovalDecisionCheckInput,
+  ApprovalWorkflowCheckContext,
+  ApprovalWorkflowCheckInput,
   AwardCheckContext,
   AwardCheckInput,
   BeneficiaryCheckContext,
@@ -188,4 +199,139 @@ export async function runBeneficiaryComplianceChecks(
   };
 
   return runRules(BENEFICIARY_RULES, input, ctx);
+}
+
+// ---------------------------------------------------------------------------
+// Module 5 B2 — Compliance approbations
+// ---------------------------------------------------------------------------
+
+/**
+ * WORKFLOW_REQUIRED_FOR_AGA — appelé depuis transitionAward(*, 'PROPOSED')
+ * pour générer un soft warning si AGA + pas de workflow attaché.
+ *
+ * Le ctx est chargé ici : plan + flag workflowAttached (workflow attach_to_plan
+ * OU default org pour AWARD_GRANT).
+ */
+export async function runApprovalAwardComplianceChecks(
+  input: ApprovalAwardCheckInput,
+  orgId: string,
+): Promise<ComplianceCheckResult> {
+  const supabase = await createSupabaseServerClient();
+
+  const [planRes, attachedRes, defaultRes] = await Promise.all([
+    supabase.from('plans').select('id, plan_type').eq('id', input.planId).maybeSingle(),
+    supabase
+      .from('approval_workflows')
+      .select('id', { count: 'exact', head: true })
+      .eq('attach_to_plan_id', input.planId)
+      .is('deleted_at', null)
+      .eq('is_active', true),
+    supabase
+      .from('approval_workflows')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('applies_to', 'AWARD_GRANT')
+      .eq('is_default', true)
+      .eq('is_active', true)
+      .is('deleted_at', null),
+  ]);
+
+  const ctx: ApprovalAwardCheckContext = {
+    plan: planRes.data ?? null,
+    workflowAttached: (attachedRes.count ?? 0) > 0 || (defaultRes.count ?? 0) > 0,
+  };
+
+  return runRules(APPROVAL_AWARD_RULES, input, ctx);
+}
+
+/**
+ * NO_SELF_APPROVAL — appelé depuis approveDecision/rejectDecision avant le RPC
+ * pour bloquer le self-approval.
+ */
+export async function runApprovalDecisionComplianceChecks(
+  input: ApprovalDecisionCheckInput,
+): Promise<ComplianceCheckResult> {
+  const supabase = await createSupabaseServerClient();
+
+  // Récupérer la decision → request → award (created_by)
+  const { data: row } = await supabase
+    .from('approval_decisions')
+    .select('request_id, approval_requests!inner(award_id)')
+    .eq('id', input.decisionId)
+    .maybeSingle();
+
+  // approval_requests join → award_id
+  const requestRow = row as { approval_requests?: { award_id?: string | null } } | null;
+  const awardId = requestRow?.approval_requests?.award_id ?? null;
+
+  let relatedAward: ApprovalDecisionCheckContext['relatedAward'] = null;
+  if (awardId) {
+    const { data: aw } = await supabase
+      .from('awards')
+      .select('id, created_by')
+      .eq('id', awardId)
+      .maybeSingle();
+    if (aw) relatedAward = { id: aw.id, created_by: aw.created_by };
+  }
+
+  const ctx: ApprovalDecisionCheckContext = { relatedAward };
+  return runRules(APPROVAL_DECISION_RULES, input, ctx);
+}
+
+/**
+ * WORKFLOW_HAS_VALID_STEPS — appelé depuis createWorkflow/updateWorkflow.
+ * Pré-charge userExistsMap (USER steps) + roleUserCountMap (ROLE/ANY/ALL steps).
+ */
+export async function runApprovalWorkflowComplianceChecks(
+  input: ApprovalWorkflowCheckInput,
+  orgId: string,
+): Promise<ComplianceCheckResult> {
+  const supabase = await createSupabaseServerClient();
+
+  const userIdsToCheck = Array.from(
+    new Set(
+      input.steps
+        .filter((s) => s.approverType === 'USER' && s.approverUserId)
+        .map((s) => s.approverUserId as string),
+    ),
+  );
+  const rolesToCount = Array.from(
+    new Set(
+      input.steps
+        .filter((s) => s.approverType !== 'USER' && s.approverRole)
+        .map((s) => s.approverRole as string),
+    ),
+  );
+
+  const userExistsMap = new Map<string, boolean>();
+  const roleUserCountMap = new Map<string, number>();
+
+  if (userIdsToCheck.length > 0) {
+    const { data: members } = await supabase
+      .from('memberships')
+      .select('user_id')
+      .eq('org_id', orgId)
+      .eq('status', 'ACTIVE')
+      .in('user_id', userIdsToCheck);
+    const found = new Set((members ?? []).map((m) => m.user_id));
+    for (const id of userIdsToCheck) userExistsMap.set(id, found.has(id));
+  }
+
+  if (rolesToCount.length > 0) {
+    // Pour chaque role, count des memberships ACTIVE qui contiennent ce role
+    const { data: members } = await supabase
+      .from('memberships')
+      .select('user_id, roles')
+      .eq('org_id', orgId)
+      .eq('status', 'ACTIVE');
+    for (const role of rolesToCount) {
+      const count = (members ?? []).filter((m) =>
+        Array.isArray(m.roles) ? (m.roles as string[]).includes(role) : false,
+      ).length;
+      roleUserCountMap.set(role, count);
+    }
+  }
+
+  const ctx: ApprovalWorkflowCheckContext = { userExistsMap, roleUserCountMap };
+  return runRules(APPROVAL_WORKFLOW_RULES, input, ctx);
 }

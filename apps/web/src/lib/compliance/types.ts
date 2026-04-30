@@ -112,3 +112,62 @@ export type ComplianceCheckResult = {
   warnings: ComplianceIssue[];
   hasHardBlocks: boolean;
 };
+
+// ---------------------------------------------------------------------------
+// Module 5 B2 — Approvals
+// ---------------------------------------------------------------------------
+
+/**
+ * Input WORKFLOW_REQUIRED_FOR_AGA — check à la transition PROPOSED d'un award.
+ * Le ctx contient le plan (pour le plan_type) et un flag workflowAttached.
+ */
+export type ApprovalAwardCheckInput = {
+  awardId: string;
+  planId: string;
+};
+
+export type ApprovalAwardCheckContext = {
+  plan: { id: string; plan_type: string } | null;
+  workflowAttached: boolean;
+};
+
+/**
+ * Input NO_SELF_APPROVAL — check au moment d'approuver/rejeter une décision.
+ */
+export type ApprovalDecisionCheckInput = {
+  decisionId: string;
+  approverUserId: string;
+};
+
+export type ApprovalDecisionCheckContext = {
+  /** Award lié à la décision (si subject_type='AWARD'). */
+  relatedAward: { id: string; created_by: string | null } | null;
+};
+
+/**
+ * Input WORKFLOW_HAS_VALID_STEPS — check à la création/update d'un workflow.
+ * Les steps sont déjà validés par Zod. Cette rule vérifie que chaque step a
+ * au moins 1 approbateur résolvable côté DB (au moment T).
+ */
+export type ApprovalWorkflowCheckInput = {
+  steps: Array<{
+    stepOrder: number;
+    approverType: string; // ROLE | USER | ANY_OF_ROLE | ALL_OF_ROLE
+    approverRole?: string;
+    approverUserId?: string;
+    requiredApprovals: number;
+  }>;
+};
+
+export type ApprovalWorkflowCheckContext = {
+  /**
+   * Map approverUserId → existsAndActive (pour USER steps).
+   * Pré-chargée par le runner.
+   */
+  userExistsMap: Map<string, boolean>;
+  /**
+   * Map role → count(memberships ACTIVE avec ce role).
+   * Pré-chargée par le runner.
+   */
+  roleUserCountMap: Map<string, number>;
+};
