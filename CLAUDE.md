@@ -386,6 +386,25 @@ approval_workflow`. Module 7 (Resend) consommera ces rows pour
 Notable : #29 STATUSES_ALLOWING_GENERATE hard-codé,
 #28 pas de "Voir Yousign Dashboard" link.
 
+44. **Doublon de types Supabase** (Module 6 B5) :
+    `apps/web/src/lib/supabase/database.types.ts` et
+    `packages/shared/src/types/database.ts` sont 2 copies du
+    même fichier généré par `supabase gen types`. Server client
+    importe depuis `@equity/shared`, donc une seule génération
+    ne suffit pas — il faut copier MANUELLEMENT le fichier dans
+    le shared package après chaque migration. À consolider en
+    V2 : ne garder qu'une seule source dans `packages/shared`
+    - re-export dans apps/web.
+
+45. **Vitest sans plugin React JSX** (Module 6 B5) :
+    `approvals.ts` doit utiliser `await import('./documents')`
+    pour éviter le transform Vitest qui plante sur le JSX de
+    `pdf/render.tsx`. À résoudre en V2 : (a) ajouter
+    `@vitejs/plugin-react` à vitest config, ou (b) extraire
+    `generateAwardDocument` core (sans render PDF) dans un
+    helper pure-TS importable. Pour l'instant, dynamic import
+    = workaround acceptable.
+
 31-43. **Dettes E2E Module 5+6 (session 2026-04-30)** : - #31 bouton "Proposer" sans guard double-clic crée 2
 approval_requests - #32 notifications PENDING orphelines après cancel - #33 hook `custom_access_token_hook` doit être enrolled
 manuellement dans Supabase Dashboard (sinon JWT n'a pas
