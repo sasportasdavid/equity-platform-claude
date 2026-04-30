@@ -250,22 +250,26 @@ export async function listUsersForWorkflowApprover(orgId: string): Promise<UserF
   const userIds = (members ?? []).map((m) => m.user_id);
   if (userIds.length === 0) return [];
 
-  // Use admin auth API to fetch users by id batch
-  const { data: usersRes } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  const usersAll = usersRes?.users ?? [];
-
+  // Batch getUserById en parallèle — évite de charger TOUS les users Supabase
+  // via listUsers({ perPage: 1000 }) qui scalait mal (M tenants × N users).
+  // Pas de risque cross-tenant non plus : on récupère uniquement les ids
+  // déjà filtrés par l'org via memberships.
   type UserMeta = { full_name?: string };
-  return userIds
-    .map((id) => {
-      const u = usersAll.find((x) => x.id === id);
+  const results = await Promise.all(
+    userIds.map(async (id) => {
+      const { data } = await admin.auth.admin.getUserById(id);
+      const u = data?.user;
       if (!u) return null;
       const meta = (u.user_metadata ?? {}) as UserMeta;
       return {
         id: u.id,
         email: u.email ?? '',
         full_name: meta.full_name ?? null,
-      };
-    })
+      } satisfies UserForApprover;
+    }),
+  );
+
+  return results
     .filter((x): x is UserForApprover => !!x)
     .sort((a, b) => (a.full_name ?? a.email).localeCompare(b.full_name ?? b.email));
 }
