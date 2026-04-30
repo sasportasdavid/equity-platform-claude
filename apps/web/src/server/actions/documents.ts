@@ -230,14 +230,23 @@ export async function regenerateAwardDocument(
 // 3. getDocumentPreviewUrl
 // ===========================================================================
 
-const previewInputSchema = z.object({ documentId: z.string().uuid() });
+const previewInputSchema = z.object({
+  documentId: z.string().uuid(),
+  /**
+   * B4 — variant à servir :
+   *   - 'ORIGINAL' (défaut)  : storage_path (PDF généré, avant signature)
+   *   - 'SIGNED'             : signed_pdf_storage_path (après webhook completed)
+   *   - 'PROOF'              : proof_certificate_url (audit trail Yousign)
+   */
+  variant: z.enum(['ORIGINAL', 'SIGNED', 'PROOF']).optional(),
+});
 
 export async function getDocumentPreviewUrl(
   input: unknown,
 ): Promise<ActionOk<{ signedUrl: string; expiresAt: string }> | ActionError> {
   const parsed = previewInputSchema.safeParse(input);
   if (!parsed.success) return validationError(parsed.error);
-  const { documentId } = parsed.data;
+  const { documentId, variant = 'ORIGINAL' } = parsed.data;
 
   const user = await requirePermission('documents.read');
   if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
@@ -245,19 +254,27 @@ export async function getDocumentPreviewUrl(
   const supabase = await createSupabaseServerClient();
   const { data: doc, error } = await supabase
     .from('document_instances')
-    .select('id, storage_path, storage_bucket, status')
+    .select(
+      'id, storage_path, storage_bucket, signed_pdf_storage_path, proof_certificate_url, status',
+    )
     .eq('id', documentId)
     .eq('org_id', user.activeOrgId)
     .maybeSingle();
 
   if (error || !doc) return { ok: false, error: 'Document introuvable' };
-  if (!doc.storage_path) {
-    return { ok: false, error: 'Aucun fichier PDF lié à ce document (DRAFT non rendered ?)' };
+
+  let path: string | null;
+  if (variant === 'SIGNED') path = doc.signed_pdf_storage_path;
+  else if (variant === 'PROOF') path = doc.proof_certificate_url;
+  else path = doc.storage_path;
+
+  if (!path) {
+    return { ok: false, error: `Aucun fichier ${variant} disponible pour ce document` };
   }
 
   const { data: signedData, error: signErr } = await supabase.storage
     .from(doc.storage_bucket ?? 'documents')
-    .createSignedUrl(doc.storage_path, PREVIEW_URL_TTL_SECONDS);
+    .createSignedUrl(path, PREVIEW_URL_TTL_SECONDS);
 
   if (signErr || !signedData?.signedUrl) {
     return { ok: false, error: signErr?.message ?? 'Signed URL échoué' };
@@ -267,7 +284,7 @@ export async function getDocumentPreviewUrl(
     eventType: 'document.preview_accessed',
     resourceType: 'document_instance',
     resourceId: documentId,
-    metadata: { storage_path: doc.storage_path },
+    metadata: { storage_path: path, variant },
     userId: user.id,
     userEmail: user.email,
     orgId: user.activeOrgId,
