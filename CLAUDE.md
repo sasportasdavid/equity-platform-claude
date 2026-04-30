@@ -165,6 +165,36 @@ apps/web/src/lib/supabase/database.types.ts`
 - Layout `/dev/layout.tsx` protège en production via
   `process.env.ENABLE_DEV_SANDBOX !== 'true'`
 
+### Variables env Yousign (Module 6 B3)
+
+Côté Next.js (`.env.local`) :
+
+- `YOUSIGN_API_KEY` — clé API récupérée Dashboard Yousign
+- `YOUSIGN_API_BASE_URL` — `https://api-sandbox.yousign.app/v3`
+  en dev/staging, `https://api.yousign.app/v3` en prod
+- `YOUSIGN_WEBHOOK_SECRET` — HMAC secret partagé avec le
+  Dashboard Yousign (Webhooks). DOIT être configuré côté
+  Edge Function aussi (`supabase secrets set
+YOUSIGN_WEBHOOK_SECRET=...`)
+- `YOUSIGN_ENVIRONMENT` — `sandbox` ou `production`, tracé
+  dans `signature_requests.yousign_environment`
+
+Côté Edge Function `yousign-webhook` (Supabase secrets) :
+
+```bash
+supabase secrets set \
+  YOUSIGN_API_KEY=xxx \
+  YOUSIGN_API_BASE_URL=https://api-sandbox.yousign.app/v3 \
+  YOUSIGN_WEBHOOK_SECRET=xxx
+```
+
+Webhook URL à déclarer dans le Dashboard Yousign :
+`https://{project-ref}.supabase.co/functions/v1/yousign-webhook`
+
+Events à activer côté Yousign : `signer_request.viewed`,
+`signer_request.signed`, `signer_request.declined`,
+`signature_request.completed`.
+
 ## État actuel
 
 ### Modules livrés
