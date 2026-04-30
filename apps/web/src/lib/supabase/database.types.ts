@@ -6,6 +6,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: '14.5';
   };
+  graphql_public: {
+    Tables: {
+      [_ in never]: never;
+    };
+    Views: {
+      [_ in never]: never;
+    };
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json;
+          operationName?: string;
+          query?: string;
+          variables?: Json;
+        };
+        Returns: Json;
+      };
+    };
+    Enums: {
+      [_ in never]: never;
+    };
+    CompositeTypes: {
+      [_ in never]: never;
+    };
+  };
   public: {
     Tables: {
       api_keys: {
@@ -2357,6 +2382,7 @@ export type Database = {
       };
       plans: {
         Row: {
+          auto_generate_document: boolean;
           board_date: string | null;
           company_id: string;
           compliance_warnings: Json;
@@ -2391,6 +2417,7 @@ export type Database = {
           version: number;
         };
         Insert: {
+          auto_generate_document?: boolean;
           board_date?: string | null;
           company_id: string;
           compliance_warnings?: Json;
@@ -2425,6 +2452,7 @@ export type Database = {
           version?: number;
         };
         Update: {
+          auto_generate_document?: boolean;
           board_date?: string | null;
           company_id?: string;
           compliance_warnings?: Json;
@@ -3546,6 +3574,10 @@ export type Database = {
         Args: { p_comment: string; p_decision_id: string; p_status: string };
         Returns: Json;
       };
+      seed_default_approval_workflow_for_org: {
+        Args: { p_org_id: string };
+        Returns: string;
+      };
       start_approval_workflow: {
         Args: { p_award_id: string; p_workflow_id?: string };
         Returns: Json;
@@ -3700,6 +3732,9 @@ export type CompositeTypes<
     : never;
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
