@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   PieChart,
   Settings as SettingsIcon,
+  ShieldCheck,
   Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -53,6 +54,11 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { href: '/dashboard/awards', label: 'Attributions', icon: <Users className="size-4" /> },
   { href: '/dashboard/beneficiaries', label: 'Bénéficiaires', icon: <Users className="size-4" /> },
   {
+    href: '/dashboard/approvals',
+    label: 'Approbations',
+    icon: <ShieldCheck className="size-4" />,
+  },
+  {
     href: '/dashboard/valuations',
     label: 'Valorisations',
     icon: <Calculator className="size-4" />,
@@ -67,7 +73,12 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { href: '/dashboard/settings', label: 'Paramètres', icon: <SettingsIcon className="size-4" /> },
 ];
 
-export function DashboardSidebar() {
+export function DashboardSidebar({
+  pendingApprovalsCount = 0,
+}: {
+  /** Module 5 B4 — badge "Approbations (N)" si > 0. */
+  pendingApprovalsCount?: number;
+}) {
   const pathname = usePathname();
   return (
     <nav
@@ -95,6 +106,14 @@ export function DashboardSidebar() {
               >
                 {item.icon}
                 <span className="flex-1">{item.label}</span>
+                {item.href === '/dashboard/approvals' && pendingApprovalsCount > 0 ? (
+                  <span
+                    className="bg-destructive text-destructive-foreground rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums"
+                    data-testid="sidebar-approvals-badge"
+                  >
+                    {pendingApprovalsCount}
+                  </span>
+                ) : null}
                 {item.comingSoon ? (
                   <span className="bg-muted text-muted-foreground rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
                     Bientôt
