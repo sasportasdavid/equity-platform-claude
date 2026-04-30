@@ -165,6 +165,19 @@ apps/web/src/lib/supabase/database.types.ts`
 - Layout `/dev/layout.tsx` protège en production via
   `process.env.ENABLE_DEV_SANDBOX !== 'true'`
 
+### Convention permissions documents (Module 6)
+
+La spec `docs/MODULE_06_DOCUMENT_ENGINE.md` mentionne des
+permissions qui ne matchent PAS les noms réellement seedés en
+DB (préfigurées Module 1). Toujours utiliser le **nom DB** côté
+code (`requirePermission(...)`, `hasPermission(...)`) :
+
+| Spec                         | DB                             |
+| ---------------------------- | ------------------------------ |
+| `documents.generate`         | `documents.send_for_signature` |
+| `documents.cancel_signature` | `documents.void`               |
+| `documents.download`         | `documents.read`               |
+
 ### Variables env Yousign (Module 6 B3)
 
 Côté Next.js (`.env.local`) :
@@ -263,9 +276,28 @@ Events à activer côté Yousign : `signer_request.viewed`,
   - [x] B5 — E2E SQL validés + cleanup + closure module
         complete
 
+- [x] Module 6 — Document Engine + Yousign Signatures
+  - [x] B1 — Migrations 00033-00037 (extend documents tables + Storage bucket documents + 6 RPCs documents/
+        signatures + seed 3 templates V1 + extend
+        content_format CHECK)
+  - [x] B2 — 3 templates React PDF (BSPCE/AGA/SO) + 5 Server
+        Actions documents + compliance V1 (3 rules) + sandbox
+        /dev/document-engine + RPC load_award_document_context
+  - [x] B3 — Yousign V3 wrapper client (8 fns) + 3 Server
+        Actions (send/cancel/getStatus) + Edge Function
+        yousign-webhook deployée cloud (HMAC + 4 events +
+        idempotency + EdgeRuntime.waitUntil background)
+  - [x] B4 — UI documents intégrée page détail award (6e
+        onglet) : DocumentStatusBadge + 3 dialogs (Preview/
+        Send/Status) + AwardDocumentsTab + getDocumentsForAward
+  - [x] B5 — Hook auto-generate document quand award passe
+        APPROVED via workflow Module 5. Migration 00040 +
+        UI checkbox Step2 wizard + sandbox toggle.
+  - [x] B6 — Closure + récap E2E + merge PR #8 squash
+        complete
+
 ### À venir
 
-- [ ] Module 6 — Document Engine + Yousign
 - [ ] Module 7 — Notifications Resend
 - [ ] Module 8 — Beneficiary Portal
 - [ ] Module 9 — Exercise Workflow
