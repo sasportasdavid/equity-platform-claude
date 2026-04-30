@@ -205,8 +205,24 @@ Deno.serve(async (req) => {
 
       const yousignBase = Deno.env.get('YOUSIGN_API_BASE_URL') ?? '';
       const yousignKey = Deno.env.get('YOUSIGN_API_KEY') ?? '';
-      const documentId = payload.data.signature_request?.documents?.[0]?.id;
-      if (!documentId) return new Response('Missing document.id', { status: 400 });
+
+      // Yousign V3 webhook payload n'inclut PAS signature_request.documents
+      // (contrairement à ce qu'on supposait). Fetch via API.
+      let documentId = payload.data.signature_request?.documents?.[0]?.id;
+      if (!documentId) {
+        const docsRes = await fetch(`${yousignBase}/signature_requests/${sigRequestId}/documents`, {
+          headers: { Authorization: `Bearer ${yousignKey}` },
+        });
+        if (!docsRes.ok) {
+          throw new Error(`Yousign list documents failed: ${docsRes.status}`);
+        }
+        const docsJson = (await docsRes.json()) as
+          | Array<{ id: string }>
+          | { data?: Array<{ id: string }> };
+        const docs = Array.isArray(docsJson) ? docsJson : (docsJson.data ?? []);
+        documentId = docs[0]?.id;
+      }
+      if (!documentId) return new Response('No documents found for sig request', { status: 400 });
 
       // Download signed PDF
       const signedRes = await fetch(
