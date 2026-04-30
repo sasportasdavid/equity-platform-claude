@@ -216,10 +216,25 @@ apps/web/src/lib/supabase/database.types.ts`
         BSPCE_BENEFICIARY_TYPE_REVERSE) + closure module 4
         complete
 
+- [x] Module 5 — Approval Engine
+  - [x] B1 — Migrations 00029-00032 (extend approval\_\*
+        tables + nouvelle table approval_decisions + 4 RPCs +
+        seed approvals.attach + template approval_pending)
+  - [x] B2 — 13 Server Actions + hook transitionAward/
+        cancelAward avec flag skipApprovalHook +
+        compliance V1 (3 rules : WORKFLOW_REQUIRED_FOR_AGA,
+        NO_SELF_APPROVAL, WORKFLOW_HAS_VALID_STEPS) + sandbox
+  - [x] B3 — Page admin /dashboard/settings/approvals
+        (liste + édition workflow, max 10 steps UP/DOWN,
+        attach/detach plan)
+  - [x] B4 — Inbox /dashboard/approvals (2 tabs cards) +
+        page détail request (timeline color-coded) +
+        AwardApprovalCard + sidebar badge
+  - [x] B5 — E2E SQL validés + cleanup + closure module
+        complete
+
 ### À venir
 
-- [ ] Module 5 — Approval Engine (workflow multi-étapes
-      configurable)
 - [ ] Module 6 — Document Engine + Yousign
 - [ ] Module 7 — Notifications Resend
 - [ ] Module 8 — Beneficiary Portal
@@ -309,6 +324,31 @@ SET deleted_at = ...` rejeté en cleanup post-mortem.
     l'instant, cleanup admin doit passer par le client Supabase
     avec service_role ou via une Server Action `archiveBeneficiary`.
 
+13. **FK `approval_decisions.step_id` sans `ON DELETE CASCADE`**
+    (Module 5 B1) : empêche le cleanup direct via DELETE workflow
+    → cascade. Workaround : delete decisions d'abord. À fixer V2.
+
+14. **`runApprovalAwardComplianceChecks` pas branché dans
+    `transitionAward`** (Module 5 B2) : la rule
+    `WORKFLOW_REQUIRED_FOR_AGA` (soft warning AGA sans workflow)
+    reste dormante. Helper `checkAwardApprovalCompliance` exposé
+    mais pas appelé. À wire Module 12 (Compliance V2 configurable).
+
+15. **Pas de notifications email Module 5** : table `notifications`
+    populated en `IN_APP` PENDING par les RPCs `start_/evaluate_
+approval_workflow`. Module 7 (Resend) consommera ces rows pour
+    envoyer les emails approbateurs.
+
+16. **Pas de SLA / escalation auto Module 5** : colonnes
+    `sla_hours` + `auto_escalate_after_hours` + `escalate_to_user_id`
+    dans `approval_workflow_steps` (Module 1 préfiguré) mais non
+    exploitées V1. Reportées V2 (Module 12).
+
+17. **2 dummy memberships APPROVER** (Module 5 B1) : conservés
+    actifs en cloud sur les users `832762f1` (sasportasdavid+2)
+    et `7f56d666` (sasportasdavid+test) pour permettre les tests
+    E2E B2-B5. Cleanup possible si plus utiles.
+
 ## Sécurité
 
 - [x] Rotation clé Resend après leak dans .env.example (date: \_\_\_)
@@ -351,6 +391,21 @@ Si tu te demandes "comment faire X", chercher d'abord :
 - **Compliance rule async avec ctx pré-chargé** : voir
   `BSPCE_BENEFICIARY_TYPE_REVERSE` dans `beneficiaryRules.ts` —
   count chargé conditionnellement dans `runChecks.ts`
+- **Hook anti-récursion via flag** : voir `transitionAward(*,
+skipApprovalHook?: boolean)` dans
+  `apps/web/src/server/actions/awards.ts`. Le 2e call interne
+  (auto PROPOSED→PENDING_APPROVAL après workflow démarré, ou
+  reverts depuis approveDecision/cancelApprovalRequest) passe
+  `skipApprovalHook=true` pour éviter de re-déclencher le
+  workflow.
+- **Timeline visuelle color-coded + tests sans React** : voir
+  `apps/web/src/components/approvals/ApprovalRequestTimeline.tsx`
+  (5 statuts, animation pulse) + `timeline-helpers.ts`
+  (`computeStepStatus` extrait pour Vitest unitaires).
+- **Compteur badge sidebar SSR conditionnel** : voir
+  `apps/web/src/components/shared/dashboard-sidebar.tsx` +
+  layout SSR qui charge le count via permission gate (0 query
+  DB pour les users sans la perm).
 - **JSON diff viewer 2 colonnes** : voir
   `apps/web/src/components/shared/JsonDiffViewer.tsx`
 - **Discriminated union Zod par variant** : voir
