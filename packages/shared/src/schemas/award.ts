@@ -123,6 +123,14 @@ export const transitionAwardSchema = z.object({
   awardId: z.string().uuid(),
   toStatus: awardStatusSchema,
   reason: z.string().max(500).optional(),
+  /**
+   * Module 5 B2 — flag anti-récursion. Quand `transitionAward` est appelée
+   * depuis le hook approval (auto-transition PROPOSED→PENDING_APPROVAL ou
+   * depuis approveDecision/rejectDecision/cancelApprovalRequest), on
+   * positionne `skipApprovalHook=true` pour éviter de re-déclencher un
+   * `start_approval_workflow` qui boucle.
+   */
+  skipApprovalHook: z.boolean().optional(),
 });
 export type TransitionAwardInput = z.infer<typeof transitionAwardSchema>;
 
