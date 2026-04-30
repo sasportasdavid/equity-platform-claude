@@ -95,12 +95,31 @@ Deno.serve(async (req) => {
   }
 
   const rawBody = await req.text();
+  // Yousign V3 envoie le HMAC dans `X-Yousign-Signature-256` (sha256=<hex>).
+  // On garde le fallback sur l'ancien `x-yousign-signature` pour compat.
   const signatureHeader =
-    req.headers.get('x-yousign-signature') ?? req.headers.get('X-Yousign-Signature') ?? '';
+    req.headers.get('x-yousign-signature-256') ??
+    req.headers.get('X-Yousign-Signature-256') ??
+    req.headers.get('x-yousign-signature') ??
+    req.headers.get('X-Yousign-Signature') ??
+    '';
+
+  // Debug : log des headers Yousign si signature absente (utile pour diag config)
+  if (!signatureHeader) {
+    const yousignHeaders = Array.from(req.headers.entries())
+      .filter(([k]) => k.toLowerCase().startsWith('x-yousign'))
+      .map(([k, v]) => `${k}=${v.slice(0, 12)}…`)
+      .join(', ');
+    console.warn(
+      `[yousign-webhook] No HMAC signature header found. Yousign headers: ${yousignHeaders || 'NONE'}`,
+    );
+  }
 
   const isValid = await verifyHmac(rawBody, signatureHeader, webhookSecret);
   if (!isValid) {
-    console.warn('[yousign-webhook] Invalid HMAC signature');
+    console.warn(
+      `[yousign-webhook] Invalid HMAC signature (header_len=${signatureHeader.length}, body_len=${rawBody.length})`,
+    );
     return new Response('Invalid signature', { status: 401 });
   }
 
@@ -121,7 +140,13 @@ Deno.serve(async (req) => {
   );
 
   try {
-    if (eventName === 'signer_request.viewed') {
+    // Yousign V3 event names :
+    //   signer.link_opened       (was: signer_request.viewed)
+    //   signer.done              (was: signer_request.signed)
+    //   signer.declined          (was: signer_request.declined)
+    //   signature_request.done   (was: signature_request.completed)
+    //   signer.notified, signature_request.activated, etc. → ignored
+    if (eventName === 'signer.link_opened' || eventName === 'signer_request.viewed') {
       const signerId = payload.data.signer?.id;
       if (!signerId) return new Response('Missing signer.id', { status: 400 });
       const { error } = await supabase.rpc('update_signer_from_webhook', {
@@ -130,7 +155,7 @@ Deno.serve(async (req) => {
         p_metadata: { ip_address: payload.data.metadata?.ip_address ?? null },
       });
       if (error) throw error;
-    } else if (eventName === 'signer_request.signed') {
+    } else if (eventName === 'signer.done' || eventName === 'signer_request.signed') {
       const signerId = payload.data.signer?.id;
       if (!signerId) return new Response('Missing signer.id', { status: 400 });
       const { error } = await supabase.rpc('update_signer_from_webhook', {
@@ -143,7 +168,7 @@ Deno.serve(async (req) => {
         },
       });
       if (error) throw error;
-    } else if (eventName === 'signer_request.declined') {
+    } else if (eventName === 'signer.declined' || eventName === 'signer_request.declined') {
       const signerId = payload.data.signer?.id;
       if (!signerId) return new Response('Missing signer.id', { status: 400 });
       const { error } = await supabase.rpc('update_signer_from_webhook', {
@@ -152,7 +177,10 @@ Deno.serve(async (req) => {
         p_metadata: { reason: payload.data.signer?.decline_reason ?? null },
       });
       if (error) throw error;
-    } else if (eventName === 'signature_request.completed') {
+    } else if (
+      eventName === 'signature_request.done' ||
+      eventName === 'signature_request.completed'
+    ) {
       const sigRequestId = payload.data.signature_request?.id;
       if (!sigRequestId) return new Response('Missing signature_request.id', { status: 400 });
 
