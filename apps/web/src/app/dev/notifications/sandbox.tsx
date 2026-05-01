@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Eye, FileText, Mail, PlayCircle, Send, Zap } from 'lucide-react';
+import { Eye, FileText, Mail, PlayCircle, RefreshCw, Send, Zap } from 'lucide-react';
 import type { Module7TemplateCode } from '@equity/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,8 +12,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   insertManualNotification,
+  renderPendingNotificationsBatch,
   triggerNotificationConsumer,
 } from '@/server/actions/notifications';
+import type { NotificationStats } from '@/server/queries/notifications';
 
 type RenderResult =
   | { code: string; ok: true; subject: string; html: string; text: string }
@@ -30,11 +32,13 @@ const MODULE_7_CODES: Module7TemplateCode[] = [
 
 export function Sandbox({
   renders,
+  stats,
   orgId,
   currentUserId,
   currentUserEmail,
 }: {
   renders: RenderResult[];
+  stats: NotificationStats;
   orgId: string;
   currentUserId: string;
   currentUserEmail: string;
@@ -111,6 +115,18 @@ export function Sandbox({
     });
   }
 
+  function handleRenderOrphans() {
+    startTransition(async () => {
+      const res = await renderPendingNotificationsBatch({ batchSize: 50 });
+      if (res.ok) {
+        toast.success(`Rendered : ${res.filled} OK, ${res.failed} échec(s)`);
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  }
+
   return (
     <div className="container mx-auto space-y-6 p-6">
       <header>
@@ -120,6 +136,34 @@ export function Sandbox({
           via Trigger consumer.
         </p>
       </header>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <RefreshCw className="size-4" /> Stats J-7 + outils B5
+          </CardTitle>
+          <CardDescription>
+            Compteurs sur les 7 derniers jours, scope = organisation courante. Le bouton ”Render
+            orphan PENDING” fill subject/body sur les notifs insérées sans render (ex: Module 5 RPC
+            IN_APP).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+            <Stat label="Total" value={stats.totalLast7d} />
+            <Stat label="Pending" value={stats.pending} />
+            <Stat label="Sending" value={stats.sending} />
+            <Stat label="Sent" value={stats.sent} />
+            <Stat label="Delivered" value={stats.delivered} />
+            <Stat label="Failed" value={stats.failed} tone="destructive" />
+            <Stat label="Bounced" value={stats.bounced} tone="destructive" />
+            <Stat label="Complained" value={stats.complained} tone="destructive" />
+          </div>
+          <Button onClick={handleRenderOrphans} disabled={pending} variant="outline">
+            <RefreshCw className="mr-2 size-4" /> Render orphan PENDING (batch 50)
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -296,6 +340,28 @@ export function Sandbox({
           ) : null}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  tone = 'default',
+}: {
+  label: string;
+  value: number;
+  tone?: 'default' | 'destructive';
+}) {
+  return (
+    <div
+      className={
+        'rounded-md border px-3 py-2 ' +
+        (tone === 'destructive' ? 'border-red-200 bg-red-50' : 'bg-slate-50')
+      }
+    >
+      <p className="text-muted-foreground text-[11px]">{label}</p>
+      <p className="text-lg font-semibold">{value}</p>
     </div>
   );
 }
