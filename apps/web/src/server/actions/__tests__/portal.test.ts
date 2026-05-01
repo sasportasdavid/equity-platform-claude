@@ -475,3 +475,120 @@ describe('simulateLeaverScenario', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// updateBeneficiaryProfile — Module 8 B5
+// ---------------------------------------------------------------------------
+
+const VALID_UPDATE_INPUT = {
+  phone: undefined,
+  addressLine1: '5 avenue Foch',
+  addressLine2: '',
+  postalCode: '75116',
+  city: 'Paris',
+  country: 'FR',
+};
+
+describe('updateBeneficiaryProfile', () => {
+  beforeEach(() => {
+    // Add address fields on the beneficiary lookup so fields_changed compute works
+    mockState.beneLookup = {
+      data: {
+        id: TEST_BENE_ID,
+        org_id: TEST_ORG_ID,
+        first_name: 'Old',
+        last_name: 'Name',
+      },
+      error: null,
+    };
+    // Override avec un cast indirect pour passer les colonnes attendues par
+    // updateBeneficiaryProfile (qui select address_line_*, postal_code, city,
+    // country en plus de id/org_id).
+    (mockState.beneLookup.data as Record<string, unknown> | null) = {
+      ...(mockState.beneLookup.data ?? {}),
+      address_line_1: '1 rue de la République',
+      address_line_2: null,
+      postal_code: '75001',
+      city: 'Paris',
+      country: 'FR',
+    };
+  });
+
+  it('rejects when no beneficiary record', async () => {
+    mockState.beneLookup = { data: null, error: null };
+    const { updateBeneficiaryProfile } = await import('../portal');
+    const res = await updateBeneficiaryProfile(VALID_UPDATE_INPUT);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/Aucun bénéficiaire/i);
+  });
+
+  it('rejects bad postalCode (Zod min 2)', async () => {
+    const { updateBeneficiaryProfile } = await import('../portal');
+    const res = await updateBeneficiaryProfile({
+      ...VALID_UPDATE_INPUT,
+      postalCode: 'X',
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.validationIssues).toBeGreaterThan(0);
+  });
+
+  it('rejects invalid country (not 2 letters)', async () => {
+    const { updateBeneficiaryProfile } = await import('../portal');
+    const res = await updateBeneficiaryProfile({
+      ...VALID_UPDATE_INPUT,
+      country: 'France',
+    });
+    expect(res.ok).toBe(false);
+  });
+
+  it('happy path : returns ok=true with no phone update', async () => {
+    const { updateBeneficiaryProfile } = await import('../portal');
+    const res = await updateBeneficiaryProfile(VALID_UPDATE_INPUT);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.beneficiaryId).toBe(TEST_BENE_ID);
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it('calls update_beneficiary_self_phone RPC when phone provided (string)', async () => {
+    const { updateBeneficiaryProfile } = await import('../portal');
+    const res = await updateBeneficiaryProfile({
+      ...VALID_UPDATE_INPUT,
+      phone: '+33 6 11 22 33 44',
+    });
+    expect(res.ok).toBe(true);
+    expect(rpcMock).toHaveBeenCalledWith('update_beneficiary_self_phone', {
+      p_phone: '+33 6 11 22 33 44',
+    });
+  });
+
+  it('audit event fields_changed reflects address modifications', async () => {
+    const { updateBeneficiaryProfile } = await import('../portal');
+    await updateBeneficiaryProfile(VALID_UPDATE_INPUT);
+    const audit = auditMock.mock.calls.at(-1) as [Record<string, unknown>] | undefined;
+    expect(audit?.[0]?.eventType).toBe('beneficiary.profile_updated');
+    const meta = audit?.[0]?.metadata as { fields_changed: string[]; from_portal: boolean };
+    expect(meta.from_portal).toBe(true);
+    // address_line_1 + postal_code ont changé vs mockState.beneLookup
+    expect(meta.fields_changed).toContain('address_line_1');
+    expect(meta.fields_changed).toContain('postal_code');
+  });
+
+  it('returns RPC error when phone update fails', async () => {
+    mockState.rpcResult = { error: { message: 'encryption failed' } };
+    const { updateBeneficiaryProfile } = await import('../portal');
+    const res = await updateBeneficiaryProfile({
+      ...VALID_UPDATE_INPUT,
+      phone: '+33612345678',
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/téléphone échouée|encryption/i);
+  });
+
+  it('propagates DB update error', async () => {
+    mockState.beneUpdate = { error: { message: 'constraint X violated' } };
+    const { updateBeneficiaryProfile } = await import('../portal');
+    const res = await updateBeneficiaryProfile(VALID_UPDATE_INPUT);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/constraint/i);
+  });
+});

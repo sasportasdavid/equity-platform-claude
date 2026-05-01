@@ -6,6 +6,8 @@ import {
   completeBeneficiaryProfileSchema,
   type CompleteBeneficiaryProfileInput,
   type LeaverScenarioResult,
+  updateBeneficiaryProfileSchema,
+  type UpdateBeneficiaryProfileInput,
 } from '@equity/shared';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { logAuditEvent } from '@/lib/audit';
@@ -352,4 +354,101 @@ export async function simulateLeaverScenario(
   });
 
   return { ok: true, result };
+}
+
+// ---------------------------------------------------------------------------
+// updateBeneficiaryProfile — Module 8 B5 (§4.5 profile edit)
+// ---------------------------------------------------------------------------
+//
+// Update partiel du profil bénéficiaire depuis `/portal/profile`. Différent
+// de `completeBeneficiaryProfile` (B2 onboarding) :
+//   - Pas de `firstName` / `lastName` (read-only V1, modifiable côté admin)
+//   - Pas de redirect (UI gère la page)
+//   - Audit event 'beneficiary.profile_updated' (vs profile_completed pour
+//     B2 onboarding)
+//
+// Champs modifiables :
+//   - phone (chiffré via RPC `update_beneficiary_self_phone`)
+//   - address_line_1, address_line_2, postal_code, city, country
+//
+// `tax_residence_country` reste bloqué par trigger Module 4 (admin-only).
+
+export async function updateBeneficiaryProfile(
+  input: UpdateBeneficiaryProfileInput,
+): Promise<ActionOk<{ beneficiaryId: string }> | ActionError> {
+  const parsed = updateBeneficiaryProfileSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+  const data = parsed.data;
+
+  const user = await requireUser();
+  const admin = getSupabaseAdminClient();
+
+  // 1. Find own beneficiary
+  const { data: bene, error: findError } = await admin
+    .from('beneficiaries')
+    .select('id, org_id, address_line_1, address_line_2, postal_code, city, country')
+    .eq('user_id', user.id)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (findError) return { ok: false, error: findError.message };
+  if (!bene) return { ok: false, error: 'Aucun bénéficiaire associé à cet utilisateur' };
+
+  // 2. Compose patch (champs autorisés par trigger Module 4)
+  const phoneTrimmed = data.phone?.trim() ?? '';
+  const addr2 = data.addressLine2?.trim() ?? '';
+  const patch = {
+    address_line_1: data.addressLine1,
+    address_line_2: addr2 === '' ? null : addr2,
+    postal_code: data.postalCode,
+    city: data.city,
+    country: data.country,
+    updated_at: new Date().toISOString(),
+  };
+
+  // 3. Compute fields_changed pour audit (avant UPDATE)
+  const fieldsChanged: string[] = [];
+  if (bene.address_line_1 !== patch.address_line_1) fieldsChanged.push('address_line_1');
+  if ((bene.address_line_2 ?? null) !== patch.address_line_2) fieldsChanged.push('address_line_2');
+  if (bene.postal_code !== patch.postal_code) fieldsChanged.push('postal_code');
+  if (bene.city !== patch.city) fieldsChanged.push('city');
+  if (bene.country !== patch.country) fieldsChanged.push('country');
+
+  const { error: updateError } = await admin.from('beneficiaries').update(patch).eq('id', bene.id);
+
+  if (updateError) return { ok: false, error: updateError.message };
+
+  // 4. Update phone via RPC si fourni (encrypt_sensitive). Empty = clear.
+  if (data.phone !== undefined) {
+    const userSupabase = await createSupabaseServerClient();
+    const { error: rpcError } = await userSupabase.rpc('update_beneficiary_self_phone', {
+      p_phone: phoneTrimmed,
+    });
+    if (rpcError) {
+      return {
+        ok: false,
+        error: `Mise à jour du téléphone échouée : ${rpcError.message}`,
+      };
+    }
+    fieldsChanged.push('phone_encrypted');
+  }
+
+  // 5. Audit
+  await logAuditEvent({
+    eventType: 'beneficiary.profile_updated',
+    resourceType: 'BENEFICIARY',
+    resourceId: bene.id,
+    userId: user.id,
+    userEmail: user.email,
+    orgId: bene.org_id,
+    metadata: {
+      fields_changed: fieldsChanged,
+      from_portal: true,
+    },
+  });
+
+  revalidatePath('/portal/profile');
+  revalidatePath('/portal');
+
+  return { ok: true, beneficiaryId: bene.id };
 }
