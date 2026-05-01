@@ -576,7 +576,7 @@ async function recordDecisionInternal(
       .eq('id', result.request_id)
       .maybeSingle();
     if (req?.award_id) {
-      await transitionAward({
+      const transitionRes = await transitionAward({
         awardId: req.award_id,
         toStatus: result.next_award_status,
         reason:
@@ -585,6 +585,21 @@ async function recordDecisionInternal(
             : 'Approved by workflow',
         skipApprovalHook: true,
       });
+
+      // Diag temporaire (à retirer post-validation E2E PR #9 Bug #34) —
+      // si transitionAward continue d'échouer après le fix trigger Bug #35,
+      // ce log donne la stack trace exacte côté Next.js dev server stderr.
+      console.log('[DIAG #34] transitionAward result:', transitionRes);
+
+      // Bug #34 — Auparavant le résultat était ignoré → silent-success
+      // côté UI alors que l'award restait en PENDING_APPROVAL en DB. On
+      // propage l'erreur pour que l'admin voie le vrai message.
+      if (!transitionRes.ok) {
+        return {
+          ok: false,
+          error: `Award transition failed: ${transitionRes.error}`,
+        };
+      }
 
       // Hook B5 Module 6 : auto-generate document si plan opt-in.
       // Uniquement sur APPROVED final (pas sur REJECTED→DRAFT). Pas de
