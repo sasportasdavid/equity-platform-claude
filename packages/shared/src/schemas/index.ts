@@ -7,3 +7,4 @@ export * from './beneficiary';
 export * from './approval';
 export * from './document';
 export * from './notification';
+export * from './portal';
