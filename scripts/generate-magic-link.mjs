@@ -55,16 +55,22 @@ const admin = createClient(url, key, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-// IMPORTANT : on doit passer par /auth/callback?next=... (PKCE/OTP exchange)
-// au lieu de redirect direct vers la destination. Sans ça, le token Supabase
-// n'est jamais échangé contre une session cookie côté Next.js → proxy renvoie
-// sur /login. Cf. apps/web/src/app/auth/callback/route.ts.
-const callbackUrl = `${appUrl}/auth/callback?next=${encodeURIComponent(redirectPath)}`;
-
+// `admin.generateLink({type:'magiclink'})` retourne 2 choses utiles :
+//   - action_link : URL Supabase /verify qui pose la session via implicit flow
+//                   (tokens dans le fragment #access_token=...). Marche PAS
+//                   avec notre /auth/callback server-side (pas d'accès au
+//                   fragment côté serveur).
+//   - properties.hashed_token : token hashé qu'on peut passer à
+//                               supabase.auth.verifyOtp({type, token_hash})
+//                               côté serveur. C'est ce que fait notre
+//                               /auth/callback dans son flow OTP legacy
+//                               (fallback #2 dans route.ts).
+// On construit donc l'URL nous-mêmes pour pointer directement sur le
+// callback avec ?token_hash=... — bypass de l'/verify Supabase.
 const { data, error } = await admin.auth.admin.generateLink({
   type: 'magiclink',
   email,
-  options: { redirectTo: callbackUrl },
+  options: { redirectTo: `${appUrl}${redirectPath}` },
 });
 
 if (error) {
@@ -72,8 +78,15 @@ if (error) {
   process.exit(1);
 }
 
+const hashedToken = data?.properties?.hashed_token;
+if (!hashedToken) {
+  console.error('No hashed_token in response — Supabase API contract changed?');
+  process.exit(1);
+}
+
+const callbackUrl = `${appUrl}/auth/callback?token_hash=${encodeURIComponent(hashedToken)}&type=magiclink&next=${encodeURIComponent(redirectPath)}`;
+
 console.log('\n=== MAGIC LINK FOR', email, '===');
-console.log('callback →', callbackUrl);
 console.log('final dest →', `${appUrl}${redirectPath}`);
-console.log(data?.properties?.action_link ?? '(no action_link)');
+console.log(callbackUrl);
 console.log('===\n');
