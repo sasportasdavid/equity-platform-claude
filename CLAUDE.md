@@ -346,9 +346,32 @@ identiques + service_role injecté automatiquement.
         admin /dashboard/settings/notifications + sandbox extension
         stats + 8 tests Vitest
 
+- [x] Module 8 — Beneficiary Portal (PR #11 ready, branche
+      feat/module-8-portal)
+  - [x] B1 — DB + 3 RPCs portal SECURITY DEFINER
+        (get_beneficiary_portal_dashboard, get_award_portal_detail,
+        simulate_leaver_scenario) + RLS vesting_events idempotent +
+        3 permissions BENEFICIARY (migrations 00051-00053)
+  - [x] B2 — Onboarding 2 étapes (welcome + profile/setup) + layout
+        /portal/\* + 4 composants header/nav/footer/userMenu + Server
+        Action completeBeneficiaryProfile + RPC update_beneficiary_self_phone
+        encrypt (migration 00054) + 28 tests
+  - [x] B3 — Pages liste + détail (synthèse + vesting chart Recharts +
+        documents) + Server Action getPortalDocumentSignedUrl
+        ownership chain + 5 composants + helper buildVestingTimeline
+        avec fallback snapshot + 25 tests
+  - [x] B4 — Simulateur de départ (Section 3 page détail) + extend
+        RPC pour full_accelerate (migration 00055) + helper labels FR + 25 tests
+  - [x] B5 — Pages /portal/documents (liste globale + filter award) +
+        /portal/profile (ProfileEditForm read-only identity + editable
+        phone/address) + sandbox stats + Server Action
+        updateBeneficiaryProfile + 8 tests
+  - [x] Bonus — fix(proxy) /portal accessible sans active_org_id
+        (commit bec24e0) — débloque les bénéficiaires purs sans
+        membership ACTIVE. La layout /portal/\* fait son propre check.
+
 ### À venir
 
-- [ ] Module 8 — Beneficiary Portal
 - [ ] Module 9 — Exercise Workflow
 - [ ] Module 10 — Cap Table dynamique
 - [ ] Module 11 — IFRS 2 finalisation
@@ -533,6 +556,35 @@ Notable : #29 STATUSES_ALLOWING_GENERATE hard-codé,
 - #52 `provider_message_id` lookup Resend webhook (OR `resend_email_id`)
   deprecated V2 : quand Module 2 sendEmail sera réécrit pour utiliser
   le pattern queue Module 7, simplifier le OR lookup.
+
+53-80. **Dettes Module 8 (PR #11)** — voir
+`memory/module_8_b{2,3,4,5}_complete.md`. Notable :
+
+- #53 phone validation E.164 strict (V1 = regex permissive)
+- #54 38 pays hardcoded (V2 = lib `i18n-iso-countries`)
+- #57 tax_residence_country self-modifiable V2 via approval workflow
+- #62 enrichWithSnapshotVested = N+1 query (V2 RPC dédié si > 50 awards)
+- #63 pas de pagination /portal/awards
+- #64 performance conditions sans tracking (Module 11)
+- #66 pas de countdown TTL signed URL portal docs (5 min hardcoded)
+- #71 simulateur sans historique simulations (V2 history view)
+- #73 simulator no minDate/maxDate sur date input (V2 garde-fous)
+- #76 phone read-back impossible côté ProfileEditForm (V2 RPC déchiffre)
+- #78 no "renvoyer document" via portail (V2 email auto signed URL 24h)
+
+**Découverte E2E B5** : le proxy `/onboarding/create-org` redirigeait
+les bénéficiaires purs (BENEFICIARY uniquement, pas de membership
+ACTIVE → JWT sans `active_org_id`). Fix `bec24e0` : ajout `/portal` à
+`NO_ORG_ALLOWED_PREFIXES`. Ce bug n'apparaissait pas pour +2/+test
+(dummy memberships APPROVER, dette #17). Pour les futurs vrais
+bénéficiaires invités, le portail est maintenant accessible directement.
+
+**Dette parallèle découverte** : le `custom_access_token_hook` s'exécute
+correctement côté DB (vérifié via test SQL manuel) mais le JWT émis ne
+contient pas les claims `active_org_id` quand testé en E2E (Supabase
+quirk non investigué). Le fix proxy contourne le problème — pas
+bloquant V1, mais à creuser si d'autres claims sont essentiels au
+proxy.
 
 ## Sécurité
 
