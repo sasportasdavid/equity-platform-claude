@@ -586,11 +586,6 @@ async function recordDecisionInternal(
         skipApprovalHook: true,
       });
 
-      // Diag temporaire (à retirer post-validation E2E PR #9 Bug #34) —
-      // si transitionAward continue d'échouer après le fix trigger Bug #35,
-      // ce log donne la stack trace exacte côté Next.js dev server stderr.
-      console.log('[DIAG #34] transitionAward result:', transitionRes);
-
       // Bug #34 — Auparavant le résultat était ignoré → silent-success
       // côté UI alors que l'award restait en PENDING_APPROVAL en DB. On
       // propage l'erreur pour que l'admin voie le vrai message.
