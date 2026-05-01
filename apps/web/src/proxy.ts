@@ -52,7 +52,16 @@ function isNoOrgAllowed(pathname: string): boolean {
 }
 
 export async function proxy(request: NextRequest) {
-  const response = NextResponse.next({ request });
+  // On propage le pathname via header pour que les Server Components puissent
+  // y accéder via `headers()`. Utilisé par `app/portal/layout.tsx` pour
+  // distinguer les routes onboarding (welcome / profile/setup) des autres
+  // routes du portail.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-pathname', request.nextUrl.pathname);
+
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
