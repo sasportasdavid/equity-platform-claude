@@ -1,3 +1,4 @@
+import { requirePermission } from '@/lib/auth/rbac';
 import { renderEmailTemplate } from '@/lib/resend/render';
 import { MODULE_7_TEMPLATE_CODES } from '@/lib/resend/templates';
 import { Sandbox } from './sandbox';
@@ -6,15 +7,16 @@ import { SAMPLE_VARS } from './sample-vars';
 export const metadata = { title: 'Dev — Notifications' };
 
 /**
- * Sandbox /dev/notifications — Module 7 B2.
+ * Sandbox /dev/notifications — Module 7 B2 + B3.
  *
- * Pré-render les 6 templates Module 7 en parallèle côté Server Component
- * (avec SAMPLE_VARS factices), passe les HTML au Client Component pour
- * affichage iframe + extracts visuels (subject, plain text).
- *
- * Pas de send réel — c'est l'EF consumer (B3) qui le fera.
+ * B2 : pré-render des 6 templates V1 + preview iframe / plain text.
+ * B3 : Test send (insertManualNotification PENDING) + Trigger consumer
+ *      (bypass cron 1-min).
  */
 export default async function Page() {
+  const user = await requirePermission('notifications.send');
+  if (!user.activeOrgId) return null;
+
   const renders = await Promise.all(
     MODULE_7_TEMPLATE_CODES.map(async (code) => {
       try {
@@ -27,5 +29,12 @@ export default async function Page() {
     }),
   );
 
-  return <Sandbox renders={renders} />;
+  return (
+    <Sandbox
+      renders={renders}
+      orgId={user.activeOrgId}
+      currentUserId={user.id}
+      currentUserEmail={user.email ?? ''}
+    />
+  );
 }

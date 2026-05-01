@@ -1,27 +1,123 @@
 'use client';
 
-import { useState } from 'react';
-import { Eye, FileText, Mail } from 'lucide-react';
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { Eye, FileText, Mail, PlayCircle, Send, Zap } from 'lucide-react';
+import type { Module7TemplateCode } from '@equity/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  insertManualNotification,
+  triggerNotificationConsumer,
+} from '@/server/actions/notifications';
 
 type RenderResult =
   | { code: string; ok: true; subject: string; html: string; text: string }
   | { code: string; ok: false; error: string };
 
-export function Sandbox({ renders }: { renders: RenderResult[] }) {
+const MODULE_7_CODES: Module7TemplateCode[] = [
+  'approval_pending',
+  'approval_approved',
+  'approval_rejected',
+  'award_granted',
+  'team_member_invite',
+  'beneficiary_first_invite',
+];
+
+export function Sandbox({
+  renders,
+  orgId,
+  currentUserId,
+  currentUserEmail,
+}: {
+  renders: RenderResult[];
+  orgId: string;
+  currentUserId: string;
+  currentUserEmail: string;
+}) {
+  const router = useRouter();
   const [openCode, setOpenCode] = useState<string | null>(null);
   const [view, setView] = useState<'html' | 'text'>('html');
   const open = renders.find((r) => r.code === openCode);
 
+  // Test send form state
+  const [pending, startTransition] = useTransition();
+  const [sendCode, setSendCode] = useState<Module7TemplateCode>('approval_pending');
+  const [sendEmail, setSendEmail] = useState<string>(currentUserEmail);
+  const [sendVarsJson, setSendVarsJson] = useState<string>(() => {
+    const found = renders.find((r) => r.code === 'approval_pending');
+    return found && found.ok
+      ? JSON.stringify(
+          {
+            recipientName: 'Marie Dupont',
+            awardNumber: 'AWD-TEST-' + Date.now().toString().slice(-4),
+            awardUnits: 1500,
+            awardPlanType: 'BSPCE',
+            creatorName: 'Jean Martin',
+            appUrl: 'http://localhost:3000',
+            approvalUrl: 'http://localhost:3000/dashboard/approvals/test',
+          },
+          null,
+          2,
+        )
+      : '{}';
+  });
+  const [lastNotifId, setLastNotifId] = useState<string | null>(null);
+  const [lastConsumerResult, setLastConsumerResult] = useState<unknown>(null);
+
+  function handleSend() {
+    let variables: Record<string, unknown>;
+    try {
+      variables = JSON.parse(sendVarsJson);
+    } catch (err) {
+      toast.error('Variables JSON invalide : ' + (err as Error).message);
+      return;
+    }
+    startTransition(async () => {
+      const res = await insertManualNotification({
+        orgId,
+        templateCode: sendCode,
+        channel: 'EMAIL',
+        recipientEmail: sendEmail,
+        userId: currentUserId,
+        variables,
+      });
+      if (res.ok) {
+        toast.success(`Notif insérée PENDING (id=${res.notificationId.slice(0, 8)}…)`);
+        setLastNotifId(res.notificationId);
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  }
+
+  function handleTriggerConsumer() {
+    startTransition(async () => {
+      const res = await triggerNotificationConsumer();
+      if (res.ok) {
+        toast.success(
+          `Consumer : ${res.result.processed ?? 0} processed, ${res.result.succeeded ?? 0} OK, ${res.result.failed ?? 0} fail`,
+        );
+        setLastConsumerResult(res.result);
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  }
+
   return (
     <div className="container mx-auto space-y-6 p-6">
       <header>
-        <h1 className="text-2xl font-bold">Dev Sandbox — Notifications (Module 7 B2)</h1>
+        <h1 className="text-2xl font-bold">Dev Sandbox — Notifications (Module 7 B2 + B3)</h1>
         <p className="text-muted-foreground text-sm">
-          6 templates V1 react-email rendered avec SAMPLE_VARS factices. Click ”Preview” pour voir
-          le HTML rendu en iframe.
+          6 templates V1 + preview HTML/text + test send via Resend (queue PENDING) + bypass cron
+          via Trigger consumer.
         </p>
       </header>
 
@@ -113,6 +209,93 @@ export function Sandbox({ renders }: { renders: RenderResult[] }) {
           </CardContent>
         </Card>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Send className="size-4" /> Test send (B3 — queue PENDING)
+          </CardTitle>
+          <CardDescription>
+            Insère une notification PENDING via insertManualNotification. Le cron consumer-tick (1
+            min) ou le bouton ”Trigger consumer” en dessous va dépiler et envoyer via Resend.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="send-template" className="text-xs">
+                Template
+              </Label>
+              <select
+                id="send-template"
+                value={sendCode}
+                onChange={(e) => setSendCode(e.target.value as Module7TemplateCode)}
+                className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+              >
+                {MODULE_7_CODES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="send-email" className="text-xs">
+                Recipient email
+              </Label>
+              <Input
+                id="send-email"
+                type="email"
+                value={sendEmail}
+                onChange={(e) => setSendEmail(e.target.value)}
+                placeholder="vous@example.com"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="send-vars" className="text-xs">
+              Variables JSON (modifiable)
+            </Label>
+            <textarea
+              id="send-vars"
+              value={sendVarsJson}
+              onChange={(e) => setSendVarsJson(e.target.value)}
+              rows={10}
+              className="border-input bg-background w-full rounded-md border px-3 py-2 font-mono text-xs"
+            />
+          </div>
+          <Button onClick={handleSend} disabled={pending || !sendEmail}>
+            <Send className="mr-2 size-4" /> Insérer comme PENDING
+          </Button>
+          {lastNotifId ? (
+            <div className="text-muted-foreground text-xs">
+              Dernier notif id : <code className="font-mono">{lastNotifId}</code>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Zap className="size-4" /> Trigger consumer manually (bypass cron)
+          </CardTitle>
+          <CardDescription>
+            Invoke la EF notifications-consumer directement (skip le tick 1-min). Utile pour tester
+            immédiatement après une insertion PENDING.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Button onClick={handleTriggerConsumer} disabled={pending} variant="outline">
+            <PlayCircle className="mr-2 size-4" /> Trigger consumer now
+          </Button>
+          {lastConsumerResult ? (
+            <pre className="rounded-md border bg-slate-50 p-2 font-mono text-[11px] text-slate-800">
+              {JSON.stringify(lastConsumerResult, null, 2)}
+            </pre>
+          ) : null}
+        </CardContent>
+      </Card>
     </div>
   );
 }
