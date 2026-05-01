@@ -12,6 +12,8 @@
 
 // AwardStatus est ré-utilisé depuis les schemas (Module 3b — 16 valeurs).
 import type { AwardStatus } from '../schemas/award';
+// LeaverTreatment est ré-utilisé depuis les constants Module 3a (5 valeurs DB).
+import type { LeaverTreatment } from '../constants/plan-types';
 
 export type VestingEventStatus = 'PENDING' | 'VESTED' | 'FORFEITED' | 'CANCELLED';
 
@@ -147,4 +149,35 @@ export type AwardPortalDetail = {
   performance_conditions: PortalPerformanceCondition[] | null;
   vesting_schedule?: PortalVestingScheduleSnapshot | null;
   documents: PortalDocumentLink[] | null;
+};
+
+// ---------------------------------------------------------------------------
+// LeaverScenarioResult (RPC simulate_leaver_scenario, Module 8 B1 + B4)
+// ---------------------------------------------------------------------------
+
+/**
+ * 5 treatments existant en DB (réutilisé depuis Module 3a constants) :
+ *   - forfeit_all       : tout perdre (vested inclus)
+ *   - keep_vested       : garder le vested, perdre le reste
+ *   - pro_rata          : V1 alias keep_vested (pro_rata fin-de-période = V2)
+ *   - accelerate        : vested + tranches dans
+ *                         [termination_date, +acceleration_months]
+ *   - full_accelerate   : toutes les unités non acquises sont accélérées
+ *                         (cas company_sale / death généreux). Module 8 B4.
+ */
+
+export type LeaverScenarioResult = {
+  leaver_type: string;
+  termination_date: string;
+  treatment: LeaverTreatment;
+  units_granted: number;
+  units_already_vested: number;
+  units_accelerated: number;
+  units_forfeited: number;
+  units_total_after_leave: number;
+  exercise_window_days: number;
+  /** ISO date `YYYY-MM-DD`, NULL si plan non-option (AGA, RSU, …) */
+  exercise_deadline: string | null;
+  acceleration_months: number;
+  used_snapshot_fallback: boolean;
 };
