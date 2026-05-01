@@ -51,3 +51,33 @@ export const completeBeneficiaryProfileSchema = z.object({
 });
 
 export type CompleteBeneficiaryProfileInput = z.infer<typeof completeBeneficiaryProfileSchema>;
+
+/**
+ * Update partiel du profil bénéficiaire depuis `/portal/profile` (Module 8 B5).
+ *
+ * Différences avec `completeBeneficiaryProfileSchema` :
+ *   - Pas de `firstName` / `lastName` (read-only V1, modifiable côté admin
+ *     uniquement pour préserver l'identité contractuelle)
+ *   - Phone toujours optionnel
+ *   - Adresse + pays modifiables
+ *
+ * `tax_residence_country` n'est PAS dans le schéma (B2 décision : bloqué
+ * par trigger Module 4, admin-only).
+ */
+export const updateBeneficiaryProfileSchema = z.object({
+  phone: z
+    .string()
+    .max(30)
+    .optional()
+    .refine(
+      (val) => val === undefined || val.trim() === '' || phoneRegex.test(val.trim()),
+      'Numéro de téléphone invalide',
+    ),
+  addressLine1: z.string().min(1).max(200),
+  addressLine2: z.string().max(200).optional().or(z.literal('')),
+  postalCode: z.string().min(2).max(20),
+  city: z.string().min(1).max(100),
+  country: isoCountry,
+});
+
+export type UpdateBeneficiaryProfileInput = z.infer<typeof updateBeneficiaryProfileSchema>;

@@ -1,6 +1,7 @@
 import 'server-only';
 import type { AwardPortalDetail, PortalDashboardData } from '@equity/shared';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 
 /**
  * Module 8 B3 — Queries serveur du portail bénéficiaire.
@@ -78,4 +79,112 @@ export async function getAwardPortalDetail(awardId: string): Promise<AwardPortal
     throw new AwardPortalDetailError('Empty award detail payload', 'NOT_FOUND');
   }
   return data as unknown as AwardPortalDetail;
+}
+
+// ---------------------------------------------------------------------------
+// getBeneficiaryDocuments — Module 8 B5
+// ---------------------------------------------------------------------------
+
+/**
+ * Document SIGNED associé à un award du bénéficiaire courant. Inclut les
+ * infos de l'award/plan pour le filtre + display dans la liste portail.
+ */
+export type BeneficiaryDocumentSummary = {
+  id: string;
+  document_number: string | null;
+  category: string | null;
+  status: string;
+  signed_at: string | null;
+  has_signed_pdf: boolean;
+  award_id: string;
+  award_number: string;
+  plan_id: string;
+  plan_name: string;
+  plan_type: string;
+};
+
+/**
+ * Charge tous les `document_instances` SIGNED des awards du bénéficiaire
+ * courant (tous awards confondus).
+ *
+ * Pattern :
+ *   1. requireUser auth check (côté caller)
+ *   2. Find own beneficiary record (user_id = auth.uid())
+ *   3. Récupère les award_ids du bénéficiaire (defense in depth filter)
+ *   4. Récupère les document_instances SIGNED + signed_pdf_storage_path
+ *      non null + related_entity_type='AWARD' + related_entity_id IN
+ *      (award_ids du bénéficiaire)
+ *   5. Joint awards + plans pour le display + filter
+ *
+ * Sécurité : on filtre strictement sur les awards du bénéficiaire (pas
+ * juste sur l'org_id). Cohérent avec `getPortalDocumentSignedUrl` (B3).
+ *
+ * Retourne `[]` si l'utilisateur n'a pas de beneficiary record actif.
+ */
+export async function getBeneficiaryDocuments(): Promise<BeneficiaryDocumentSummary[]> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const admin = getSupabaseAdminClient();
+
+  // 1. Find own beneficiary
+  const { data: bene } = await admin
+    .from('beneficiaries')
+    .select('id')
+    .eq('user_id', user.id)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (!bene) return [];
+
+  // 2. Récupère les award_ids du bénéficiaire (peut être vide)
+  const { data: awards } = await admin
+    .from('awards')
+    .select('id, award_number, plan_id, plans:plan_id (name, plan_type)')
+    .eq('beneficiary_id', bene.id)
+    .is('deleted_at', null);
+  if (!awards || awards.length === 0) return [];
+
+  const awardIds = awards.map((a) => a.id);
+  const awardById = new Map(awards.map((a) => [a.id, a]));
+
+  // 3. Récupère les documents SIGNED de ces awards
+  const { data: docs, error } = await admin
+    .from('document_instances')
+    .select(
+      'id, document_number, category, status, signed_at, signed_pdf_storage_path, related_entity_id',
+    )
+    .eq('related_entity_type', 'AWARD')
+    .eq('status', 'SIGNED')
+    .in('related_entity_id', awardIds)
+    .not('signed_pdf_storage_path', 'is', null)
+    .order('signed_at', { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to load beneficiary documents: ${error.message}`);
+  }
+
+  return (docs ?? []).flatMap((d): BeneficiaryDocumentSummary[] => {
+    if (!d.related_entity_id) return [];
+    const award = awardById.get(d.related_entity_id);
+    if (!award) return [];
+    const plan = (award.plans ?? null) as { name: string; plan_type: string } | null;
+    return [
+      {
+        id: d.id,
+        document_number: d.document_number,
+        category: d.category,
+        status: d.status,
+        signed_at: d.signed_at,
+        has_signed_pdf: !!d.signed_pdf_storage_path,
+        award_id: award.id,
+        award_number: award.award_number ?? '—',
+        plan_id: award.plan_id,
+        plan_name: plan?.name ?? '—',
+        plan_type: plan?.plan_type ?? '—',
+      },
+    ];
+  });
 }
