@@ -409,6 +409,86 @@
   font-weight: 500;
 }
 
+/* === Animations Editorial Finance V1 (Étape 4 + 7) === */
+
+@keyframes pulse-live {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes marching-ants {
+  to {
+    background-position:
+      16px 0,
+      -16px 100%,
+      0 -16px,
+      100% 16px;
+  }
+}
+
+@keyframes draw-line {
+  from {
+    width: 0;
+  }
+  to {
+    width: 64px;
+  }
+}
+
+@keyframes halo-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(184, 134, 91, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(184, 134, 91, 0.05);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-pulse-live {
+  animation: pulse-live 2s var(--ease-ui) infinite;
+}
+.animate-marching-ants {
+  animation: marching-ants 12s linear infinite;
+}
+.animate-draw-line {
+  animation: draw-line 400ms var(--ease-enter) forwards;
+}
+.animate-halo-pulse {
+  animation: halo-pulse 4s var(--ease-ui) infinite;
+}
+.animate-fade-up {
+  animation: fade-up 300ms var(--ease-enter) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

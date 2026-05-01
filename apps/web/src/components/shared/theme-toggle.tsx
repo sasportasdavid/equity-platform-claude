@@ -27,6 +27,10 @@ export function ThemeToggle() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
+  // Pattern SSR-safe officiel next-themes : flag mounted=true au premier
+  // render client pour éviter mismatch hydration. Le warning React
+  // "setState in effect" est un faux-positif ici (mount-only).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
   if (!mounted) {
