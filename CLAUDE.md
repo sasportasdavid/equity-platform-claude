@@ -155,7 +155,12 @@ resource_type, resource_id, metadata })`.
   SQL pur avant de toucher au TS
 - Régénérer les types après chaque migration :
   `pnpm supabase gen types typescript --linked > 
-apps/web/src/lib/supabase/database.types.ts`
+packages/shared/src/types/database.ts`
+- ⚠️ Le fichier de types vit UNIQUEMENT dans `@equity/shared` (single
+  source). Les 3 clients Supabase (`apps/web/src/lib/supabase/{client,server,admin}.ts`)
+  importent `Database` depuis `@equity/shared`. Le fichier
+  `apps/web/src/lib/supabase/database.types.ts` a été supprimé en
+  PR #9 (était dead code, jamais importé — fix dette #44).
 
 ### Sandbox /dev/\*
 
@@ -618,3 +623,16 @@ Conserver le client cookie-based pour les RPC qui ont besoin
 de auth.uid() (audit, RLS).
 
 Référence : Module 4 B5 — bug fix `624f939`
+
+2026-04-30 — Milestone :
+
+Module 6 mergé sur master (commit 9310819).
+Pipeline E2E complet validé via UI :
+DRAFT → PROPOSED → PENDING_APPROVAL → APPROVED → PDF GENERATED
+→ SENT_FOR_SIGNATURE → SIGNED (via Yousign V3 webhook) → GRANTED.
+
+PR #9 (en cours) :
+
+- P0 (Bug #34 + #35) ✅ validé E2E via UI
+- P1/P2 en cours
+- Merge ETA : J+1
