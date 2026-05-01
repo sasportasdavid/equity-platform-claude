@@ -238,3 +238,44 @@ export async function cancelPendingNotification(input: unknown): Promise<ActionV
 
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// 5. triggerNotificationConsumer — bypass cron pour les tests (sandbox)
+// ---------------------------------------------------------------------------
+
+type ConsumerResponse = {
+  ok: boolean;
+  processed?: number;
+  succeeded?: number;
+  failed?: number;
+  duration_ms?: number;
+  error?: string;
+};
+
+/**
+ * Bypass le cron 1-min : invoke directement l'EF notifications-consumer
+ * via le client admin (service_role). Utilisé par la sandbox /dev pour
+ * tester le flow sans attendre.
+ *
+ * Permission `notifications.send` requise (admin only).
+ */
+export async function triggerNotificationConsumer(): Promise<
+  ActionOk<{ result: ConsumerResponse }> | ActionError
+> {
+  const user = await requirePermission('notifications.send');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const admin = getSupabaseAdminClient();
+  const { data, error } = await admin.functions.invoke<ConsumerResponse>('notifications-consumer', {
+    body: { trigger: 'manual', triggered_by: user.id },
+  });
+
+  if (error) {
+    return { ok: false, error: `EF invoke failed: ${error.message}` };
+  }
+  if (!data) {
+    return { ok: false, error: 'EF returned no body' };
+  }
+
+  return { ok: true, result: data };
+}
