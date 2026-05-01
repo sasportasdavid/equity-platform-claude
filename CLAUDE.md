@@ -301,6 +301,16 @@ Events à activer côté Yousign : `signer_request.viewed`,
   - [x] B6 — Closure + récap E2E + merge PR #8 squash
         complete
 
+- [x] PR #9 — Bug fixes E2E (Module 5+6 dette résolue)
+  - [x] Bug #34 P0 — propage erreurs transitionAward
+  - [x] Bug #35 P0 — migration 00041 trigger ownership-based
+  - [x] Bug #36 P1 — formatNumber tests Vitest verrouillent U+00A0
+  - [x] Bug #31 P2 — migration 00042 RPC idempotency
+  - [x] Bug #44 P1 — supprime apps/web/database.types.ts dead code
+  - [x] Bug #45 P2 — @vitejs/plugin-react + revert dynamic import
+  - [x] Bonus : scripts/generate-magic-link.mjs pour futurs E2E
+  - Mergé sur master via squash (commit `d8bdab1`)
+
 ### À venir
 
 - [ ] Module 7 — Notifications Resend
@@ -423,49 +433,40 @@ approval_workflow`. Module 7 (Resend) consommera ces rows pour
 Notable : #29 STATUSES_ALLOWING_GENERATE hard-codé,
 #28 pas de "Voir Yousign Dashboard" link.
 
-44. **Doublon de types Supabase** (Module 6 B5) :
-    `apps/web/src/lib/supabase/database.types.ts` et
-    `packages/shared/src/types/database.ts` sont 2 copies du
-    même fichier généré par `supabase gen types`. Server client
-    importe depuis `@equity/shared`, donc une seule génération
-    ne suffit pas — il faut copier MANUELLEMENT le fichier dans
-    le shared package après chaque migration. À consolider en
-    V2 : ne garder qu'une seule source dans `packages/shared`
-    - re-export dans apps/web.
+31-45. **Dettes E2E Module 5+6 (session 2026-04-30) — STATUT POST-PR9** :
 
-45. **Vitest sans plugin React JSX** (Module 6 B5) :
-    `approvals.ts` doit utiliser `await import('./documents')`
-    pour éviter le transform Vitest qui plante sur le JSX de
-    `pdf/render.tsx`. À résoudre en V2 : (a) ajouter
-    `@vitejs/plugin-react` à vitest config, ou (b) extraire
-    `generateAwardDocument` core (sans render PDF) dans un
-    helper pure-TS importable. Pour l'instant, dynamic import
-    = workaround acceptable.
-
-31-43. **Dettes E2E Module 5+6 (session 2026-04-30)** : - #31 bouton "Proposer" sans guard double-clic crée 2
-approval_requests - #32 notifications PENDING orphelines après cancel - #33 hook `custom_access_token_hook` doit être enrolled
-manuellement dans Supabase Dashboard (sinon JWT n'a pas
-`active_org_id`/`active_roles`) - #34 `approveDecision` Server Action throws "Failed to
-fetch" côté UI (workaround : RPC SQL direct) - #35 trigger `enforce_award_beneficiary_update` bloque
-INSERT audit_events RLS sans JWT context - #36 (closed) `formatNumber` rendait `1/200` (U+202F glyph
-absent Helvetica) → fix `b7ad3e8` normalize → U+00A0 - #37 (closed) Yousign V3 rejette `expiration_date` ISO avec
-millisecondes → fix `5643e5b` use `YYYY-MM-DD` - #38 (closed) Yousign V3 rejette `fields[0].page = -1`
-(`>=1` requis) → fix `5643e5b` `page: 1` (mono-page V1) - #39 (closed) Yousign V3 webhook header
-`x-yousign-signature-256` (pas `-signature`) + event names
-`signer.done`/`signature_request.done` → fix `6a11862` - #40 form login Capiwise n'envoie pas magic link aux users
-sans row `user_profiles` (silent return) → fix avec INSERT
-user_profiles + dette ouvert pour ajouter trigger AFTER
-INSERT auth.users - #41 pas de mécanisme replay webhook Yousign si Dashboard
-mal configuré au moment de l'envoi (workaround : Yousign
-Dashboard Replay button OU script CLI à créer) - #42 (closed) Yousign V3 webhook payload n'inclut pas
-`signature_request.documents[]` → fetch via API
-`GET /signature_requests/{id}/documents` (fix EF v5
-commit `3f91eb9`) - #43 (closed) `signature_request.done` handler timeout
-côté Yousign Dashboard (5 s) car processing sync (4 HTTP
-calls + 2 uploads ≈ 2-10 s) → fix EF v6 :
-ack 200 immédiat puis processing en background via
-`EdgeRuntime.waitUntil()`. Idempotence préservée par
-pré-check `status === 'COMPLETED'` (Yousign retry safe).
+- #31 (closed PR #9) double-clic Proposer → migration 00042 idempotency
+- #32 notifications PENDING orphelines après cancel — non bloquant
+- #33 hook `custom_access_token_hook` doit être enrolled
+  manuellement dans Supabase Dashboard — doc only
+- #34 (closed PR #9) approveDecision Failed to fetch → propagation
+  erreur transitionAward (commit `e71259e` pré-squash, intégré dans `d8bdab1`)
+- #35 (closed PR #9) trigger enforce_award_beneficiary_update →
+  ownership-based check au lieu de whitelist (migration 00041)
+- #36 (closed) `formatNumber` rendait `1/200` (U+202F glyph absent
+  Helvetica) → fix `b7ad3e8` (Module 6) + tests Vitest verrouillés PR #9
+- #37 (closed) Yousign V3 rejette `expiration_date` ISO avec ms
+  → fix `5643e5b` use `YYYY-MM-DD`
+- #38 (closed) Yousign V3 rejette `fields[0].page = -1` (>=1 requis)
+  → fix `5643e5b` page=1 (mono-page V1)
+- #39 (closed) Yousign V3 webhook header `x-yousign-signature-256`
+  (pas `-signature`) + event names `signer.done`/`signature_request.done`
+  → fix `6a11862`
+- #40 form login Capiwise n'envoie pas magic link aux users sans
+  row `user_profiles` (silent return) → workaround INSERT user_profiles.
+  Dette ouverte : ajouter trigger AFTER INSERT auth.users
+- #41 pas de mécanisme replay webhook Yousign si Dashboard
+  mal configuré au moment de l'envoi (workaround : Yousign Dashboard
+  Replay button OU script CLI à créer)
+- #42 (closed) Yousign V3 webhook payload n'inclut pas
+  `signature_request.documents[]` → fetch via API (fix EF v5 `3f91eb9`)
+- #43 (closed) `signature_request.done` handler timeout côté
+  Yousign Dashboard (5 s) → fix EF v6 ack 200 immédiat +
+  `EdgeRuntime.waitUntil()` (commit `db00559`)
+- #44 (closed PR #9) doublon types Supabase apps/web ↔ shared →
+  apps/web copy supprimée (était dead code, jamais importée)
+- #45 (closed PR #9) Vitest sans plugin React JSX →
+  `@vitejs/plugin-react` installé + revert dynamic import workaround
 
 ## Sécurité
 
@@ -485,6 +486,19 @@ pré-check `status === 'COMPLETED'` (Yousign retry safe).
 > `signer_request.signed` (V2) → `signer.done` (V3). Pattern
 > de fix : OR-conditions sur les 2 nommages + log diagnostic
 > (header_len, listing des x-vendor-\* headers reçus).
+
+> **GENERATED ALWAYS columns dans BEFORE triggers** : leur
+> `NEW.value` est NULL (pas la valeur recalculée — Postgres calcule
+> seulement APRÈS le BEFORE trigger). Si on les compare à OLD via
+> `IS DISTINCT FROM`, le résultat est TOUJOURS TRUE → faux-positif
+> qui fait raise le trigger sur des UPDATE qui ne touchent pas le
+> champ. À EXCLURE des checks de delta sur les triggers BEFORE.
+> Cf. PR #9 Bug #35 (`enforce_award_beneficiary_update`) qui
+> enregistrait `units_outstanding`/`total_fair_value` (générés)
+> dans sa blacklist → empêchait les bénéficiaires de set
+> `accepted_at` malgré la logique correcte. Solution : retirer
+> les colonnes générées de la liste, ce sont de toute façon des
+> calculs côté DB non user-modifiables.
 
 > **Webhooks externes — temps de réponse** : la plupart des
 > providers (Stripe, Yousign, etc.) timeout à 5-10 s. Si le
