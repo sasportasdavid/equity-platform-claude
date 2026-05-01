@@ -4,125 +4,409 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
-
 /*
-  Capiwise theme — finance/equity SaaS
-  Primary  : Indigo 800 (#3730a3) — confiance, sérieux
-  Accent   : Emerald 600 (#059669) — croissance, gains
-  Neutral  : Slate (subtle blue tint, lisibilité chiffres)
-  Charts   : indigo, emerald, amber, sky, rose
+  Capiwise theme — Editorial Finance V1 (Design System V1, mai 2026)
+
+  Palette signature :
+    Paper   crème papier        #FAF8F3 (jour)  → Midnight #0E1525 (nuit)
+    Ink     bleu nuit           #0B1838
+    Brass   cuivre/laiton       #B8865B (accent éditorial)
+    Bond    vert obligation     #0F6B47 (succès)
+    Title   rouge éditorial     #A23131 (danger)
+    Saffron jaune ocre          #A8801E (warning / pending)
+    Slate   gris bleu           #4A5775 (info / neutre)
+
+  Typographie :
+    Serif  Fraunces  → titres éditoriaux, citations italic
+    Sans   Inter     → corps, navigation, labels
+    Mono   JetBrains → tous les chiffres financiers (tabular-nums)
 */
 
-:root {
-  --background: oklch(0.99 0.003 240);
-  --foreground: oklch(0.21 0.034 264);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.034 264);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.034 264);
-  --primary: oklch(0.42 0.16 269);
-  --primary-foreground: oklch(0.985 0.005 250);
-  --secondary: oklch(0.965 0.01 240);
-  --secondary-foreground: oklch(0.28 0.04 264);
-  --muted: oklch(0.965 0.01 240);
-  --muted-foreground: oklch(0.52 0.025 257);
-  --accent: oklch(0.94 0.04 162);
-  --accent-foreground: oklch(0.34 0.11 162);
-  --destructive: oklch(0.58 0.22 25);
-  --border: oklch(0.92 0.01 247);
-  --input: oklch(0.92 0.01 247);
-  --ring: oklch(0.42 0.16 269);
-  --chart-1: oklch(0.55 0.2 269); /* indigo brand */
-  --chart-2: oklch(0.66 0.16 162); /* emerald positive */
-  --chart-3: oklch(0.78 0.15 75); /* amber pending */
-  --chart-4: oklch(0.7 0.13 220); /* sky info */
-  --chart-5: oklch(0.62 0.2 15); /* rose alert */
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0.005 240);
-  --sidebar-foreground: oklch(0.21 0.034 264);
-  --sidebar-primary: oklch(0.42 0.16 269);
-  --sidebar-primary-foreground: oklch(0.985 0.005 250);
-  --sidebar-accent: oklch(0.94 0.04 162);
-  --sidebar-accent-foreground: oklch(0.34 0.11 162);
-  --sidebar-border: oklch(0.92 0.01 247);
-  --sidebar-ring: oklch(0.42 0.16 269);
+@theme inline {
+  /* === Editorial Finance — palette explicite === */
+
+  /* Paper backgrounds */
+  --color-paper-50: var(--paper-50);
+  --color-paper-100: var(--paper-100);
+  --color-paper-200: var(--paper-200);
+  --color-paper-300: var(--paper-300);
+
+  /* Ink (texte et bleu nuit) */
+  --color-ink-900: var(--ink-900);
+  --color-ink-800: var(--ink-800);
+  --color-ink-700: var(--ink-700);
+  --color-ink-500: var(--ink-500);
+  --color-ink-400: var(--ink-400);
+  --color-ink-300: var(--ink-300);
+
+  /* Brass (cuivre / laiton — accent signature) */
+  --color-brass-50: var(--brass-50);
+  --color-brass-100: var(--brass-100);
+  --color-brass-300: var(--brass-300);
+  --color-brass-500: var(--brass-500);
+  --color-brass-700: var(--brass-700);
+  --color-brass-900: var(--brass-900);
+
+  /* Bond (vert obligation — succès) */
+  --color-bond-50: var(--bond-50);
+  --color-bond-100: var(--bond-100);
+  --color-bond-300: var(--bond-300);
+  --color-bond-500: var(--bond-500);
+  --color-bond-700: var(--bond-700);
+  --color-bond-900: var(--bond-900);
+
+  /* Title (rouge éditorial — danger) */
+  --color-title-50: var(--title-50);
+  --color-title-100: var(--title-100);
+  --color-title-300: var(--title-300);
+  --color-title-500: var(--title-500);
+  --color-title-700: var(--title-700);
+  --color-title-900: var(--title-900);
+
+  /* Saffron (warning / pending) */
+  --color-saffron-50: var(--saffron-50);
+  --color-saffron-100: var(--saffron-100);
+  --color-saffron-300: var(--saffron-300);
+  --color-saffron-500: var(--saffron-500);
+  --color-saffron-700: var(--saffron-700);
+
+  /* Slate (info / neutre) */
+  --color-slate-50: var(--slate-50);
+  --color-slate-100: var(--slate-100);
+  --color-slate-300: var(--slate-300);
+  --color-slate-500: var(--slate-500);
+  --color-slate-700: var(--slate-700);
+
+  /* === shadcn aliases — compat backward (mappés sur Editorial Finance) === */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* === Fonts (next/font dans layout.tsx) === */
+  --font-serif: var(--font-fraunces);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-heading: var(--font-fraunces);
+
+  /* === Radius — élégance discrète === */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+
+  /* === Shadows (warm gray, jamais cool) === */
+  --shadow-xs: 0 1px 2px 0 rgba(11, 24, 56, 0.04);
+  --shadow-sm: 0 2px 4px -1px rgba(11, 24, 56, 0.06), 0 1px 2px -1px rgba(11, 24, 56, 0.04);
+  --shadow-md: 0 4px 8px -2px rgba(11, 24, 56, 0.08), 0 2px 4px -2px rgba(11, 24, 56, 0.04);
+  --shadow-lg: 0 12px 24px -6px rgba(11, 24, 56, 0.1), 0 4px 8px -4px rgba(11, 24, 56, 0.06);
+  --shadow-brass: 0 6px 16px -4px rgba(184, 134, 91, 0.25), 0 2px 4px -2px rgba(184, 134, 91, 0.15);
+
+  /* === Motion === */
+  --ease-ui: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.7, 0, 0.84, 0);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
 }
 
+/* === Mode jour ("Paper") === */
+:root {
+  /* Editorial Finance — palette de base */
+  --paper-50: #fdfbf6;
+  --paper-100: #faf8f3;
+  --paper-200: #f2eee5;
+  --paper-300: #e8e1d2;
+
+  --ink-900: #0b1838;
+  --ink-800: #1a2851;
+  --ink-700: #2c3a66;
+  --ink-500: #5b6788;
+  --ink-400: #8590ad;
+  --ink-300: #b5bcd0;
+
+  --brass-50: #faf4ec;
+  --brass-100: #f1e2c9;
+  --brass-300: #dbb789;
+  --brass-500: #b8865b;
+  --brass-700: #8c5f36;
+  --brass-900: #5a3a1f;
+
+  --bond-50: #eaf3ee;
+  --bond-100: #c9e1d2;
+  --bond-300: #6faf89;
+  --bond-500: #0f6b47;
+  --bond-700: #094b30;
+  --bond-900: #062e1d;
+
+  --title-50: #f8ecec;
+  --title-100: #ecc9c9;
+  --title-300: #c97373;
+  --title-500: #a23131;
+  --title-700: #761e1e;
+  --title-900: #4a1010;
+
+  --saffron-50: #fbf2dd;
+  --saffron-100: #f4dfa0;
+  --saffron-300: #ddb14a;
+  --saffron-500: #a8801e;
+  --saffron-700: #74570f;
+
+  --slate-50: #eef1f6;
+  --slate-100: #d6dce7;
+  --slate-300: #8693ab;
+  --slate-500: #4a5775;
+  --slate-700: #2e3950;
+
+  /* shadcn variables remappées sur Editorial Finance */
+  --background: var(--paper-100);
+  --foreground: var(--ink-900);
+  --card: var(--paper-50);
+  --card-foreground: var(--ink-900);
+  --popover: var(--paper-50);
+  --popover-foreground: var(--ink-900);
+  --primary: var(--brass-500);
+  --primary-foreground: var(--paper-50);
+  --secondary: var(--paper-200);
+  --secondary-foreground: var(--ink-700);
+  --muted: var(--paper-200);
+  --muted-foreground: var(--ink-500);
+  --accent: var(--brass-100);
+  --accent-foreground: var(--brass-700);
+  --destructive: var(--title-500);
+  --border: var(--paper-300);
+  --input: var(--paper-300);
+  --ring: var(--brass-500);
+
+  /* Charts (5 séries éditoriales) */
+  --chart-1: var(--brass-500);
+  --chart-2: var(--bond-500);
+  --chart-3: var(--saffron-500);
+  --chart-4: var(--ink-700);
+  --chart-5: var(--slate-500);
+
+  /* Sidebar */
+  --sidebar: var(--paper-50);
+  --sidebar-foreground: var(--ink-900);
+  --sidebar-primary: var(--brass-500);
+  --sidebar-primary-foreground: var(--paper-50);
+  --sidebar-accent: var(--paper-200);
+  --sidebar-accent-foreground: var(--ink-900);
+  --sidebar-border: var(--paper-300);
+  --sidebar-ring: var(--brass-500);
+
+  --radius: 0.4rem; /* 6.4px — radius-md cible */
+}
+
+/* === Mode sombre ("Midnight") — pas un invert === */
 .dark {
-  --background: oklch(0.18 0.02 250);
-  --foreground: oklch(0.97 0.005 240);
-  --card: oklch(0.23 0.025 252);
-  --card-foreground: oklch(0.97 0.005 240);
-  --popover: oklch(0.23 0.025 252);
-  --popover-foreground: oklch(0.97 0.005 240);
-  --primary: oklch(0.7 0.16 269);
-  --primary-foreground: oklch(0.18 0.02 250);
-  --secondary: oklch(0.28 0.025 252);
-  --secondary-foreground: oklch(0.97 0.005 240);
-  --muted: oklch(0.28 0.025 252);
-  --muted-foreground: oklch(0.7 0.02 252);
-  --accent: oklch(0.32 0.07 162);
-  --accent-foreground: oklch(0.85 0.13 162);
-  --destructive: oklch(0.7 0.2 22);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.7 0.16 269);
-  --chart-1: oklch(0.7 0.18 269);
-  --chart-2: oklch(0.78 0.15 162);
-  --chart-3: oklch(0.82 0.14 75);
-  --chart-4: oklch(0.75 0.12 220);
-  --chart-5: oklch(0.7 0.18 15);
-  --sidebar: oklch(0.21 0.022 252);
-  --sidebar-foreground: oklch(0.97 0.005 240);
-  --sidebar-primary: oklch(0.7 0.16 269);
-  --sidebar-primary-foreground: oklch(0.18 0.02 250);
-  --sidebar-accent: oklch(0.32 0.07 162);
-  --sidebar-accent-foreground: oklch(0.85 0.13 162);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.7 0.16 269);
+  --paper-50: #131b30;
+  --paper-100: #0e1525;
+  --paper-200: #0a1020;
+  --paper-300: #1f2940;
+
+  --ink-900: #f0ead8;
+  --ink-800: #dcd2bc;
+  --ink-700: #b5ac97;
+  --ink-500: #8a8474;
+  --ink-400: #5c5749;
+  --ink-300: #3a3628;
+
+  --brass-50: #2a1d10;
+  --brass-100: #3d2c19;
+  --brass-300: #8c5f36;
+  --brass-500: #d4a06a;
+  --brass-700: #b8865b;
+  --brass-900: #e5c193;
+
+  --bond-50: #0a1f15;
+  --bond-100: #103122;
+  --bond-300: #1f6b48;
+  --bond-500: #4fb58a;
+  --bond-700: #6fc8a5;
+
+  --title-50: #2a0f0f;
+  --title-100: #401818;
+  --title-300: #a23131;
+  --title-500: #e26a6a;
+  --title-700: #ec9090;
+
+  --saffron-50: #2a1f0a;
+  --saffron-100: #3e2e10;
+  --saffron-300: #a8801e;
+  --saffron-500: #e5b84f;
+  --saffron-700: #f0d080;
+
+  --slate-50: #1a1f2c;
+  --slate-100: #232a3c;
+  --slate-300: #4a5775;
+  --slate-500: #8693ab;
+  --slate-700: #b5bcd0;
+
+  /* shadcn aliases dark */
+  --background: var(--paper-100);
+  --foreground: var(--ink-900);
+  --card: var(--paper-50);
+  --card-foreground: var(--ink-900);
+  --popover: var(--paper-50);
+  --popover-foreground: var(--ink-900);
+  --primary: var(--brass-500);
+  --primary-foreground: var(--paper-100);
+  --secondary: var(--paper-200);
+  --secondary-foreground: var(--ink-800);
+  --muted: var(--paper-200);
+  --muted-foreground: var(--ink-500);
+  --accent: var(--paper-300);
+  --accent-foreground: var(--brass-500);
+  --destructive: var(--title-500);
+  --border: var(--paper-300);
+  --input: var(--paper-300);
+  --ring: var(--brass-500);
+
+  --chart-1: var(--brass-500);
+  --chart-2: var(--bond-500);
+  --chart-3: var(--saffron-500);
+  --chart-4: var(--ink-700);
+  --chart-5: var(--slate-500);
+
+  --sidebar: var(--paper-50);
+  --sidebar-foreground: var(--ink-900);
+  --sidebar-primary: var(--brass-500);
+  --sidebar-primary-foreground: var(--paper-100);
+  --sidebar-accent: var(--paper-200);
+  --sidebar-accent-foreground: var(--ink-800);
+  --sidebar-border: var(--paper-300);
+  --sidebar-ring: var(--brass-500);
+
+  /* Shadows mode sombre : ring subtle au lieu de drop shadow */
+  --shadow-md: 0 0 0 1px rgba(240, 234, 216, 0.08), 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 0 0 1px rgba(240, 234, 216, 0.1), 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* === Utilitaires custom Editorial Finance === */
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+@utility text-display {
+  font-family: var(--font-serif);
+  font-size: 48px;
+  line-height: 1.05;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+@utility text-h1 {
+  font-family: var(--font-serif);
+  font-size: 32px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+@utility text-h2 {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  line-height: 1.25;
+  font-weight: 500;
+}
+
+@utility text-h3 {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 500;
+}
+
+@utility text-overline {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+@utility text-caption {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+@utility text-numeric-xl {
+  font-family: var(--font-mono);
+  font-size: 36px;
+  line-height: 1;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  letter-spacing: -0.02em;
+}
+
+@utility text-numeric-lg {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+@utility text-numeric-md {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 1.2;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+@utility text-numeric-sm {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+@utility serif-italic {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 500;
 }
 
 @layer base {
