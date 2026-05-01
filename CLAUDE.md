@@ -213,6 +213,20 @@ Events à activer côté Yousign : `signer_request.viewed`,
 `signer_request.signed`, `signer_request.declined`,
 `signature_request.completed`.
 
+### Variables env Resend (Module 7 B2)
+
+Côté Next.js (`.env.local`) :
+
+- `RESEND_API_KEY` — clé Resend Dashboard → API Keys
+- `RESEND_FROM_EMAIL` — adresse expéditeur (domaine vérifié Resend),
+  ex `no-reply@capiwise.fr`
+- `RESEND_FROM_NAME` — nom affiché, ex `Capiwise`
+- `RESEND_REPLY_TO` — adresse Reply-To (optional, fallback = from)
+- `RESEND_WEBHOOK_SECRET` — HMAC svix shared secret (B4 webhook)
+
+Côté Edge Function `notifications-consumer` (Supabase secrets, B3) :
+identiques + service_role injecté automatiquement.
+
 ## État actuel
 
 ### Modules livrés
