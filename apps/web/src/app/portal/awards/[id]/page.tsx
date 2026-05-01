@@ -5,6 +5,7 @@ import { AwardOverview } from '../../components/AwardOverview';
 import { VestingChart } from '../../components/VestingChart';
 import { VestingTranchesTable } from '../../components/VestingTranchesTable';
 import { PortalDocumentsList } from '../../components/PortalDocumentsList';
+import { LeaverSimulator } from '../../components/LeaverSimulator';
 import { Card, CardContent } from '@/components/ui/card';
 import { buildVestingTimeline } from '@/lib/portal/vesting';
 import { AwardPortalDetailError, getAwardPortalDetail } from '@/server/queries/portal';
@@ -110,7 +111,18 @@ export default async function PortalAwardDetailPage({
         ) : null}
       </section>
 
-      {/* Section 4 — Documents (skip Section 3 simulator B4) */}
+      {/* Section 3 — Simulateur de départ (Module 8 B4) */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Simulateur de départ</h2>
+        <LeaverSimulator
+          awardId={award.id}
+          planType={plan.plan_type}
+          leaverRulesSnapshot={award.leaver_rules_snapshot}
+          unitsGranted={Number(award.units_granted)}
+        />
+      </section>
+
+      {/* Section 4 — Documents */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Documents</h2>
         <PortalDocumentsList documents={documents} />
