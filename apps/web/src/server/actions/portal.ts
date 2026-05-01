@@ -156,3 +156,121 @@ export async function completeBeneficiaryProfile(
 
   return { ok: true, beneficiaryId: bene.id };
 }
+
+// ---------------------------------------------------------------------------
+// getPortalDocumentSignedUrl — Module 8 B3 (§4.3 documents)
+// ---------------------------------------------------------------------------
+//
+// Retourne une URL signée Supabase Storage pour télécharger le PDF SIGNED
+// d'un `document_instances`, après vérification que le document appartient
+// bien à un award du bénéficiaire courant.
+//
+// Sécurité (3 vérifs) :
+//   1. requireUser() : auth check
+//   2. Find own beneficiary record (user_id = auth.uid())
+//   3. Le document_instance.related_entity = AWARD doit appartenir à un
+//      award.beneficiary_id = own beneficiary.id
+//
+// Sans étape 3, un BENEFICIARY pourrait demander l'URL d'un document d'un
+// autre bénéficiaire de la même org (Module 6 `getDocumentPreviewUrl`
+// filtre uniquement sur org_id, ce qui est insuffisant côté portail).
+//
+// On ne sert QUE la variante SIGNED (storage_path post-Yousign). V2
+// pourrait étendre à PROOF (audit trail) si besoin.
+
+const portalDocumentInputSchema = z.object({
+  documentId: z.string().uuid(),
+});
+
+const PORTAL_DOC_URL_TTL_SECONDS = 5 * 60; // 5 minutes (download immediate)
+
+export async function getPortalDocumentSignedUrl(
+  input: unknown,
+): Promise<ActionOk<{ signedUrl: string; expiresAt: string }> | ActionError> {
+  const parsed = portalDocumentInputSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+  const { documentId } = parsed.data;
+
+  const user = await requireUser();
+  const admin = getSupabaseAdminClient();
+
+  // 1. Find own beneficiary record
+  const { data: bene } = await admin
+    .from('beneficiaries')
+    .select('id, org_id')
+    .eq('user_id', user.id)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (!bene) {
+    return { ok: false, error: 'Aucun bénéficiaire associé à cet utilisateur' };
+  }
+
+  // 2. Load document + verify ownership chain (document → award →
+  //    beneficiary)
+  const { data: doc, error: docErr } = await admin
+    .from('document_instances')
+    .select(
+      'id, status, storage_bucket, signed_pdf_storage_path, related_entity_type, related_entity_id, org_id',
+    )
+    .eq('id', documentId)
+    .maybeSingle();
+
+  if (docErr || !doc) {
+    return { ok: false, error: 'Document introuvable' };
+  }
+
+  if (doc.org_id !== bene.org_id) {
+    return { ok: false, error: 'Document non associé à votre organisation' };
+  }
+  if (doc.related_entity_type !== 'AWARD' || !doc.related_entity_id) {
+    return { ok: false, error: 'Document non lié à une attribution' };
+  }
+  if (doc.status !== 'SIGNED' || !doc.signed_pdf_storage_path) {
+    return { ok: false, error: 'Document non signé ou indisponible' };
+  }
+
+  // 3. Verify the award belongs to this beneficiary
+  const { data: award } = await admin
+    .from('awards')
+    .select('id, beneficiary_id')
+    .eq('id', doc.related_entity_id)
+    .maybeSingle();
+
+  if (!award || award.beneficiary_id !== bene.id) {
+    return { ok: false, error: 'Accès refusé à ce document' };
+  }
+
+  // 4. Generate signed URL (TTL court)
+  const { data: signed, error: signErr } = await admin.storage
+    .from(doc.storage_bucket ?? 'documents')
+    .createSignedUrl(doc.signed_pdf_storage_path, PORTAL_DOC_URL_TTL_SECONDS);
+
+  if (signErr || !signed?.signedUrl) {
+    return {
+      ok: false,
+      error: signErr?.message ?? 'Génération de l’URL signée échouée',
+    };
+  }
+
+  // 5. Audit
+  await logAuditEvent({
+    eventType: 'portal.document_downloaded',
+    resourceType: 'document_instance',
+    resourceId: documentId,
+    userId: user.id,
+    userEmail: user.email,
+    orgId: bene.org_id,
+    metadata: {
+      award_id: award.id,
+      storage_path: doc.signed_pdf_storage_path,
+      ttl_seconds: PORTAL_DOC_URL_TTL_SECONDS,
+    },
+  });
+
+  return {
+    ok: true,
+    signedUrl: signed.signedUrl,
+    expiresAt: new Date(Date.now() + PORTAL_DOC_URL_TTL_SECONDS * 1000).toISOString(),
+  };
+}
