@@ -1,0 +1,40 @@
+-- =============================================================================
+-- Module 7 B1 — Install pg_net extension (cron deferred to B3)
+-- =============================================================================
+-- pg_net est nécessaire pour `net.http_post(...)` utilisé par le futur
+-- cron `notifications-consumer-tick` (à scheduler en B3 quand l'EF
+-- `notifications-consumer` sera deployée).
+--
+-- DÉCISION B1 : ne PAS scheduler le cron maintenant. La call cron
+-- nécessite `vault.decrypted_secrets.service_role_key` pour auth Bearer
+-- vers la EF — ce secret n'est PAS encore dans le Vault (seul
+-- `beneficiary_encryption_key` y est stocké). Le user doit setup ce
+-- secret en B3 via Supabase Dashboard OU via :
+--
+--   SELECT vault.create_secret('<service_role_key_value>', 'service_role_key');
+--
+-- Puis ajouter la migration cron suivante (B3) :
+--
+--   SELECT cron.schedule(
+--     'notifications-consumer-tick',
+--     '* * * * *',  -- chaque minute
+--     $$
+--     SELECT net.http_post(
+--       url := 'https://ytlfnxcrclugrsbvqdkb.supabase.co/functions/v1/notifications-consumer',
+--       headers := jsonb_build_object(
+--         'Content-Type', 'application/json',
+--         'Authorization', 'Bearer ' || (
+--           SELECT decrypted_secret FROM vault.decrypted_secrets
+--            WHERE name = 'service_role_key'
+--         )
+--       ),
+--       body := jsonb_build_object('trigger', 'cron')
+--     );
+--     $$
+--   );
+--
+-- Note : un cron `cleanup-old-notifications` weekly (Sunday 3am)
+-- existe déjà depuis Module 1. Pas besoin d'en re-créer un.
+-- =============================================================================
+
+CREATE EXTENSION IF NOT EXISTS pg_net;
