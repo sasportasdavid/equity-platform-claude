@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
 import path from 'node:path';
 
 /**
@@ -13,6 +14,12 @@ import path from 'node:path';
  * Exclude `e2e/` (Playwright) et `node_modules`.
  */
 export default defineConfig({
+  // @vitejs/plugin-react ajouté en PR #9 (Bug #45) — permet aux tests qui
+  // touchent (ou importent transitivement) du JSX/TSX d'être bundlés
+  // correctement. Avant : tout test qui chaînait vers `@/lib/pdf/render.tsx`
+  // plantait au transform Rolldown. Workaround historique = dynamic import
+  // dans approvals.ts (cf. PR #9 closure dans memory).
+  plugins: [react()],
   test: {
     environment: 'node',
     globals: false,
