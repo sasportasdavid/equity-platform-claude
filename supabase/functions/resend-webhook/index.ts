@@ -1,94 +1,129 @@
 // ============================================================================
-// Capiwise — Edge Function : resend-webhook
+// Capiwise — Edge Function : resend-webhook (Module 7 B4)
 //
-// Reçoit les événements de delivery de Resend (svix) et met à jour la table
-// `notifications` (status, delivered_at, failure_reason).
+// Reçoit les events Resend (email.delivered/bounced/complained/failed/...)
+// et met à jour `notifications` selon le mapping de la spec §6.1.
 //
-// Vérification de signature : Svix HMAC-SHA256 (cf. https://docs.svix.com/
-// receiving/verifying-payloads/how-manual). On contrôle 3 headers :
-//   - svix-id        unique message id
-//   - svix-timestamp epoch seconds (rejeté si > 5 min de skew)
-//   - svix-signature liste de signatures versionnées (v1,XXXXX v1,YYYYY)
+// Pattern v6 (Module 6 yousign-webhook db00559) :
+//  - Vérification HMAC svix au début (lib svix)
+//  - Pré-check idempotence (SELECT status WHERE resend_email_id|provider_message_id)
+//  - Ack 200 immédiat sous 100 ms
+//  - UPDATE en background via EdgeRuntime.waitUntil(promise)
 //
-// Déploiement : `supabase functions deploy resend-webhook --no-verify-jwt`
-// (le webhook arrive en anon — on contrôle l'authenticité via la signature).
+// Resend webhook timeout est strict (~5-10 s). Le pré-check + ack 200
+// garantit qu'on n'atteint jamais le timeout. Les UPDATEs sont rapides
+// — le background reste cohérent avec yousign-webhook v6.
 //
-// Variables d'env attendues (Supabase Functions secrets) :
-//   - RESEND_WEBHOOK_SECRET  (commence par `whsec_`)
-//   - SUPABASE_URL           (auto-injecté par le runtime)
-//   - SUPABASE_SERVICE_ROLE_KEY (auto-injecté)
+// Lookup notifications : on essaie d'abord `resend_email_id` (Module 7 B3
+// queue pattern) puis fallback `provider_message_id` (Module 2 immediate
+// send pattern). Garantit backwards compat avec sendEmail<K> Module 2.
+//
+// Auth : svix-signature (pas de JWT). Déployée avec verify_jwt=false —
+// l'authenticité est garantie par HMAC svix.
+//
+// Variables env (Supabase Functions secrets) :
+//   - RESEND_WEBHOOK_SECRET   (whsec_xxx fourni par Resend Dashboard)
+//   - SUPABASE_URL            (auto)
+//   - SUPABASE_SERVICE_ROLE_KEY (auto)
+//
+// Configuration Resend Dashboard (à faire APRÈS deploy) :
+//   1. Resend Dashboard → Webhooks → Add Endpoint
+//   2. URL : https://ytlfnxcrclugrsbvqdkb.supabase.co/functions/v1/resend-webhook
+//   3. Events : email.delivered, email.bounced, email.complained, email.failed
+//      (V2 : email.opened, email.clicked, email.delivery_delayed)
+//   4. Save → copy le signing secret (whsec_xxx)
+//   5. supabase secrets set --project-ref ytlfnxcrclugrsbvqdkb \
+//        RESEND_WEBHOOK_SECRET=whsec_xxx
+//   6. (optional) re-deploy EF pour picker la nouvelle env var
 // ============================================================================
 
 // @ts-expect-error — Deno runtime types not available in Node tsc
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.104.1';
+// @ts-expect-error — Deno runtime types not available in Node tsc
+import { Webhook } from 'https://esm.sh/svix@1.45.1';
 
 declare const Deno: {
   env: { get(key: string): string | undefined };
   serve(handler: (req: Request) => Promise<Response>): void;
 };
 
-const TOLERANCE_SECONDS = 5 * 60;
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void } | undefined;
 
-type ResendEvent = {
+type ResendWebhookPayload = {
   type: string;
-  data: {
-    email_id?: string;
-    bounce?: { reason?: string };
-    [key: string]: unknown;
-  };
   created_at?: string;
+  data?: {
+    email_id?: string;
+    created_at?: string;
+    bounce?: { message?: string; subType?: string };
+    failed?: { reason?: string };
+    tags?: Record<string, string> | Array<{ name: string; value: string }>;
+  };
 };
 
-async function verifySvixSignature(
-  body: string,
-  headers: Headers,
-  secret: string,
-): Promise<boolean> {
-  const svixId = headers.get('svix-id');
-  const svixTimestamp = headers.get('svix-timestamp');
-  const svixSignature = headers.get('svix-signature');
+type NotificationUpdate = {
+  status?: 'DELIVERED' | 'BOUNCED' | 'COMPLAINED' | 'FAILED';
+  delivered_at?: string;
+  failed_at?: string;
+  failure_reason?: string;
+};
 
-  if (!svixId || !svixTimestamp || !svixSignature) return false;
+type ClassifyResult =
+  | { kind: 'apply'; updates: NotificationUpdate }
+  | { kind: 'ignore'; reason: string };
 
-  const ts = parseInt(svixTimestamp, 10);
-  if (!Number.isFinite(ts)) return false;
-  const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - ts) > TOLERANCE_SECONDS) return false;
-
-  // Le secret arrive en base "whsec_BASE64KEY" — on extrait la partie base64
-  const secretKey = secret.startsWith('whsec_') ? secret.slice('whsec_'.length) : secret;
-  const keyBytes = Uint8Array.from(atob(secretKey), (c) => c.charCodeAt(0));
-
-  const signedContent = `${svixId}.${svixTimestamp}.${body}`;
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sigBuffer = await crypto.subtle.sign(
-    'HMAC',
-    cryptoKey,
-    new TextEncoder().encode(signedContent),
-  );
-  const expected = btoa(String.fromCharCode(...new Uint8Array(sigBuffer)));
-
-  // svix-signature = "v1,xxx v1,yyy" — chaque entrée est "version,base64sig"
-  const candidates = svixSignature
-    .split(' ')
-    .map((s) => s.split(',', 2))
-    .filter(([v]) => v === 'v1')
-    .map(([, sig]) => sig);
-
-  return candidates.some((sig) => timingSafeEqual(sig, expected));
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return mismatch === 0;
+// NOTE : duplicaté de packages/shared/src/notifications/resend-event-classifier.ts
+// pour que la EF Deno reste 100% standalone (pas d'import workspace côté Deno).
+// La version shared/ est la source de vérité testée — tenir les 2 en sync.
+function classifyResendEvent(
+  eventType: string,
+  eventData: ResendWebhookPayload['data'] | null | undefined,
+): ClassifyResult {
+  switch (eventType) {
+    case 'email.delivered':
+      return {
+        kind: 'apply',
+        updates: {
+          status: 'DELIVERED',
+          delivered_at: eventData?.created_at ?? new Date().toISOString(),
+        },
+      };
+    case 'email.bounced':
+      return {
+        kind: 'apply',
+        updates: {
+          status: 'BOUNCED',
+          failed_at: new Date().toISOString(),
+          failure_reason: `Bounced: ${eventData?.bounce?.message ?? 'unknown bounce reason'}`,
+        },
+      };
+    case 'email.complained':
+      return {
+        kind: 'apply',
+        updates: {
+          status: 'COMPLAINED',
+          failed_at: new Date().toISOString(),
+          failure_reason: 'Spam complaint received from recipient',
+        },
+      };
+    case 'email.failed':
+      return {
+        kind: 'apply',
+        updates: {
+          status: 'FAILED',
+          failed_at: new Date().toISOString(),
+          failure_reason: `Resend failed: ${eventData?.failed?.reason ?? 'unknown'}`,
+        },
+      };
+    case 'email.delivery_delayed':
+      return { kind: 'ignore', reason: 'transient delay (waiting final event)' };
+    case 'email.opened':
+    case 'email.clicked':
+    case 'email.sent':
+      return { kind: 'ignore', reason: 'V2 analytics (not tracked V1)' };
+    default:
+      return { kind: 'ignore', reason: `unknown event type: ${eventType}` };
+  }
 }
 
 Deno.serve(async (req) => {
@@ -96,80 +131,123 @@ Deno.serve(async (req) => {
     return new Response('Method not allowed', { status: 405 });
   }
 
-  const secret = Deno.env.get('RESEND_WEBHOOK_SECRET');
-  if (!secret) {
+  const webhookSecret = Deno.env.get('RESEND_WEBHOOK_SECRET');
+  if (!webhookSecret) {
+    console.error('[resend-webhook] RESEND_WEBHOOK_SECRET not configured');
     return new Response('Webhook secret not configured', { status: 500 });
   }
 
   const rawBody = await req.text();
-  const isValid = await verifySvixSignature(rawBody, req.headers, secret);
-  if (!isValid) {
+  const headers = Object.fromEntries(req.headers.entries());
+
+  // 1. Verify svix HMAC
+  let payload: ResendWebhookPayload;
+  try {
+    const wh = new Webhook(webhookSecret);
+    payload = wh.verify(rawBody, headers) as ResendWebhookPayload;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'unknown';
+    console.warn(`[resend-webhook] svix verification failed: ${msg}`);
     return new Response('Invalid signature', { status: 401 });
   }
 
-  let event: ResendEvent;
-  try {
-    event = JSON.parse(rawBody) as ResendEvent;
-  } catch {
-    return new Response('Invalid JSON', { status: 400 });
+  const eventType = payload.type;
+  const emailId = payload.data?.email_id;
+  console.log(`[resend-webhook] Received ${eventType} for email_id=${emailId ?? 'NONE'}`);
+
+  if (!emailId) {
+    return new Response(JSON.stringify({ ok: true, skipped: 'no email_id' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
-  const messageId = event.data?.email_id;
-  if (!messageId) {
-    return new Response('OK (no email_id)', { status: 200 });
+  // 2. Classify event → updates ou ignore
+  const classification = classifyResendEvent(eventType, payload.data);
+  if (classification.kind === 'ignore') {
+    console.log(`[resend-webhook] Ignoring event: ${classification.reason}`);
+    return new Response(
+      JSON.stringify({ ok: true, ignored: true, reason: classification.reason }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
   }
 
+  // 3. Lookup notification (resend_email_id en priorité, fallback provider_message_id)
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  const nowIso = new Date().toISOString();
-  const update: Record<string, unknown> = {
-    provider_response: event.data,
+  const { data: notif, error: lookupErr } = await supabase
+    .from('notifications')
+    .select('id, status')
+    .or(`resend_email_id.eq.${emailId},provider_message_id.eq.${emailId}`)
+    .maybeSingle();
+
+  if (lookupErr) {
+    console.error(`[resend-webhook] DB lookup failed: ${lookupErr.message}`);
+    return new Response(JSON.stringify({ ok: false, error: lookupErr.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  if (!notif) {
+    console.warn(`[resend-webhook] Notification not found for resend_email_id ${emailId}`);
+    return new Response(JSON.stringify({ ok: true, skipped: 'notification_not_found' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Idempotence : si déjà à l'état cible, ack sans rien faire
+  if (notif.status === classification.updates.status) {
+    console.log(`[resend-webhook] Already ${notif.status}, idempotent skip`);
+    return new Response(JSON.stringify({ ok: true, skipped: 'already_in_target_status' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // 4. Ack 200 immédiat + UPDATE background (pattern v6)
+  const notificationId = notif.id;
+  const updates = classification.updates;
+  const tags = payload.data?.tags ?? null;
+
+  const processUpdate = async () => {
+    try {
+      const patch: Record<string, unknown> = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+        // On garde la dernière payload Resend pour debug/audit
+        resend_response: { event: eventType, tags, ...updates } as never,
+      };
+      const { error: updErr } = await supabase
+        .from('notifications')
+        .update(patch)
+        .eq('id', notificationId);
+      if (updErr) {
+        console.error(`[resend-webhook][bg] update ${notificationId} failed: ${updErr.message}`);
+        return;
+      }
+      console.log(
+        `[resend-webhook][bg] Updated ${notificationId} → status=${updates.status} (event=${eventType})`,
+      );
+    } catch (bgErr) {
+      const msg = bgErr instanceof Error ? bgErr.message : 'unknown';
+      console.error(`[resend-webhook][bg] Failed for ${notificationId}: ${msg}`);
+    }
   };
 
-  switch (event.type) {
-    case 'email.sent':
-      update.status = 'SENT';
-      update.sent_at = nowIso;
-      break;
-    case 'email.delivered':
-      update.status = 'DELIVERED';
-      update.delivered_at = nowIso;
-      break;
-    case 'email.bounced':
-    case 'email.delivery_delayed':
-      update.status = 'BOUNCED';
-      update.failed_at = nowIso;
-      update.failure_reason = event.data?.bounce?.reason ?? event.type;
-      break;
-    case 'email.complained':
-    case 'email.failed':
-      update.status = 'FAILED';
-      update.failed_at = nowIso;
-      update.failure_reason = event.type;
-      break;
-    case 'email.opened':
-    case 'email.clicked':
-      // Trackés mais ne changent pas le status fonctionnel
-      update.provider_response = event.data;
-      break;
-    default:
-      // Event inconnu — on stocke la trace mais on ne touche pas le status
-      update.provider_response = event.data;
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+    EdgeRuntime.waitUntil(processUpdate());
+  } else {
+    // Local dev fallback (deno run sans EdgeRuntime) — process inline
+    await processUpdate();
   }
 
-  const { error } = await supabase
-    .from('notifications')
-    .update(update)
-    .eq('provider_message_id', messageId);
-
-  if (error) {
-    console.error('[resend-webhook] update failed', error);
-    return new Response('DB update failed', { status: 500 });
-  }
-
-  return new Response('OK', { status: 200 });
+  return new Response(JSON.stringify({ ok: true, processing: 'background', event: eventType }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
 });

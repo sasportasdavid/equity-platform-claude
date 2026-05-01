@@ -145,6 +145,12 @@ vi.mock('../documents', () => ({
   generateAwardDocument: (input: unknown) => generateAwardDocumentMock(input),
 }));
 
+// Module 7 B5 — mock hook notif (approvals.ts importe ./notifications qui
+// pull lib/supabase/admin → clientEnv parse échoue en test).
+vi.mock('../notifications', () => ({
+  notifyCreatorOfApprovalDecision: vi.fn().mockResolvedValue({ ok: true, notificationId: null }),
+}));
+
 beforeEach(() => {
   mockCompliance.workflow = { errors: [], warnings: [], hasHardBlocks: false };
   mockCompliance.decision = { errors: [], warnings: [], hasHardBlocks: false };

@@ -69,6 +69,14 @@ function makeBuilder() {
   return builder;
 }
 
+// Mock Module 7 B5 hook (importé par awards.ts depuis ./notifications) —
+// notifications.ts pull lib/supabase/admin → clientEnv parse échoue en test.
+// Ce mock court-circuite la chaîne env.
+vi.mock('@/server/actions/notifications', () => ({
+  notifyApproversOfPendingApproval: vi.fn().mockResolvedValue({ ok: true, created: 0 }),
+  notifyCreatorOfApprovalDecision: vi.fn().mockResolvedValue({ ok: true, notificationId: null }),
+}));
+
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn().mockResolvedValue({
     from: () => makeBuilder(),

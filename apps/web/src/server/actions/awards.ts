@@ -23,6 +23,7 @@ import {
   timestampFieldForStatus,
 } from '@/lib/stateMachines/awardStateMachine';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { notifyApproversOfPendingApproval } from '@/server/actions/notifications';
 
 /**
  * Module 3b — Server Actions pour le lifecycle des awards.
@@ -418,6 +419,18 @@ export async function transitionAward(input: unknown): Promise<ActionVoid | Acti
         skipApprovalHook: true,
       });
       if (!auto.ok) return auto;
+
+      // Module 7 B5 — Hook notif EMAIL approval_pending aux APPROVERs.
+      // Fire-and-forget : si la notif fail, on ne bloque pas la transition.
+      // Les notifs IN_APP du RPC start_approval_workflow restent en place
+      // (orphan rendering possible via renderPendingNotificationsBatch).
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+      void notifyApproversOfPendingApproval({ requestId, awardId, appUrl }).catch((err) => {
+        console.error(
+          `[transitionAward] notifyApproversOfPendingApproval failed for award ${awardId}:`,
+          err,
+        );
+      });
     }
   }
 

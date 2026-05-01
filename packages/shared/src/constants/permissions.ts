@@ -98,6 +98,14 @@ export const PERMISSIONS = [
   'reports.generate',
   'reports.read',
   'reports.dsn_export', // M2 — DSN spécifique
+
+  // Notifications (Module 7 B1 — seedés en migration 00046)
+  'notifications.read.all',
+  'notifications.read.own',
+  'notifications.send',
+  'notifications.cancel',
+  'notification_templates.read',
+  'notification_templates.update',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

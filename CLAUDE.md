@@ -213,6 +213,20 @@ Events à activer côté Yousign : `signer_request.viewed`,
 `signer_request.signed`, `signer_request.declined`,
 `signature_request.completed`.
 
+### Variables env Resend (Module 7 B2)
+
+Côté Next.js (`.env.local`) :
+
+- `RESEND_API_KEY` — clé Resend Dashboard → API Keys
+- `RESEND_FROM_EMAIL` — adresse expéditeur (domaine vérifié Resend),
+  ex `no-reply@capiwise.fr`
+- `RESEND_FROM_NAME` — nom affiché, ex `Capiwise`
+- `RESEND_REPLY_TO` — adresse Reply-To (optional, fallback = from)
+- `RESEND_WEBHOOK_SECRET` — HMAC svix shared secret (B4 webhook)
+
+Côté Edge Function `notifications-consumer` (Supabase secrets, B3) :
+identiques + service_role injecté automatiquement.
+
 ## État actuel
 
 ### Modules livrés
@@ -311,9 +325,29 @@ Events à activer côté Yousign : `signer_request.viewed`,
   - [x] Bonus : scripts/generate-magic-link.mjs pour futurs E2E
   - Mergé sur master via squash (commit `d8bdab1`)
 
+- [x] Module 7 — Notifications Resend (PR #10 ready, queue pattern complet)
+  - [x] B1 — DB extends + composite PK (code, channel, locale) +
+        seed 6 templates V1 + 6 permissions + RPC
+        `lock_pending_notifications` + pg_net install
+        (migrations 00043-00048)
+  - [x] B2 — 4 templates react-email (ApprovalPending/Approved/
+        Rejected, AwardGranted) + EmailLayout shared + helpers
+        render/subject + 4 Server Actions queue pattern + sandbox
+        preview HTML/text
+  - [x] B3 — EF `notifications-consumer` Deno (Resend REST direct) +
+        cron 1-min + Vault `service_role_key` setup + sandbox
+        extension test send/trigger consumer (migration 00049)
+  - [x] B4 — EF `resend-webhook` Deno (svix HMAC +
+        EdgeRuntime.waitUntil pattern v6) + classifier helper
+        shared (Vitest) + status COMPLAINED ajouté (migration 00050)
+  - [x] B5 — 3 hooks Server Action (notifyApproversOfPendingApproval/
+        notifyCreatorOfApprovalDecision/renderPendingNotificationsBatch)
+        wired dans transitionAward + recordDecisionInternal + page
+        admin /dashboard/settings/notifications + sandbox extension
+        stats + 8 tests Vitest
+
 ### À venir
 
-- [ ] Module 7 — Notifications Resend
 - [ ] Module 8 — Beneficiary Portal
 - [ ] Module 9 — Exercise Workflow
 - [ ] Module 10 — Cap Table dynamique
@@ -411,10 +445,13 @@ SET deleted_at = ...` rejeté en cleanup post-mortem.
     reste dormante. Helper `checkAwardApprovalCompliance` exposé
     mais pas appelé. À wire Module 12 (Compliance V2 configurable).
 
-15. **Pas de notifications email Module 5** : table `notifications`
-    populated en `IN_APP` PENDING par les RPCs `start_/evaluate_
-approval_workflow`. Module 7 (Resend) consommera ces rows pour
-    envoyer les emails approbateurs.
+15. **(closed PR #10)** Notifications email Module 5 → décision archi
+    Module 7 B5 : ne PAS modifier le RPC Module 5 (qui insère IN_APP
+    avec variables minimal), mais ADD une notif EMAIL séparée via
+    `notifyApproversOfPendingApproval` côté TS Server Action (hook
+    fire-and-forget après `start_approval_workflow`). Les notifs IN_APP
+    du RPC restent en place pour V2 inbox UI ; `renderPendingNotificationsBatch`
+    permet de les rendre rétroactivement si besoin.
 
 16. **Pas de SLA / escalation auto Module 5** : colonnes
     `sla_hours` + `auto_escalate_after_hours` + `escalate_to_user_id`
@@ -467,6 +504,35 @@ Notable : #29 STATUSES_ALLOWING_GENERATE hard-codé,
   apps/web copy supprimée (était dead code, jamais importée)
 - #45 (closed PR #9) Vitest sans plugin React JSX →
   `@vitejs/plugin-react` installé + revert dynamic import workaround
+
+46-52. **Dettes Module 7 (PR #10)** :
+
+- #46 Hook `award_granted` non câblé V1 (notif bénéficiaire après
+  signature Yousign). Deno↔Node import complexe. Alternatives V2 :
+  (a) appel HTTP de l'EF yousign-webhook vers une nouvelle EF Module 7,
+  (b) trigger DB AFTER UPDATE awards WHEN status='GRANTED' qui INSERT
+  notif PENDING. Reporté Module 8 (portail bénéficiaire) où le besoin
+  sera plus contextualisé.
+- #47 `triggerNotificationConsumer` exposé en Server Action (utile
+  sandbox, pas prod). Gate `process.env.ENABLE_DEV_SANDBOX` V2 ou
+  déplacer hors Server Action.
+- #48 Pas de pagination sur table admin
+  `/dashboard/settings/notifications` : limit 100 hardcoded. Pour orgs
+  haute volumétrie (1k+ notifs/jour), ajouter pagination keyset par
+  created_at V2.
+- #49 Pas de bouton "Re-send" sur FAILED côté admin V1 : pas de
+  mécanisme de re-queue. L'admin peut INSERT manuel via sandbox. V2 =
+  bouton "Re-send" qui clone la notif en PENDING.
+- #50 Classifier `classifyResendEvent` dupliqué entre `packages/shared`
+  (testé Vitest) et l'EF Deno (standalone, pas d'import workspace côté
+  Deno). ~30 lignes maintenance manuelle. Acceptable V1, migrer vers
+  lib npm publiée si divergence critique.
+- #51 Pas de retry sur webhook background : si UPDATE DB fail dans
+  `EdgeRuntime.waitUntil()`, l'event Resend est perdu (on a déjà ack
+  200). V2 = retry inline via DB queue + alerting si fail répété.
+- #52 `provider_message_id` lookup Resend webhook (OR `resend_email_id`)
+  deprecated V2 : quand Module 2 sendEmail sera réécrit pour utiliser
+  le pattern queue Module 7, simplifier le OR lookup.
 
 ## Sécurité
 
