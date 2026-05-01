@@ -3511,6 +3511,7 @@ export type Database = {
         Args: { p_request_id: string }
         Returns: Json
       }
+      get_award_portal_detail: { Args: { p_award_id: string }; Returns: Json }
       get_beneficiary_decrypted: {
         Args: { p_id: string }
         Returns: {
@@ -3531,6 +3532,7 @@ export type Database = {
           status: string
         }[]
       }
+      get_beneficiary_portal_dashboard: { Args: never; Returns: Json }
       get_invitation_by_token: {
         Args: { p_token: string }
         Returns: {
@@ -3645,6 +3647,14 @@ export type Database = {
       seed_default_approval_workflow_for_org: {
         Args: { p_org_id: string }
         Returns: string
+      }
+      simulate_leaver_scenario: {
+        Args: {
+          p_award_id: string
+          p_leaver_type: string
+          p_termination_date: string
+        }
+        Returns: Json
       }
       start_approval_workflow: {
         Args: { p_award_id: string; p_workflow_id?: string }
