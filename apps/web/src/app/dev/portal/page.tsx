@@ -70,7 +70,17 @@ export default async function PortalSandboxPage() {
             <Link href="/portal/awards" target="_blank" className="text-primary underline">
               /portal/awards
             </Link>{' '}
-            — placeholder B3
+            — liste des attributions (cards summary)
+          </li>
+          <li>
+            <Link
+              href="/portal/awards/0ebbbf8d-c805-4084-8392-aa501e119c53"
+              target="_blank"
+              className="text-primary underline"
+            >
+              /portal/awards/AWD-2026-0007
+            </Link>{' '}
+            — détail award (synthèse + vesting + documents)
           </li>
         </ul>
       </section>
