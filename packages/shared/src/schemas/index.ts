@@ -6,3 +6,4 @@ export * from './award';
 export * from './beneficiary';
 export * from './approval';
 export * from './document';
+export * from './notification';
