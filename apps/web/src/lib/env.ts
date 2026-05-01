@@ -37,6 +37,8 @@ const serverEnvSchema = z.object({
   YOUSIGN_WEBHOOK_SECRET: optionalString,
   RESEND_API_KEY: optionalString,
   RESEND_FROM_EMAIL: optionalEmail,
+  RESEND_FROM_NAME: optionalString,
+  RESEND_REPLY_TO: optionalEmail,
   RESEND_WEBHOOK_SECRET: optionalString,
   EODHD_API_KEY: optionalString,
   SENTRY_DSN: optionalUrl,
