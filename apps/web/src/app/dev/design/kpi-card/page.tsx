@@ -85,7 +85,7 @@ export default function KPICardSandboxPage() {
                 <li>Stroke brass-500 1.5px</li>
                 <li>Point ancrage final = couleur brass (tendance positive)</li>
                 <li>Citation italic visible (size=hero)</li>
-                <li>CTA "Voir le rapport IFRS 2 →"</li>
+                <li>CTA &laquo;&nbsp;Voir le rapport IFRS 2 &rarr;&nbsp;&raquo;</li>
                 <li>Hover : translateY -2px + shadow</li>
               </ul>
             </div>
@@ -145,9 +145,11 @@ export default function KPICardSandboxPage() {
 
         {/* CAS 4 — EMPTY STATE intégré */}
         <div className="space-y-3">
-          <h2 className="text-h3 text-ink-900">Cas 4 — Empty state intégré · jamais "—"</h2>
+          <h2 className="text-h3 text-ink-900">
+            Cas 4 — Empty state intégré · jamais &laquo;&nbsp;&mdash;&nbsp;&raquo;
+          </h2>
           <p className="text-ink-500 text-sm">
-            Quand la donnée n'est pas encore disponible (sparkline manquante, valeur null) →
+            Quand la donnée n&apos;est pas encore disponible (sparkline manquante, valeur null) →
             illustration SVG inline + phrase éditoriale.
           </p>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -172,8 +174,8 @@ export default function KPICardSandboxPage() {
         <div className="space-y-3">
           <h2 className="text-h3 text-ink-900">Cas 5 — Status badge LIVE · sparkline plate</h2>
           <p className="text-ink-500 text-sm">
-            Données temps réel — pulse animé sur le badge. La sparkline plate symbolise l'absence
-            d'événement majeur (zone calme).
+            Données temps réel — pulse animé sur le badge. La sparkline plate symbolise
+            l&apos;absence d&apos;événement majeur (zone calme).
           </p>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <KPICard
