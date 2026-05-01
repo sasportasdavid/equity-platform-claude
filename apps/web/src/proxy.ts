@@ -35,8 +35,15 @@ const PUBLIC_ROUTES = new Set([
 
 const PUBLIC_PREFIXES = ['/api/webhooks/', '/_next/', '/favicon', '/static/', '/dev/'];
 
-/** Routes accessibles à un user authentifié SANS active_org_id. */
-const NO_ORG_ALLOWED_PREFIXES = ['/onboarding', '/select-org'];
+/**
+ * Routes accessibles à un user authentifié SANS `active_org_id` dans son JWT.
+ *
+ * - `/onboarding` + `/select-org` : flows admin pour créer/choisir une org
+ * - `/portal` (Module 8) : un BENEFICIARY pur n'a pas forcément d'org membership ;
+ *   son contexte org vient de `beneficiaries.org_id` lu côté layout, pas du JWT.
+ *   La layout `/portal/*` fait son propre check beneficiary (Module 8 B2).
+ */
+const NO_ORG_ALLOWED_PREFIXES = ['/onboarding', '/select-org', '/portal'];
 
 /** Routes d'erreur disponibles à tout user authentifié. */
 const ERROR_ROUTES = new Set(['/unauthorized', '/no-access']);
