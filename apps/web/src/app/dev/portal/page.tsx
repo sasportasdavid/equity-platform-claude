@@ -34,6 +34,29 @@ export default async function PortalSandboxPage() {
     .is('deleted_at', null)
     .limit(10);
 
+  // Module 8 stats globales (B5)
+  const [{ count: awardsGrantedCount }, { count: docsSignedCount }, { data: recentDocs }] =
+    await Promise.all([
+      admin
+        .from('awards')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'GRANTED')
+        .is('deleted_at', null),
+      admin
+        .from('document_instances')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'SIGNED')
+        .not('signed_pdf_storage_path', 'is', null),
+      admin
+        .from('document_instances')
+        .select('id, document_number, signed_at, related_entity_id')
+        .eq('status', 'SIGNED')
+        .eq('related_entity_type', 'AWARD')
+        .not('signed_pdf_storage_path', 'is', null)
+        .order('signed_at', { ascending: false })
+        .limit(5),
+    ]);
+
   return (
     <div className="mx-auto max-w-4xl space-y-8 p-8">
       <header className="space-y-1">
@@ -80,9 +103,46 @@ export default async function PortalSandboxPage() {
             >
               /portal/awards/AWD-2026-0007
             </Link>{' '}
-            — détail award (synthèse + vesting + documents)
+            — détail award (synthèse + vesting + simulator + documents)
+          </li>
+          <li>
+            <Link href="/portal/documents" target="_blank" className="text-primary underline">
+              /portal/documents
+            </Link>{' '}
+            — liste globale documents SIGNED + filter par award (B5)
+          </li>
+          <li>
+            <Link href="/portal/profile" target="_blank" className="text-primary underline">
+              /portal/profile
+            </Link>{' '}
+            — édition profil (phone, address modifiables) (B5)
           </li>
         </ul>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Stats Module 8</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatBox label="Bénéficiaires portal-ready" value={portalReady?.length ?? 0} />
+          <StatBox label="Awards GRANTED visibles" value={awardsGrantedCount ?? 0} />
+          <StatBox label="Documents SIGNED" value={docsSignedCount ?? 0} />
+          <StatBox label="Sans user_id" value={needsInvite?.length ?? 0} />
+        </div>
+        {recentDocs && recentDocs.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-muted-foreground text-xs uppercase tracking-wide">
+              5 derniers documents signés
+            </p>
+            <ul className="space-y-1 text-xs">
+              {recentDocs.map((d) => (
+                <li key={d.id} className="text-muted-foreground font-mono">
+                  {d.document_number ?? d.id} ·{' '}
+                  {d.signed_at ? new Date(d.signed_at).toISOString().slice(0, 10) : '—'}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
 
       <section className="space-y-3">
@@ -172,6 +232,15 @@ export default async function PortalSandboxPage() {
           puis se reconnecter avec son email (magic link).
         </p>
       </section>
+    </div>
+  );
+}
+
+function StatBox({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="border-border/40 bg-muted/20 space-y-0.5 rounded-md border p-3">
+      <p className="text-muted-foreground text-xs uppercase tracking-wide">{label}</p>
+      <p className="text-2xl font-semibold tabular-nums">{value}</p>
     </div>
   );
 }
