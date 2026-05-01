@@ -350,3 +350,128 @@ describe('getPortalDocumentSignedUrl', () => {
     if (!res.ok) expect(res.error).toMatch(/bucket/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// simulateLeaverScenario — Module 8 B4
+// ---------------------------------------------------------------------------
+
+const VALID_SIMULATE_INPUT = {
+  awardId: TEST_AWARD_ID,
+  leaverType: 'resignation',
+  terminationDate: '2027-01-01',
+};
+
+const SAMPLE_RPC_RESULT = {
+  leaver_type: 'resignation',
+  termination_date: '2027-01-01',
+  treatment: 'keep_vested',
+  units_granted: 1200,
+  units_already_vested: 300,
+  units_accelerated: 0,
+  units_forfeited: 900,
+  units_total_after_leave: 300,
+  exercise_window_days: 90,
+  exercise_deadline: '2027-04-01',
+  acceleration_months: 0,
+  used_snapshot_fallback: true,
+};
+
+describe('simulateLeaverScenario', () => {
+  it('rejects invalid awardId (not uuid)', async () => {
+    const { simulateLeaverScenario } = await import('../portal');
+    const res = await simulateLeaverScenario({
+      ...VALID_SIMULATE_INPUT,
+      awardId: 'not-a-uuid',
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.validationIssues).toBeGreaterThan(0);
+  });
+
+  it('rejects invalid date format', async () => {
+    const { simulateLeaverScenario } = await import('../portal');
+    const res = await simulateLeaverScenario({
+      ...VALID_SIMULATE_INPUT,
+      terminationDate: '01/01/2027',
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.validationIssues).toBeGreaterThan(0);
+  });
+
+  it('rejects empty leaverType', async () => {
+    const { simulateLeaverScenario } = await import('../portal');
+    const res = await simulateLeaverScenario({
+      ...VALID_SIMULATE_INPUT,
+      leaverType: '',
+    });
+    expect(res.ok).toBe(false);
+  });
+
+  it('happy path : ok=true + result + audit logged', async () => {
+    rpcMock.mockImplementationOnce(() => Promise.resolve({ data: SAMPLE_RPC_RESULT, error: null }));
+    const { simulateLeaverScenario } = await import('../portal');
+    const res = await simulateLeaverScenario(VALID_SIMULATE_INPUT);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.result.treatment).toBe('keep_vested');
+      expect(res.result.units_already_vested).toBe(300);
+    }
+    expect(rpcMock).toHaveBeenCalledWith('simulate_leaver_scenario', {
+      p_award_id: TEST_AWARD_ID,
+      p_leaver_type: 'resignation',
+      p_termination_date: '2027-01-01',
+    });
+    const lastAudit = auditMock.mock.calls.at(-1) as [Record<string, unknown>] | undefined;
+    expect(lastAudit?.[0]?.eventType).toBe('portal.leaver_simulated');
+  });
+
+  it('translates "Award not found" RPC error to French', async () => {
+    rpcMock.mockImplementationOnce(() =>
+      Promise.resolve({ data: null, error: { message: 'Award not found' } }),
+    );
+    const { simulateLeaverScenario } = await import('../portal');
+    const res = await simulateLeaverScenario(VALID_SIMULATE_INPUT);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/introuvable|accès refusé/i);
+  });
+
+  it('translates "Not authenticated" RPC error', async () => {
+    rpcMock.mockImplementationOnce(() =>
+      Promise.resolve({ data: null, error: { message: 'Not authenticated' } }),
+    );
+    const { simulateLeaverScenario } = await import('../portal');
+    const res = await simulateLeaverScenario(VALID_SIMULATE_INPUT);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/authentifié/i);
+  });
+
+  it('returns error when RPC returns null payload (no data)', async () => {
+    rpcMock.mockImplementationOnce(() => Promise.resolve({ data: null, error: null }));
+    const { simulateLeaverScenario } = await import('../portal');
+    const res = await simulateLeaverScenario(VALID_SIMULATE_INPUT);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/vide|simulation/i);
+  });
+
+  it('handles full_accelerate result correctly (Module 8 B4 migration 00055)', async () => {
+    const fullAccelResult = {
+      ...SAMPLE_RPC_RESULT,
+      treatment: 'full_accelerate',
+      units_already_vested: 300,
+      units_accelerated: 900,
+      units_forfeited: 0,
+      units_total_after_leave: 1200,
+    };
+    rpcMock.mockImplementationOnce(() => Promise.resolve({ data: fullAccelResult, error: null }));
+    const { simulateLeaverScenario } = await import('../portal');
+    const res = await simulateLeaverScenario({
+      ...VALID_SIMULATE_INPUT,
+      leaverType: 'company_sale',
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.result.treatment).toBe('full_accelerate');
+      expect(res.result.units_accelerated).toBe(900);
+      expect(res.result.units_forfeited).toBe(0);
+    }
+  });
+});

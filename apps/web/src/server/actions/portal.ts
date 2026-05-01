@@ -5,7 +5,9 @@ import { z } from 'zod';
 import {
   completeBeneficiaryProfileSchema,
   type CompleteBeneficiaryProfileInput,
+  type LeaverScenarioResult,
 } from '@equity/shared';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { logAuditEvent } from '@/lib/audit';
 import { requireUser } from '@/lib/auth/rbac';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -104,7 +106,6 @@ export async function completeBeneficiaryProfile(
   // On utilise le client cookie-based pour que `auth.uid()` soit présent
   // dans la SECURITY DEFINER function (le RPC vérifie ownership).
   if (phoneTrimmed !== '') {
-    const { createSupabaseServerClient } = await import('@/lib/supabase/server');
     const userSupabase = await createSupabaseServerClient();
     const { error: rpcError } = await userSupabase.rpc('update_beneficiary_self_phone', {
       p_phone: phoneTrimmed,
@@ -273,4 +274,82 @@ export async function getPortalDocumentSignedUrl(
     signedUrl: signed.signedUrl,
     expiresAt: new Date(Date.now() + PORTAL_DOC_URL_TTL_SECONDS * 1000).toISOString(),
   };
+}
+
+// ---------------------------------------------------------------------------
+// simulateLeaverScenario — Module 8 B4 (§4.3 section 3 + §5.2 + §6)
+// ---------------------------------------------------------------------------
+//
+// Wrapper TypeScript autour du RPC SECURITY DEFINER `simulate_leaver_scenario`
+// (Module 8 B1, étendu B4 migration 00055 pour `full_accelerate`).
+//
+// Sécurité : le RPC fait l'auth check + ownership check côté DB. On utilise
+// le client cookie-based pour propager auth.uid().
+//
+// Audit : event 'portal.leaver_simulated' avec metadata
+//   { award_id, leaver_type, termination_date, treatment_returned }.
+//
+// L'audit est logué APRÈS appel RPC : on inclut le treatment retourné par
+// le RPC (utile pour debug + compréhension a posteriori d'un user qui aurait
+// simulé un type avec treatment surprenant).
+
+const simulateLeaverSchema = z.object({
+  awardId: z.string().uuid(),
+  leaverType: z.string().min(1).max(60),
+  /** ISO date YYYY-MM-DD */
+  terminationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format YYYY-MM-DD attendu'),
+});
+
+export async function simulateLeaverScenario(
+  input: unknown,
+): Promise<ActionOk<{ result: LeaverScenarioResult }> | ActionError> {
+  const parsed = simulateLeaverSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+  const { awardId, leaverType, terminationDate } = parsed.data;
+
+  const user = await requireUser();
+  const userSupabase = await createSupabaseServerClient();
+
+  const { data, error } = await userSupabase.rpc('simulate_leaver_scenario', {
+    p_award_id: awardId,
+    p_leaver_type: leaverType,
+    p_termination_date: terminationDate,
+  });
+
+  if (error) {
+    if (/not authenticated/i.test(error.message)) {
+      return { ok: false, error: 'Non authentifié' };
+    }
+    if (/no beneficiary record/i.test(error.message)) {
+      return { ok: false, error: 'Aucun bénéficiaire associé à cet utilisateur' };
+    }
+    if (/award not found/i.test(error.message)) {
+      return { ok: false, error: 'Attribution introuvable ou accès refusé' };
+    }
+    return { ok: false, error: error.message };
+  }
+
+  const result = data as unknown as LeaverScenarioResult | null;
+  if (!result) {
+    return { ok: false, error: 'Réponse vide du moteur de simulation' };
+  }
+
+  // Audit best-effort (le helper ne throw pas)
+  await logAuditEvent({
+    eventType: 'portal.leaver_simulated',
+    resourceType: 'AWARD',
+    resourceId: awardId,
+    userId: user.id,
+    userEmail: user.email,
+    orgId: user.activeOrgId,
+    metadata: {
+      award_id: awardId,
+      leaver_type: leaverType,
+      termination_date: terminationDate,
+      treatment_returned: result.treatment,
+      used_snapshot_fallback: result.used_snapshot_fallback,
+    },
+  });
+
+  return { ok: true, result };
 }
