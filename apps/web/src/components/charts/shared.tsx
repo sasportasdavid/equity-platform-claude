@@ -132,7 +132,7 @@ export function EditorialTooltip({
         <div
           className={
             italicLabel
-              ? 'serif-italic text-ink-900 mb-2 text-sm'
+              ? 'serif-italic text-brass-500 mb-2 text-sm'
               : 'text-overline text-ink-700 mb-2'
           }
         >

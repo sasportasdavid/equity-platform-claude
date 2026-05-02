@@ -147,6 +147,7 @@ export default function ChartsSandboxPage() {
               height={260}
               showLegend
               showDots
+              italicTooltipLabel
             />
           </CardContent>
         </Card>
