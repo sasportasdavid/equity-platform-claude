@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { ArrowLeft, Lock } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { uuidSchema } from '@equity/shared';
 import { PageShell } from '@/components/shared/PageShell';
 import { PlanActionsMenu } from '@/components/plans/PlanActionsMenu';

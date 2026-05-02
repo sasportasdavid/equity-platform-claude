@@ -33,7 +33,9 @@ export type EditorialSynthesisTabProps = {
 };
 
 export function EditorialSynthesisTab({ detail, planAwards = [] }: EditorialSynthesisTabProps) {
-  const today = new Date();
+  // `today` mémoisé : sans ça React Hooks déps lint warn car une
+  // nouvelle Date() à chaque render casserait le useMemo ci-dessous.
+  const today = useMemo(() => new Date(), []);
   const grantDate = parseIsoLocalDate(detail.plan.grant_date);
   const cliffDate = computeCliffDate(grantDate, detail.vestingSchedule?.cliff_months ?? null);
   const isPreCliff = cliffDate !== null && today < cliffDate;

@@ -77,12 +77,6 @@ function buildSchedule(
   totalMonths: number,
   cliffPct = 25,
 ): PlanDetail['vestingSchedule'] {
-  const tranches: PlanDetail['vestingSchedule'] extends infer T
-    ? T extends { tranches: infer U }
-      ? U
-      : never
-    : never = [] as never;
-
   const grantDate = new Date(grant);
   const numTranches = Math.floor(totalMonths / 12);
   const arr: {

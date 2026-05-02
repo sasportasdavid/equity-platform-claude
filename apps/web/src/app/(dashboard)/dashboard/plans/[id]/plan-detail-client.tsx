@@ -6,13 +6,8 @@ import {
   AlertTriangle,
   Boxes,
   Calculator,
-  CalendarDays,
-  CheckCircle2,
-  Coins,
-  FileText,
   GitBranch,
   History,
-  Layers,
   LineChart as LineIcon,
   Sigma,
   TrendingUp,
@@ -142,100 +137,10 @@ export function PlanDetailClient({
 }
 
 // ---------------------------------------------------------------------------
-// Onglet 1 — Synthèse
+// Onglet 1 — Synthèse : remplacé par EditorialSynthesisTab (Étape 13).
+// L'ancien composant SynthesisTab a été supprimé, ainsi que ses imports
+// orphelins (LineChart Recharts, KpiCard locale, formatDateShort).
 // ---------------------------------------------------------------------------
-function SynthesisTab({ detail }: { detail: PlanDetail }) {
-  const tranches = detail.vestingSchedule?.tranches ?? [];
-  const cumulData = useMemo(() => {
-    return tranches.reduce<Array<{ date: string; cumul: number }>>((acc, t) => {
-      const prev = acc[acc.length - 1]?.cumul ?? 0;
-      acc.push({ date: t.vesting_date, cumul: Math.min(prev + t.percentage_of_award, 100) });
-      return acc;
-    }, []);
-  }, [tranches]);
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          icon={<Coins className="size-4" />}
-          label="Pool total"
-          value={detail.plan.pool_size.toLocaleString('fr-FR')}
-        />
-        <KpiCard
-          icon={<TrendingUp className="size-4" />}
-          label="Alloué"
-          value={detail.plan.pool_allocated.toLocaleString('fr-FR')}
-          sub={
-            detail.plan.pool_size > 0
-              ? `${Math.round((detail.plan.pool_allocated / detail.plan.pool_size) * 100)} %`
-              : '—'
-          }
-        />
-        <KpiCard
-          icon={<UserMinus className="size-4" />}
-          label="Conditions perf."
-          value={detail.conditions.length.toString()}
-        />
-        <KpiCard
-          icon={<CalendarDays className="size-4" />}
-          label="Date attribution"
-          value={formatDate(detail.plan.grant_date)}
-        />
-      </div>
-
-      <ValuationCard planId={detail.plan.id} latest={detail.latestValuation} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Calendrier de vesting</CardTitle>
-          <CardDescription>
-            {tranches.length === 0
-              ? 'Aucune tranche définie.'
-              : `${tranches.length} tranche${tranches.length > 1 ? 's' : ''} — cumul jusqu'à 100 %`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {cumulData.length > 0 ? (
-            <div className="h-[280px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={cumulData} margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(d) => formatDateShort(d)}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11 }}
-                    domain={[0, 100]}
-                    tickFormatter={(v) => `${v} %`}
-                  />
-                  <RechartsTooltip
-                    formatter={(value) => [
-                      `${typeof value === 'number' ? value.toFixed(2) : value} %`,
-                      'Cumul vested',
-                    ]}
-                    labelFormatter={(label) => formatDate(label)}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="cumul"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-sm">Aucune donnée à afficher.</p>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Card « Valorisation » (Synthèse) — affiche la dernière valorisation DONE.
