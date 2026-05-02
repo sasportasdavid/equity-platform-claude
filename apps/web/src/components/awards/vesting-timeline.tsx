@@ -3,8 +3,11 @@ import { cn } from '@/lib/utils';
 /**
  * Module Design System V1 — Vesting Timeline éditoriale (Étape 9).
  *
- * SVG natif (pas Recharts) — contrôle pixel-perfect requis pour la
- * **règle critique** : la position TODAY est calculée par formule
+ * SVG natif pour les marqueurs (ticks + ligne TODAY) **+** layers
+ * HTML/CSS pour les zones (patterns hachures pixel-perfect
+ * indépendants de la largeur du conteneur).
+ *
+ * **Règle critique** : la position TODAY est calculée par formule
  * stricte
  *   `((today - vestingStart) / (vestingEnd - vestingStart)) * 100%`
  * Aucune valeur arbitraire, aucun fallback "centré".
@@ -12,20 +15,22 @@ import { cn } from '@/lib/utils';
  * Anatomie selon mockup 4 (page Plan Detail) + mockup 2 (Portail
  * bénéficiaire) :
  *
- * - Frise horizontale full-width hauteur ~80px
+ * - Frise horizontale full-width hauteur **72px**
  * - 4 zones visuelles construites depuis les `vesting_events` :
  *   * **Acquis** (`status='VESTED'`) : bond-500 plein
- *   * **En cours** (segment courant entre last_vested et next_pending) :
+ *   * **En cours** (segment courant entre last_vested et today) :
  *     gradient bond-500 → ink-700
- *   * **À acquérir** (PENDING futurs sans condition) : hachures 45°
- *     ink-300
+ *   * **À acquérir** (PENDING futurs sans condition) :
+ *     **hachures 45° diagonales** denses ink-300 (CSS gradient,
+ *     pas SVG pattern → préservé pixel-perfect quel que soit le
+ *     stretching du SVG)
  *   * **Conditionnel** (events liés à conditions de performance) :
- *     barres verticales pointillées brass-500
- * - Au-dessus : ticks de dates mono à chaque tranche
- * - En-dessous : pourcentage cumulé + nb d'unités
+ *     **lignes verticales brass régulièrement espacées** (~30px
+ *     d'intervalle → 8-12 lignes selon largeur zone)
+ * - Sur la frise : ticks ink-500 fines à chaque tranche
  * - **Ligne verticale "AUJOURD'HUI"** cuivre 1.5px avec pulse 3s
- * - Animation au mount : fill de gauche à droite 800ms ease-enter
- * - Légende 4 mini-carrés en bas
+ * - Animation au mount : fill scaleX 800ms ease-enter sur "Acquis"
+ * - Légende mini-carrés en bas
  *
  * **Prop `simplified={true}`** pour le portail bénéficiaire :
  * désactive les tooltips détaillés, retire la zone "Conditionnel"
@@ -68,9 +73,33 @@ export type VestingTimelineProps = {
   className?: string;
 };
 
-const SVG_HEIGHT = 80;
-const TIMELINE_Y = 32;
-const TIMELINE_HEIGHT = 14;
+const TIMELINE_HEIGHT = 72;
+
+// Patterns CSS — défini en dehors du composant pour mémoization.
+// `repeating-linear-gradient` reste pixel-perfect quelle que soit la
+// largeur du conteneur (vs SVG pattern qui se déforme avec
+// `preserveAspectRatio="none"`).
+const PATTERN_HATCH_PENDING = [
+  'repeating-linear-gradient(',
+  '45deg,',
+  'transparent 0,',
+  'transparent 5px,',
+  'var(--ink-300) 5px,',
+  'var(--ink-300) 6.5px',
+  ')',
+].join(' ');
+
+const PATTERN_HATCH_CONDITIONAL = [
+  'repeating-linear-gradient(',
+  '90deg,',
+  'transparent 0,',
+  'transparent 28px,',
+  'var(--brass-500) 28px,',
+  'var(--brass-500) 29.5px',
+  ')',
+].join(' ');
+
+const GRADIENT_EN_COURS = 'linear-gradient(90deg, var(--bond-500), var(--ink-700))';
 
 export function VestingTimeline({
   tranches,
@@ -114,125 +143,115 @@ export function VestingTimeline({
   const enCoursStartPct = acquisEndPct;
   const enCoursEndPct = Math.max(acquisEndPct, todayPct);
 
+  // Zones conditionnelles à dessiner (depuis acquisEndPct vers chaque
+  // tranche conditionnelle PENDING). On regroupe en plages contiguës.
+  const conditionalRanges = hasConditionalZone
+    ? tranchePositions
+        .filter((t) => t.hasPerformanceCondition && t.status !== 'VESTED')
+        .map((t, idx, arr) => {
+          const prev = idx === 0 ? acquisEndPct : arr[idx - 1]!.xPct;
+          return { startPct: prev, endPct: t.xPct };
+        })
+        .filter((r) => r.endPct > r.startPct)
+    : [];
+
   return (
     <div className={cn('w-full', className)} data-testid="vesting-timeline">
-      <svg
-        viewBox={`0 0 100 ${SVG_HEIGHT}`}
-        preserveAspectRatio="none"
-        width="100%"
-        height={SVG_HEIGHT}
-        role="img"
-        aria-label="Chronologie de vesting"
+      {/* Frise horizontale — wrapper relatif h=72px */}
+      <div
+        className="relative w-full overflow-hidden rounded-sm"
+        style={{ height: `${TIMELINE_HEIGHT}px` }}
       >
-        <defs>
-          {/* Hachures 45° pour "À acquérir" */}
-          <pattern
-            id="hatch-pending"
-            patternUnits="userSpaceOnUse"
-            width="6"
-            height="6"
-            patternTransform="rotate(45)"
-          >
-            <line x1="0" y1="0" x2="0" y2="6" stroke="var(--ink-300)" strokeWidth="2" />
-          </pattern>
-          {/* Gradient bond-500 → ink-700 pour "En cours" */}
-          <linearGradient id="grad-encours" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="var(--bond-500)" />
-            <stop offset="100%" stopColor="var(--ink-700)" />
-          </linearGradient>
-          {/* Hachures verticales pointillées brass pour "Conditionnel" */}
-          <pattern id="hatch-conditional" patternUnits="userSpaceOnUse" width="4" height="6">
-            <line x1="2" y1="0" x2="2" y2="2" stroke="var(--brass-500)" strokeWidth="1.5" />
-            <line x1="2" y1="3" x2="2" y2="5" stroke="var(--brass-500)" strokeWidth="1.5" />
-          </pattern>
-        </defs>
-
-        {/* Zone "À acquérir" — fond complet (sera recouvert par les autres zones) */}
-        <rect
-          x="0"
-          y={TIMELINE_Y}
-          width="100"
-          height={TIMELINE_HEIGHT}
-          fill="url(#hatch-pending)"
+        {/* Layer 1 — fond "À acquérir" (hachures 45° diagonales) */}
+        <div
+          className="absolute inset-0"
+          style={{ backgroundImage: PATTERN_HATCH_PENDING }}
+          aria-hidden="true"
         />
 
-        {/* Zone "Conditionnel" superposée si applicable */}
-        {hasConditionalZone
-          ? tranchePositions
-              .filter((t) => t.hasPerformanceCondition && t.status !== 'VESTED')
-              .map((t, idx, arr) => {
-                const prev = idx === 0 ? acquisEndPct : arr[idx - 1]!.xPct;
-                return (
-                  <rect
-                    key={`cond-${idx}`}
-                    x={prev}
-                    y={TIMELINE_Y}
-                    width={Math.max(0, t.xPct - prev)}
-                    height={TIMELINE_HEIGHT}
-                    fill="url(#hatch-conditional)"
-                  />
-                );
-              })
-          : null}
-
-        {/* Zone "En cours" — gradient si on est entre dernier vested et today */}
-        {enCoursEndPct > enCoursStartPct ? (
-          <rect
-            x={enCoursStartPct}
-            y={TIMELINE_Y}
-            width={enCoursEndPct - enCoursStartPct}
-            height={TIMELINE_HEIGHT}
-            fill="url(#grad-encours)"
-          />
-        ) : null}
-
-        {/* Zone "Acquis" — bond-500 plein, animation fill 800ms */}
-        <rect
-          x="0"
-          y={TIMELINE_Y}
-          width={acquisEndPct}
-          height={TIMELINE_HEIGHT}
-          fill="var(--bond-500)"
-          style={{
-            animation: 'vesting-fill 800ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
-            transformOrigin: 'left',
-          }}
-        />
-
-        {/* Tranches — petits ticks verticaux brass au-dessus de la frise */}
-        {tranchePositions.map((t, idx) => (
-          <line
-            key={`tick-${idx}`}
-            x1={t.xPct}
-            y1={TIMELINE_Y - 4}
-            x2={t.xPct}
-            y2={TIMELINE_Y + TIMELINE_HEIGHT + 4}
-            stroke="var(--ink-500)"
-            strokeWidth="0.3"
+        {/* Layer 2 — zones "Conditionnel" (lignes verticales brass) superposées.
+            backgroundColor paper-100 masque le Layer 1 ink-300 dessous afin
+            que seules les verticales brass restent visibles dans la zone */}
+        {conditionalRanges.map((r, idx) => (
+          <div
+            key={`cond-${idx}`}
+            className="absolute bottom-0 top-0"
+            style={{
+              left: `${r.startPct}%`,
+              width: `${r.endPct - r.startPct}%`,
+              backgroundColor: 'var(--paper-100)',
+              backgroundImage: PATTERN_HATCH_CONDITIONAL,
+            }}
+            aria-hidden="true"
           />
         ))}
 
-        {/* Ligne verticale TODAY — cuivre, formule stricte */}
-        <line
-          x1={todayPct}
-          y1={TIMELINE_Y - 8}
-          x2={todayPct}
-          y2={TIMELINE_Y + TIMELINE_HEIGHT + 8}
-          stroke="var(--brass-500)"
-          strokeWidth="0.6"
-          className="animate-pulse-live"
-          style={{ transformOrigin: `${todayPct}% center` }}
+        {/* Layer 3 — "En cours" (gradient bond → ink) */}
+        {enCoursEndPct > enCoursStartPct ? (
+          <div
+            className="absolute bottom-0 top-0"
+            style={{
+              left: `${enCoursStartPct}%`,
+              width: `${enCoursEndPct - enCoursStartPct}%`,
+              backgroundImage: GRADIENT_EN_COURS,
+            }}
+            aria-hidden="true"
+          />
+        ) : null}
+
+        {/* Layer 4 — "Acquis" (bond-500 plein, scaleX 800ms à mount) */}
+        <div
+          className="absolute bottom-0 left-0 top-0"
+          style={{
+            width: `${acquisEndPct}%`,
+            backgroundColor: 'var(--bond-500)',
+            transformOrigin: 'left',
+            animation: 'vesting-fill 800ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          }}
+          aria-hidden="true"
         />
-      </svg>
+
+        {/* Layer 5 — SVG superposé pour ticks + ligne TODAY (preserveAspectRatio="none"
+            pour l'étirement, OK ici car on n'a que des lignes verticales — leur
+            épaisseur est trop fine pour que la déformation X soit visible) */}
+        <svg
+          className="absolute inset-0 h-full w-full"
+          viewBox={`0 0 100 ${TIMELINE_HEIGHT}`}
+          preserveAspectRatio="none"
+          role="img"
+          aria-label="Chronologie de vesting"
+        >
+          {/* Ticks fins ink-500 à chaque tranche */}
+          {tranchePositions.map((t, idx) => (
+            <line
+              key={`tick-${idx}`}
+              x1={t.xPct}
+              y1={6}
+              x2={t.xPct}
+              y2={TIMELINE_HEIGHT - 6}
+              stroke="var(--ink-500)"
+              strokeWidth="0.25"
+              opacity="0.6"
+            />
+          ))}
+
+          {/* Ligne verticale TODAY — cuivre, formule stricte */}
+          <line
+            x1={todayPct}
+            y1={-2}
+            x2={todayPct}
+            y2={TIMELINE_HEIGHT + 2}
+            stroke="var(--brass-500)"
+            strokeWidth="0.5"
+            className="animate-pulse-live"
+          />
+        </svg>
+      </div>
 
       {/* Labels au-dessus : dates de tranches */}
-      <div className="relative mt-1">
-        <div className="flex justify-between">
-          <span className="text-numeric-sm text-ink-500">
-            {formatDate(vestingStart, simplified)}
-          </span>
-          <span className="text-numeric-sm text-ink-500">{formatDate(vestingEnd, simplified)}</span>
-        </div>
+      <div className="relative mt-1 flex justify-between">
+        <span className="text-numeric-sm text-ink-500">{formatDate(vestingStart, simplified)}</span>
+        <span className="text-numeric-sm text-ink-500">{formatDate(vestingEnd, simplified)}</span>
       </div>
 
       {/* Labels en-dessous : pourcentage + unités cumulés */}
@@ -243,15 +262,13 @@ export function VestingTimeline({
         </span>
       </div>
 
-      {/* Légende — 4 mini-carrés (3 si hasConditionalZone=false) */}
+      {/* Légende — 3 ou 4 mini-carrés selon hasConditionalZone */}
       <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
         <LegendItem
           color="var(--bond-500)"
           label={`Acquis · ${tranches.filter((t) => t.status === 'VESTED').reduce((sum, t) => sum + t.unitsToVest, 0)} u.`}
         />
-        {enCoursEndPct > enCoursStartPct ? (
-          <LegendItem fill="url(#grad-encours-legend)" label="En cours" gradient />
-        ) : null}
+        {enCoursEndPct > enCoursStartPct ? <LegendItem gradient label="En cours" /> : null}
         <LegendItem pattern="pending" label="À acquérir" />
         {hasConditionalZone ? (
           <LegendItem
@@ -269,13 +286,11 @@ export function VestingTimeline({
 
 function LegendItem({
   color,
-  fill,
   pattern,
   label,
   gradient,
 }: {
   color?: string;
-  fill?: string;
   pattern?: 'pending' | 'conditional';
   label: string;
   gradient?: boolean;
@@ -288,11 +303,11 @@ function LegendItem({
           backgroundColor: color,
           backgroundImage:
             pattern === 'pending'
-              ? 'repeating-linear-gradient(45deg, var(--ink-300) 0, var(--ink-300) 1px, transparent 1px, transparent 3px)'
+              ? 'repeating-linear-gradient(45deg, transparent 0, transparent 1.5px, var(--ink-300) 1.5px, var(--ink-300) 2.5px)'
               : pattern === 'conditional'
-                ? 'repeating-linear-gradient(0deg, var(--brass-500) 0, var(--brass-500) 1px, transparent 1px, transparent 3px)'
+                ? 'repeating-linear-gradient(90deg, transparent 0, transparent 2.5px, var(--brass-500) 2.5px, var(--brass-500) 3.5px)'
                 : gradient
-                  ? 'linear-gradient(90deg, var(--bond-500), var(--ink-700))'
+                  ? GRADIENT_EN_COURS
                   : undefined,
         }}
       />
