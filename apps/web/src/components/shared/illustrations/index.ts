@@ -18,5 +18,5 @@ export { CompassIllustration } from './compass-illustration';
 export { VaultIllustration } from './vault-illustration';
 export { SignatureIllustration } from './signature-illustration';
 export { ScalesIllustration } from './scales-illustration';
-export { SeedlingIllustration } from './seedling-illustration';
+export { LettrineIllustration } from './lettrine-illustration';
 export { LighthouseIllustration } from './lighthouse-illustration';

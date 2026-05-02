@@ -7,7 +7,7 @@ import {
   LighthouseIllustration,
   PlumeIllustration,
   ScalesIllustration,
-  SeedlingIllustration,
+  LettrineIllustration,
   SignatureIllustration,
   VaultIllustration,
 } from '@/components/shared/illustrations';
@@ -20,11 +20,11 @@ import {
  *
  * Décisions design notables (à reporter après commit) :
  *
- * 1. **Seedling** : intentionnellement rendu en cuivre + ink (PAS de
- *    vert) pour éviter le cliché tech-startup green-thumb.
- *    Vert reste réservé à `bond-500` (succès). Si le rendu te semble
- *    encore hors registre, alternatives suggérées : page liminaire
- *    pliée, sceau de cire, lettrine ornée du « C » de Capiwise.
+ * 1. **Lettrine ornée** (remplace seedling) : capitale « C » Fraunces
+ *    serif dans cadre cuivre orné, façon manuscrit médiéval. Évoque
+ *    l'ouverture d'un chapitre — métaphore juste pour démarrer son
+ *    histoire d'equity. Le vert reste réservé à `bond-500` (succès).
+ *    Alternatives documentées dans le composant lettrine-illustration.tsx.
  *
  * 2. **Tous les SVG** sur palette brass + ink + paper-200/50 + ink-300.
  *    Aucun bond-500 (vert) ni title-500 (rouge) pour ne pas pré-influencer
@@ -72,8 +72,8 @@ export default function EmptyStatesSandboxPage() {
           <IllustrationTile name="scales" caption="empty compliance">
             <ScalesIllustration size={80} />
           </IllustrationTile>
-          <IllustrationTile name="seedling" caption="empty premier truc · cuivre/ink (sans vert)">
-            <SeedlingIllustration size={80} />
+          <IllustrationTile name="lettrine" caption="empty premier truc · capitale ornée">
+            <LettrineIllustration size={80} />
           </IllustrationTile>
           <IllustrationTile name="lighthouse" caption="empty error/permission">
             <LighthouseIllustration size={80} />
@@ -164,7 +164,7 @@ export default function EmptyStatesSandboxPage() {
             description="Aucune alerte de conformité active sur vos plans en cours."
           />
           <EmptyState
-            illustration={<SeedlingIllustration size={72} />}
+            illustration={<LettrineIllustration size={72} />}
             title="Bienvenue sur Capiwise."
             description="Commencez par créer votre première organisation et inviter votre équipe."
             action={{ label: 'Créer mon organisation', href: '#' }}
@@ -178,9 +178,10 @@ export default function EmptyStatesSandboxPage() {
           <code className="bg-paper-200 rounded px-1">/dev/design/empty-states</code>
         </p>
         <p className="mt-2">
-          ⚠ <strong>Décision design seedling</strong> : intentionnellement sans couleur verte
-          (cuivre + ink uniquement) pour éviter le cliché startup. Si jugé hors registre,
-          suggestions alternatives dans le docstring du composant SeedlingIllustration.
+          ⚠ <strong>Décision design « premier truc »</strong> : lettrine ornée &laquo; C &raquo;
+          Fraunces (remplace seedling), métaphore d&apos;ouverture d&apos;un chapitre plus alignée
+          avec le registre Editorial Finance. Alternatives documentées dans
+          <code className="bg-paper-200 rounded px-1">lettrine-illustration.tsx</code>.
         </p>
       </footer>
     </div>

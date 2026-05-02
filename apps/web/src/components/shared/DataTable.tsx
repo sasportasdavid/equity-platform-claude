@@ -10,6 +10,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table';
 import { useState, type ReactNode } from 'react';
+import { ChevronDown, ChevronsUpDown, ChevronUp } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -21,18 +22,26 @@ import {
 import { cn } from '@/lib/utils';
 
 /**
- * DataTable réutilisable basée sur TanStack Table v8.
+ * Module Design System V1 — DataTable Editorial Finance.
  *
- * Features minimales pour la V1 :
- *  - sorting client-side (clic header)
- *  - filtrage côté serveur (déjà appliqué via les filters de listPlans)
- *  - empty state custom
- *  - row click handler (onRowClick) pour ouvrir le détail
+ * Refonte visuelle (Étape 8) :
+ * - Header sticky text-overline ink-700 fond paper-200
+ * - Lignes alternées zebra paper-200/30 (subtle)
+ * - Hover row : bg paper-200/60 transition 100ms
+ * - Row click : underline 1px brass-300 sur la première cellule au hover
+ * - Sort icons : ChevronUp/Down brass quand actif, neutre sinon
+ * - Empty state plug : si `emptyState` est un ReactNode complet
+ *   (EmptyState component), il remplace la cell unique. Sinon fallback
+ *   string dans une cell unique.
  *
- * On NE veut PAS de pagination client-side ici : la V1 est plafonnée à
- * ~100 plans par org (limit côté listPlans à ajouter si besoin), donc
- * tout tient sur une page. La pagination serveur arrivera quand un user
- * dépassera 200 plans.
+ * **API publique inchangée** :
+ * - `columns: ColumnDef<TData, TValue>[]`
+ * - `data: TData[]`
+ * - `onRowClick?: (row: TData) => void`
+ * - `emptyState?: ReactNode`
+ *
+ * Backward compat 100% — les ~58 fichiers consommateurs Module 3a/3b/4/5/7
+ * continuent à fonctionner sans changement.
  */
 export function DataTable<TData, TValue>({
   columns,
@@ -57,61 +66,85 @@ export function DataTable<TData, TValue>({
     getFilteredRowModel: getFilteredRowModel(),
   });
 
+  const isEmpty = table.getRowModel().rows.length === 0;
+
   return (
-    <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
+    <Table>
+      <TableHeader>
+        {table.getHeaderGroups().map((headerGroup) => (
+          <TableRow key={headerGroup.id}>
+            {headerGroup.headers.map((header) => {
+              const canSort = header.column.getCanSort();
+              const sortDir = header.column.getIsSorted();
+              return (
                 <TableHead
                   key={header.id}
-                  className={cn(
-                    'whitespace-nowrap',
-                    header.column.getCanSort() && 'cursor-pointer select-none',
-                  )}
-                  onClick={
-                    header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined
-                  }
+                  className={cn(canSort && 'hover:text-ink-900 cursor-pointer select-none')}
+                  onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
+                  data-sortable={canSort ? 'true' : undefined}
+                  data-sort={sortDir || undefined}
                 >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                  {header.column.getIsSorted() === 'asc' ? ' ↑' : null}
-                  {header.column.getIsSorted() === 'desc' ? ' ↓' : null}
+                  <span className="inline-flex items-center gap-1.5">
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                    {canSort ? <SortIcon direction={sortDir as 'asc' | 'desc' | false} /> : null}
+                  </span>
                 </TableHead>
+              );
+            })}
+          </TableRow>
+        ))}
+      </TableHeader>
+      <TableBody>
+        {isEmpty ? (
+          <TableRow className="hover:bg-transparent">
+            <TableCell
+              colSpan={columns.length}
+              className="text-ink-500 px-3 py-8 text-center text-sm"
+            >
+              {emptyState ?? (
+                <span className="serif-italic text-ink-500">Aucun résultat à afficher.</span>
+              )}
+            </TableCell>
+          </TableRow>
+        ) : (
+          table.getRowModel().rows.map((row) => (
+            <TableRow
+              key={row.id}
+              className={cn('group/row', onRowClick && 'cursor-pointer')}
+              onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+              data-testid={`datatable-row-${row.id}`}
+            >
+              {row.getVisibleCells().map((cell, idx) => (
+                <TableCell
+                  key={cell.id}
+                  className={cn(
+                    onRowClick &&
+                      idx === 0 &&
+                      'group-hover/row:decoration-brass-300 group-hover/row:underline group-hover/row:underline-offset-4',
+                  )}
+                >
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </TableCell>
               ))}
             </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows.length === 0 ? (
-            <TableRow>
-              <TableCell
-                colSpan={columns.length}
-                className="text-muted-foreground h-32 text-center text-sm"
-              >
-                {emptyState ?? 'Aucun résultat.'}
-              </TableCell>
-            </TableRow>
-          ) : (
-            table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                className={cn(onRowClick && 'hover:bg-muted/50 cursor-pointer')}
-                onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                data-testid={`datatable-row-${row.id}`}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} className="whitespace-nowrap">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
+          ))
+        )}
+      </TableBody>
+    </Table>
   );
+}
+
+/**
+ * Sort icon — neutre (chevrons up+down) ou brass directionnel.
+ */
+function SortIcon({ direction }: { direction: 'asc' | 'desc' | false }) {
+  if (direction === 'asc') {
+    return <ChevronUp className="text-brass-500 size-3" strokeWidth={1.5} />;
+  }
+  if (direction === 'desc') {
+    return <ChevronDown className="text-brass-500 size-3" strokeWidth={1.5} />;
+  }
+  return <ChevronsUpDown className="text-ink-400 size-3" strokeWidth={1.5} />;
 }
