@@ -29,18 +29,28 @@ export default async function SelectOrgPage() {
     redirect('/onboarding/create-org');
   }
 
-  // Si une seule org et c'est déjà l'active, on redirige direct vers /dashboard
-  if (memberships.length === 1) {
+  // Si une seule org ET qu'elle est DÉJÀ l'active du JWT → redirect /dashboard.
+  // Sinon (ex: JWT sans active_org_id à cause de la dette #33 — hook
+  // `custom_access_token_hook` instable), on AFFICHE le picker même avec
+  // 1 seule org : l'user clique → `setActiveOrg` met à jour app_metadata
+  // côté DB → refreshSession() → /dashboard. Sans ce check on tombe en
+  // boucle infinie : proxy → /select-org → /dashboard → proxy → /select-org…
+  if (memberships.length === 1 && memberships[0]!.org_id === user.activeOrgId) {
     redirect('/dashboard');
   }
+
+  const singleMembership = memberships.length === 1;
 
   return (
     <div className="w-full max-w-2xl">
       <header className="mb-6 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Choisissez une organisation</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {singleMembership ? 'Confirmer votre organisation' : 'Choisissez une organisation'}
+        </h1>
         <p className="text-muted-foreground mt-2 text-sm">
-          Vous êtes membre de {memberships.length} organisations. Sélectionnez celle sur laquelle
-          travailler.
+          {singleMembership
+            ? 'Cliquez pour activer votre organisation et accéder à la plateforme.'
+            : `Vous êtes membre de ${memberships.length} organisations. Sélectionnez celle sur laquelle travailler.`}
         </p>
       </header>
 

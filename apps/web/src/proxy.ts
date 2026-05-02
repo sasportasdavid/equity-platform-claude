@@ -13,9 +13,14 @@ import { createServerClient } from '@supabase/ssr';
  *  5. Utilisateur authentifié sans `app_metadata.active_org_id` :
  *     - sur /onboarding/* ou /select-org : on laisse passer (c'est là qu'il
  *       va régler ce problème)
- *     - sinon : redirect /onboarding/create-org si zéro membership probable,
- *       /select-org si ≥1 membership (c'est l'app qui décidera précisément
- *       côté SSR via requireUser).
+ *     - sinon : redirect /select-org. Cette page SSR lit `memberships` via
+ *       admin client et décide :
+ *         * 0 membership → redirige vers /onboarding/create-org
+ *         * ≥1 membership → affiche le picker (qui appelle setActiveOrg
+ *           pour mettre à jour app_metadata.active_org_id côté DB)
+ *       Pourquoi pas redirect direct vers /onboarding/create-org : si le
+ *       hook `custom_access_token_hook` est instable (dette #33), un user
+ *       qui A bien des memberships était re-routé vers create-org → fix ici.
  *
  * Notes Next 16 :
  *  - Filename = `proxy.ts` (le legacy `middleware.ts` reste supporté mais
@@ -104,10 +109,12 @@ export async function proxy(request: NextRequest) {
   const activeOrgId =
     (user?.app_metadata as { active_org_id?: string } | null)?.active_org_id ?? null;
 
-  // Authed user qui visite /login → /dashboard ou /onboarding selon contexte
+  // Authed user qui visite /login → /dashboard ou /select-org selon contexte
+  // (la page /select-org décidera : redirect /onboarding/create-org si 0
+  // membership, picker si ≥1 — voir commentaire en haut de fichier)
   if (isAuthed && pathname === '/login') {
     const url = request.nextUrl.clone();
-    url.pathname = activeOrgId ? '/dashboard' : '/onboarding/create-org';
+    url.pathname = activeOrgId ? '/dashboard' : '/select-org';
     url.search = '';
     return NextResponse.redirect(url);
   }
@@ -120,10 +127,12 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Authed sans org active sur route business → onboarding
+  // Authed sans org active sur route business → /select-org (qui décidera
+  // d'afficher le picker ou de rediriger vers /onboarding/create-org si
+  // l'user n'a vraiment aucune membership)
   if (isAuthed && !activeOrgId && !isPublic && !isNoOrgAllowed(pathname)) {
     const url = request.nextUrl.clone();
-    url.pathname = '/onboarding/create-org';
+    url.pathname = '/select-org';
     url.search = '';
     return NextResponse.redirect(url);
   }
