@@ -39,6 +39,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { EditorialSynthesisTab } from '@/components/plans/detail/EditorialSynthesisTab';
 import type { PlanDetail } from '@/server/queries/plans';
 
 /**
@@ -106,7 +107,7 @@ export function PlanDetailClient({
         </TabsList>
 
         <TabsContent value="synthesis">
-          <SynthesisTab detail={detail} />
+          <EditorialSynthesisTab detail={detail} />
         </TabsContent>
         <TabsContent value="snapshot">
           <SnapshotTab detail={detail} />

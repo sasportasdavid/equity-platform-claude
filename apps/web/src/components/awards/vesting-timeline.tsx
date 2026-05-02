@@ -68,6 +68,17 @@ export type VestingTimelineProps = {
   today?: string;
   /** Variante simplifiée pour le portail bénéficiaire */
   simplified?: boolean;
+  /**
+   * Mode "calendrier théorique" pour Plan Detail (Étape 13).
+   * Quand `true` :
+   *  - Pas de zone "Acquis" bond plein (un plan n'est pas "acquis" — ce
+   *    sont les awards individuels qui le sont).
+   *  - Zone "En cours" gradient bond → ink visible UNIQUEMENT entre la
+   *    dernière tranche passée et today (si today > première tranche).
+   *  - Légende ajustée : pas d'item "Acquis", "En cours" devient
+   *    "Période courante".
+   */
+  theoreticalMode?: boolean;
   /** Nombre total d'unités (pour ratio cumul) */
   unitsGranted: number;
   className?: string;
@@ -107,6 +118,7 @@ export function VestingTimeline({
   vestingEnd,
   today,
   simplified = false,
+  theoreticalMode = false,
   unitsGranted,
   className,
 }: VestingTimelineProps) {
@@ -133,15 +145,39 @@ export function VestingTimeline({
     return { ...t, xPct: ratio * 100 };
   });
 
-  // Position de la dernière tranche VESTED (fin de la zone "Acquis")
-  const lastVested = tranchePositions
-    .filter((t) => t.status === 'VESTED')
-    .sort((a, b) => b.xPct - a.xPct)[0];
+  // Position de la dernière tranche VESTED (fin de la zone "Acquis").
+  // En theoreticalMode, on ne dessine pas la zone Acquis (un plan n'est
+  // pas "acquis"), donc acquisEndPct = 0 toujours.
+  const lastVested = theoreticalMode
+    ? null
+    : tranchePositions.filter((t) => t.status === 'VESTED').sort((a, b) => b.xPct - a.xPct)[0];
   const acquisEndPct = lastVested?.xPct ?? 0;
 
-  // "En cours" = segment entre last_vested et today (si today > last_vested)
-  const enCoursStartPct = acquisEndPct;
-  const enCoursEndPct = Math.max(acquisEndPct, todayPct);
+  // "En cours" :
+  //  - Mode normal : segment entre last_vested et today
+  //  - theoreticalMode : segment entre la tranche passée la plus récente
+  //    (vesting_date <= today) et today, UNIQUEMENT si today est entre
+  //    deux tranches (donc après la première mais avant la dernière)
+  let enCoursStartPct: number;
+  let enCoursEndPct: number;
+  if (theoreticalMode) {
+    const passedTranches = tranchePositions
+      .filter((t) => Date.parse(t.vestingDate) <= todayMs)
+      .sort((a, b) => b.xPct - a.xPct);
+    const futureTranches = tranchePositions.filter((t) => Date.parse(t.vestingDate) > todayMs);
+    if (passedTranches.length > 0 && futureTranches.length > 0) {
+      // today est entre deux tranches → zone En cours visible
+      enCoursStartPct = passedTranches[0]!.xPct;
+      enCoursEndPct = todayPct;
+    } else {
+      // pré-première tranche OU post-dernière tranche → pas de zone En cours
+      enCoursStartPct = 0;
+      enCoursEndPct = 0;
+    }
+  } else {
+    enCoursStartPct = acquisEndPct;
+    enCoursEndPct = Math.max(acquisEndPct, todayPct);
+  }
 
   // Zones conditionnelles à dessiner (depuis acquisEndPct vers chaque
   // tranche conditionnelle PENDING). On regroupe en plages contiguës.
@@ -262,13 +298,17 @@ export function VestingTimeline({
         </span>
       </div>
 
-      {/* Légende — 3 ou 4 mini-carrés selon hasConditionalZone */}
+      {/* Légende — items conditionnels selon le mode */}
       <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
-        <LegendItem
-          color="var(--bond-500)"
-          label={`Acquis · ${tranches.filter((t) => t.status === 'VESTED').reduce((sum, t) => sum + t.unitsToVest, 0)} u.`}
-        />
-        {enCoursEndPct > enCoursStartPct ? <LegendItem gradient label="En cours" /> : null}
+        {!theoreticalMode ? (
+          <LegendItem
+            color="var(--bond-500)"
+            label={`Acquis · ${tranches.filter((t) => t.status === 'VESTED').reduce((sum, t) => sum + t.unitsToVest, 0)} u.`}
+          />
+        ) : null}
+        {enCoursEndPct > enCoursStartPct ? (
+          <LegendItem gradient label={theoreticalMode ? 'Période courante' : 'En cours'} />
+        ) : null}
         <LegendItem pattern="pending" label="À acquérir" />
         {hasConditionalZone ? (
           <LegendItem
