@@ -463,6 +463,15 @@
   }
 }
 
+@keyframes vesting-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 .animate-pulse-live {
   animation: pulse-live 2s var(--ease-ui) infinite;
 }
