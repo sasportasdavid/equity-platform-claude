@@ -89,7 +89,20 @@ const sampleDecisions: Decision[] = [
     comment: null,
   },
   // Étape 3 : currentStepOrder, in_progress
-  // Étape 4 : upcoming
+  // (le RPC start_approval_workflow insère toujours des PENDING decisions
+  // sur la step courante — sans elles le helper computeStepStatus
+  // retourne 'skipped' par défaut)
+  {
+    id: 'd3-pending',
+    step_order: 3,
+    approver_user_id: 'u3',
+    approver_role: 'AUDITEUR',
+    status: 'PENDING',
+    decided_at: null,
+    decided_by: null,
+    comment: null,
+  },
+  // Étape 4 : upcoming (pas de décision)
 ];
 
 export default function ApprovalFlowSandboxPage() {
