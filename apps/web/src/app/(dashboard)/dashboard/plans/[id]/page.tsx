@@ -9,6 +9,7 @@ import { RunValuationButton } from '@/components/plans/RunValuationButton';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { hasPermission, requirePermission } from '@/lib/auth/rbac';
 import { getAdaptivePlanTitle } from '@/lib/utils/adaptive-plan-title';
+import { listAwards } from '@/server/queries/awards';
 import { getPlanDetails } from '@/server/queries/plans';
 import { cn } from '@/lib/utils';
 import { PlanDetailClient } from './plan-detail-client';
@@ -67,13 +68,16 @@ export default async function PlanDetailPage({ params }: { params: Promise<{ id:
   const detail = await getPlanDetails(idCheck.data);
   if (!detail) notFound();
 
-  const [canUpdate, canRunValuation, canCreate, canLock, canDelete] = await Promise.all([
-    hasPermission('plans.update'),
-    hasPermission('valuations.run'),
-    hasPermission('plans.create'),
-    hasPermission('plans.lock'),
-    hasPermission('plans.delete'),
-  ]);
+  const [canUpdate, canRunValuation, canCreate, canLock, canDelete, planAwards] = await Promise.all(
+    [
+      hasPermission('plans.update'),
+      hasPermission('valuations.run'),
+      hasPermission('plans.create'),
+      hasPermission('plans.lock'),
+      hasPermission('plans.delete'),
+      listAwards({ planId: idCheck.data }),
+    ],
+  );
 
   // Calcule la dernière tranche depuis le snapshot vestingSchedule
   const lastTrancheDate =
@@ -169,7 +173,11 @@ export default async function PlanDetailPage({ params }: { params: Promise<{ id:
         </PageShell.Actions>
       </PageShell.Header>
 
-      <PlanDetailClient detail={detail} canUpdate={canUpdate && !detail.plan.is_locked} />
+      <PlanDetailClient
+        detail={detail}
+        canUpdate={canUpdate && !detail.plan.is_locked}
+        planAwards={planAwards}
+      />
     </PageShell>
   );
 }

@@ -1,7 +1,11 @@
 'use client';
 
 import { useMemo } from 'react';
+import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
 import { VestingTimeline, type VestingTimelineTranche } from '@/components/awards/vesting-timeline';
+import { StatusBadge, type StatusBadgeTone } from '@/components/ui/status-badge';
+import type { AwardListRow } from '@/server/queries/awards';
 import type { PlanDetail } from '@/server/queries/plans';
 
 /**
@@ -24,9 +28,11 @@ import type { PlanDetail } from '@/server/queries/plans';
 
 export type EditorialSynthesisTabProps = {
   detail: PlanDetail;
+  /** Awards de ce plan, chargés côté Server Component (page.tsx) */
+  planAwards?: ReadonlyArray<AwardListRow>;
 };
 
-export function EditorialSynthesisTab({ detail }: EditorialSynthesisTabProps) {
+export function EditorialSynthesisTab({ detail, planAwards = [] }: EditorialSynthesisTabProps) {
   const today = new Date();
   const grantDate = parseIsoLocalDate(detail.plan.grant_date);
   const cliffDate = computeCliffDate(grantDate, detail.vestingSchedule?.cliff_months ?? null);
@@ -162,6 +168,263 @@ export function EditorialSynthesisTab({ detail }: EditorialSynthesisTabProps) {
           </p>
         )}
       </section>
+
+      {/* Section 3 — Bloc bas 2 colonnes : bénéficiaires (66%) + conditions (33%) */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <BeneficiariesBlock awards={planAwards} planId={detail.plan.id} className="lg:col-span-2" />
+        <PlanConditionsCard detail={detail} cliffDate={cliffDate} className="lg:col-span-1" />
+      </section>
+    </div>
+  );
+}
+
+// ============================================================================
+// Bloc bas gauche — Bénéficiaires de ce plan
+// ============================================================================
+
+const AWARD_STATUS_TONE: Record<string, StatusBadgeTone> = {
+  DRAFT: 'slate',
+  PROPOSED: 'saffron',
+  PENDING_APPROVAL: 'saffron',
+  APPROVED: 'bond',
+  REJECTED: 'title',
+  SENT_FOR_SIGNATURE: 'brass',
+  SIGNED: 'brass',
+  GRANTED: 'bond',
+  VESTING: 'bond',
+  VESTED: 'bond',
+  EXERCISED: 'bond',
+  CANCELLED: 'slate',
+  FORFEITED: 'title',
+  EXPIRED: 'slate',
+};
+
+const AWARD_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Brouillon',
+  PROPOSED: 'Proposé',
+  PENDING_APPROVAL: 'En approbation',
+  APPROVED: 'Approuvé',
+  REJECTED: 'Rejeté',
+  SENT_FOR_SIGNATURE: 'En signature',
+  SIGNED: 'Signé',
+  GRANTED: 'Octroyé',
+  VESTING: 'Vesting',
+  VESTED: 'Acquis',
+  EXERCISED: 'Exercé',
+  CANCELLED: 'Annulé',
+  FORFEITED: 'Renoncé',
+  EXPIRED: 'Expiré',
+};
+
+function BeneficiariesBlock({
+  awards,
+  planId: _planId,
+  className,
+}: {
+  awards: ReadonlyArray<AwardListRow>;
+  planId: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`bg-card border-border/50 flex flex-col gap-4 rounded-lg border p-6 ${className ?? ''}`}
+    >
+      <header className="flex items-baseline justify-between">
+        <div>
+          <p className="text-overline text-brass-500">BÉNÉFICIAIRES · DE CE PLAN</p>
+          <h2 className="text-h3 text-ink-900 mt-1">
+            {awards.length === 0
+              ? 'Aucune attribution'
+              : `${awards.length} ${awards.length > 1 ? 'attributions' : 'attribution'}`}
+          </h2>
+        </div>
+        {awards.length > 0 ? (
+          <Link
+            href={`/dashboard/awards?planId=${_planId}`}
+            className="text-brass-700 hover:text-brass-900 inline-flex items-center gap-1 text-xs font-medium"
+          >
+            Voir toutes
+            <ArrowRight className="size-3" strokeWidth={1.5} />
+          </Link>
+        ) : null}
+      </header>
+
+      {awards.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center py-8">
+          <p className="serif-italic text-ink-500 text-sm leading-relaxed">
+            Aucune attribution n&apos;a encore été créée sur ce plan.
+          </p>
+        </div>
+      ) : (
+        <ul className="divide-paper-300 -mx-2 divide-y" role="list">
+          {awards.slice(0, 8).map((award) => {
+            const beneficiaryName = award.beneficiary
+              ? `${award.beneficiary.first_name ?? ''} ${award.beneficiary.last_name ?? ''}`.trim() ||
+                award.beneficiary.email
+              : 'Bénéficiaire inconnu';
+            const statusTone = AWARD_STATUS_TONE[award.status] ?? 'slate';
+            const statusLabel = AWARD_STATUS_LABEL[award.status] ?? award.status;
+            return (
+              <li key={award.id}>
+                <Link
+                  href={`/dashboard/awards/${award.id}`}
+                  className="hover:bg-paper-200/40 flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-ink-900 truncate text-sm font-medium">
+                        {beneficiaryName}
+                      </span>
+                      {award.award_number ? (
+                        <span className="text-ink-500 font-mono text-[11px]">
+                          {award.award_number}
+                        </span>
+                      ) : null}
+                    </div>
+                    {award.beneficiary?.email ? (
+                      <p className="text-ink-500 truncate text-xs">{award.beneficiary.email}</p>
+                    ) : null}
+                  </div>
+                  <div className="text-ink-900 shrink-0 text-right font-mono text-sm tabular-nums">
+                    {formatNumber(award.units_granted)}
+                    <span className="text-ink-400 ml-1 text-xs">u.</span>
+                  </div>
+                  <StatusBadge tone={statusTone} pattern="solid">
+                    {statusLabel}
+                  </StatusBadge>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// Bloc bas droit — Card "Conditions du plan" key-value
+// ============================================================================
+
+const PLAN_TYPE_LABEL: Record<string, string> = {
+  BSPCE: 'BSPCE',
+  AGA: 'AGA',
+  STOCK_OPTION: 'Stock Option',
+  PHANTOM: 'Phantom',
+  BSA: 'BSA',
+  RSU: 'RSU',
+};
+
+const SETTLEMENT_LABEL: Record<string, string> = {
+  CASH: 'Cash',
+  EQUITY: 'Equity',
+};
+
+const VESTING_TYPE_LABEL: Record<string, string> = {
+  CLIFF_LINEAR: 'Cliff puis linéaire',
+  CLIFF_ANNUAL: 'Cliff puis annuel',
+  CLIFF_QUARTERLY: 'Cliff puis trimestriel',
+  ANNUAL: 'Annuel',
+  QUARTERLY: 'Trimestriel',
+  MONTHLY: 'Mensuel',
+  SINGLE: 'Tranche unique',
+};
+
+function PlanConditionsCard({
+  detail,
+  cliffDate,
+  className,
+}: {
+  detail: PlanDetail;
+  cliffDate: Date | null;
+  className?: string;
+}) {
+  const rows: { label: string; value: string }[] = [];
+
+  rows.push({
+    label: 'Type',
+    value: PLAN_TYPE_LABEL[detail.plan.plan_type] ?? detail.plan.plan_type,
+  });
+  if (detail.plan.settlement_type) {
+    rows.push({
+      label: 'Règlement',
+      value: SETTLEMENT_LABEL[detail.plan.settlement_type] ?? detail.plan.settlement_type,
+    });
+  }
+  if (detail.plan.exercise_price != null) {
+    rows.push({
+      label: 'Strike',
+      value: `${formatNumber(detail.plan.exercise_price)} €`,
+    });
+  }
+  if (detail.plan.reference_share_price != null) {
+    rows.push({
+      label: 'FMV référence',
+      value: `${formatNumber(detail.plan.reference_share_price)} €`,
+    });
+  }
+  rows.push({
+    label: 'Date attribution',
+    value: formatDateFr(parseIsoLocalDate(detail.plan.grant_date) ?? new Date()),
+  });
+  if (detail.plan.board_date) {
+    rows.push({
+      label: 'Conseil',
+      value: formatDateFr(parseIsoLocalDate(detail.plan.board_date) ?? new Date()),
+    });
+  }
+  if (detail.vestingSchedule?.vesting_type) {
+    rows.push({
+      label: 'Type vesting',
+      value:
+        VESTING_TYPE_LABEL[detail.vestingSchedule.vesting_type] ??
+        detail.vestingSchedule.vesting_type,
+    });
+  }
+  if (detail.vestingSchedule?.cliff_months) {
+    rows.push({
+      label: 'Cliff',
+      value: cliffDate
+        ? `${detail.vestingSchedule.cliff_months} m · ${formatDateFr(cliffDate)}`
+        : `${detail.vestingSchedule.cliff_months} m`,
+    });
+  }
+  if (detail.vestingSchedule?.total_months) {
+    rows.push({
+      label: 'Durée totale',
+      value: `${detail.vestingSchedule.total_months} m`,
+    });
+  }
+  if (detail.conditions.length > 0) {
+    rows.push({
+      label: 'Conditions perf.',
+      value: `${detail.conditions.length} ${detail.conditions.length > 1 ? 'définies' : 'définie'}`,
+    });
+  }
+  if (detail.leavers.length > 0) {
+    rows.push({
+      label: 'Règles départs',
+      value: `${detail.leavers.length} ${detail.leavers.length > 1 ? 'définies' : 'définie'}`,
+    });
+  }
+
+  return (
+    <div
+      className={`bg-card border-border/50 flex flex-col gap-4 rounded-lg border p-6 ${className ?? ''}`}
+    >
+      <header>
+        <p className="text-overline text-brass-500">CONDITIONS · DU PLAN</p>
+        <h2 className="text-h3 text-ink-900 mt-1">Récapitulatif</h2>
+      </header>
+
+      <dl className="divide-paper-300 -mx-2 divide-y">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-baseline justify-between gap-3 px-2 py-2">
+            <dt className="text-ink-500 text-xs uppercase tracking-wider">{r.label}</dt>
+            <dd className="text-ink-900 font-mono text-sm tabular-nums">{r.value}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }

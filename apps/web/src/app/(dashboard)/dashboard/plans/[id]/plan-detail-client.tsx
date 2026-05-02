@@ -61,9 +61,11 @@ import type { PlanDetail } from '@/server/queries/plans';
 export function PlanDetailClient({
   detail,
   canUpdate: _canUpdate,
+  planAwards,
 }: {
   detail: PlanDetail;
   canUpdate: boolean;
+  planAwards?: ReadonlyArray<import('@/server/queries/awards').AwardListRow>;
 }) {
   const warnings = useMemo(() => {
     const raw = detail.plan.compliance_warnings as Array<{
@@ -107,7 +109,7 @@ export function PlanDetailClient({
         </TabsList>
 
         <TabsContent value="synthesis">
-          <EditorialSynthesisTab detail={detail} />
+          <EditorialSynthesisTab detail={detail} planAwards={planAwards ?? []} />
         </TabsContent>
         <TabsContent value="snapshot">
           <SnapshotTab detail={detail} />
