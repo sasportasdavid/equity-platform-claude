@@ -3699,6 +3699,10 @@ export type Database = {
         Args: { p_award_id: string }
         Returns: Json
       }
+      load_exercise_document_context: {
+        Args: { p_exercise_request_id: string }
+        Returns: Json
+      }
       load_plan_draft: { Args: { p_draft_id: string }; Returns: Json }
       lock_pending_notifications: {
         Args: { p_batch_size?: number }
