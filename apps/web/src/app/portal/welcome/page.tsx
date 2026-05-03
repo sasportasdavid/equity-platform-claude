@@ -59,38 +59,50 @@ export default async function PortalWelcomePage() {
   const orgName = org?.name ?? 'votre société';
   const awards = awardsCount ?? 0;
 
+  const firstName = bene.first_name ?? '';
+
   return (
     <div className="mx-auto max-w-2xl">
+      <header className="mb-8 space-y-2">
+        <p className="text-overline text-brass-500">BIENVENUE · NOUVEAU BÉNÉFICIAIRE</p>
+        <h1 className="text-h1 text-ink-900">
+          {firstName ? `Bonjour ${firstName},` : 'Bienvenue,'}{' '}
+          <span className="serif-italic text-brass-500">votre capital partagé vous attend</span>
+        </h1>
+        <div className="bg-brass-500 animate-draw-line mt-3 h-[2px] w-16" aria-hidden="true" />
+      </header>
+
       <Card>
         <CardContent className="space-y-6 p-8">
-          <div className="space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">Bienvenue sur Capiwise</h1>
-            <p className="text-muted-foreground leading-relaxed">
-              {orgName} vous a attribué{' '}
-              <span className="text-foreground font-medium">
+          <div className="space-y-3">
+            <p className="text-ink-700 text-base leading-relaxed">
+              <span className="text-ink-900 font-medium">{orgName}</span> vous a attribué{' '}
+              <span className="text-ink-900 font-medium">
                 {awards} plan{awards > 1 ? 's' : ''}
               </span>{' '}
               d&apos;actionnariat salarié.
             </p>
-            <p className="text-muted-foreground leading-relaxed">
+            <p className="text-ink-500 text-sm leading-relaxed">
               Avant de découvrir vos attributions, nous avons besoin de quelques informations
               personnelles pour finaliser votre profil.
             </p>
           </div>
 
-          <hr className="border-border/40" />
+          <hr className="border-paper-300" />
 
           <div className="space-y-3">
-            <h2 className="text-xl font-semibold">
-              Qu&apos;est-ce qu&apos;un plan d&apos;actionnariat salarié&nbsp;?
+            <p className="text-overline text-brass-500">QU&apos;EST-CE QU&apos;UN PLAN ?</p>
+            <h2 className="text-h3 text-ink-900">
+              Acquérir des actions{' '}
+              <span className="serif-italic text-brass-500">progressivement</span>
             </h2>
-            <p className="text-muted-foreground leading-relaxed">
+            <p className="text-ink-700 text-sm leading-relaxed">
               Un plan vous permet d&apos;acquérir progressivement des actions de votre société, soit
               gratuitement (AGA), soit en exerçant un droit d&apos;achat à un prix préférentiel
               (BSPCE, Stock Options).
             </p>
-            <p className="text-muted-foreground leading-relaxed">En pratique :</p>
-            <ul className="text-muted-foreground space-y-1.5 pl-5 leading-relaxed [&>li]:list-disc">
+            <p className="text-ink-700 text-sm leading-relaxed">En pratique :</p>
+            <ul className="text-ink-700 [&>li::marker]:text-brass-500 space-y-1.5 pl-5 text-sm leading-relaxed [&>li]:list-disc">
               <li>Vous recevez un nombre d&apos;unités initialement.</li>
               <li>Elles deviennent acquises au fil du temps (vesting).</li>
               <li>
@@ -99,7 +111,7 @@ export default async function PortalWelcomePage() {
             </ul>
           </div>
 
-          <hr className="border-border/40" />
+          <hr className="border-paper-300" />
 
           <div className="flex justify-end">
             <ContinueOnboardingButton />

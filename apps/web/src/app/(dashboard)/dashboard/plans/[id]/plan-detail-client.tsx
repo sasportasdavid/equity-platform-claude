@@ -6,13 +6,8 @@ import {
   AlertTriangle,
   Boxes,
   Calculator,
-  CalendarDays,
-  CheckCircle2,
-  Coins,
-  FileText,
   GitBranch,
   History,
-  Layers,
   LineChart as LineIcon,
   Sigma,
   TrendingUp,
@@ -39,6 +34,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { EditorialSynthesisTab } from '@/components/plans/detail/EditorialSynthesisTab';
 import type { PlanDetail } from '@/server/queries/plans';
 
 /**
@@ -60,9 +56,11 @@ import type { PlanDetail } from '@/server/queries/plans';
 export function PlanDetailClient({
   detail,
   canUpdate: _canUpdate,
+  planAwards,
 }: {
   detail: PlanDetail;
   canUpdate: boolean;
+  planAwards?: ReadonlyArray<import('@/server/queries/awards').AwardListRow>;
 }) {
   const warnings = useMemo(() => {
     const raw = detail.plan.compliance_warnings as Array<{
@@ -106,7 +104,7 @@ export function PlanDetailClient({
         </TabsList>
 
         <TabsContent value="synthesis">
-          <SynthesisTab detail={detail} />
+          <EditorialSynthesisTab detail={detail} planAwards={planAwards ?? []} />
         </TabsContent>
         <TabsContent value="snapshot">
           <SnapshotTab detail={detail} />
@@ -139,195 +137,19 @@ export function PlanDetailClient({
 }
 
 // ---------------------------------------------------------------------------
-// Onglet 1 — Synthèse
+// Onglet 1 — Synthèse : remplacé par EditorialSynthesisTab (Étape 13).
+// L'ancien composant SynthesisTab a été supprimé, ainsi que ses imports
+// orphelins (LineChart Recharts, KpiCard locale, formatDateShort).
 // ---------------------------------------------------------------------------
-function SynthesisTab({ detail }: { detail: PlanDetail }) {
-  const tranches = detail.vestingSchedule?.tranches ?? [];
-  const cumulData = useMemo(() => {
-    return tranches.reduce<Array<{ date: string; cumul: number }>>((acc, t) => {
-      const prev = acc[acc.length - 1]?.cumul ?? 0;
-      acc.push({ date: t.vesting_date, cumul: Math.min(prev + t.percentage_of_award, 100) });
-      return acc;
-    }, []);
-  }, [tranches]);
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          icon={<Coins className="size-4" />}
-          label="Pool total"
-          value={detail.plan.pool_size.toLocaleString('fr-FR')}
-        />
-        <KpiCard
-          icon={<TrendingUp className="size-4" />}
-          label="Alloué"
-          value={detail.plan.pool_allocated.toLocaleString('fr-FR')}
-          sub={
-            detail.plan.pool_size > 0
-              ? `${Math.round((detail.plan.pool_allocated / detail.plan.pool_size) * 100)} %`
-              : '—'
-          }
-        />
-        <KpiCard
-          icon={<UserMinus className="size-4" />}
-          label="Conditions perf."
-          value={detail.conditions.length.toString()}
-        />
-        <KpiCard
-          icon={<CalendarDays className="size-4" />}
-          label="Date attribution"
-          value={formatDate(detail.plan.grant_date)}
-        />
-      </div>
-
-      <ValuationCard planId={detail.plan.id} latest={detail.latestValuation} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Calendrier de vesting</CardTitle>
-          <CardDescription>
-            {tranches.length === 0
-              ? 'Aucune tranche définie.'
-              : `${tranches.length} tranche${tranches.length > 1 ? 's' : ''} — cumul jusqu'à 100 %`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {cumulData.length > 0 ? (
-            <div className="h-[280px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={cumulData} margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(d) => formatDateShort(d)}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11 }}
-                    domain={[0, 100]}
-                    tickFormatter={(v) => `${v} %`}
-                  />
-                  <RechartsTooltip
-                    formatter={(value) => [
-                      `${typeof value === 'number' ? value.toFixed(2) : value} %`,
-                      'Cumul vested',
-                    ]}
-                    labelFormatter={(label) => formatDate(label)}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="cumul"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-sm">Aucune donnée à afficher.</p>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
-// Card « Valorisation » (Synthèse) — affiche la dernière valorisation DONE.
-//
-// Trois états :
-//   - latest = null → empty state avec hint pour cliquer sur « Lancer »
-//   - latest avec fair_value chiffrée → KpiCard centrale + métadonnées
-//   - latest sans fair_value (cas dégénéré) → état d'erreur léger
+// Card « Valorisation » : supprimée Étape 14 (cleanup QA polish).
+// L'ancien composant `ValuationCard` était orphelin depuis l'Étape 13
+// (refonte Synthesis tab → EditorialSynthesisTab qui n'utilise pas
+// cette carte). Si une vue valorisation est nécessaire à l'avenir,
+// la lien `RunValuationButton` du PageShell pointe déjà vers
+// /dashboard/plans/[id]/valuations/[runId].
 // ---------------------------------------------------------------------------
-function ValuationCard({
-  planId,
-  latest,
-}: {
-  planId: string;
-  latest: PlanDetail['latestValuation'];
-}) {
-  if (!latest) {
-    return (
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Calculator className="size-4" />
-            Valorisation
-          </CardTitle>
-          <CardDescription>
-            Aucune valorisation lancée. Cliquez sur « Lancer une valorisation » en haut de la page
-            pour calculer la juste-valeur IFRS 2.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-
-  const fv = latest.fairValuePerInstrument;
-  const fvLabel = fv != null ? `${fv.toFixed(2)} €` : '—';
-  const ci =
-    latest.ci95Low != null && latest.ci95High != null
-      ? `IC 95 % : ${latest.ci95Low.toFixed(2)} – ${latest.ci95High.toFixed(2)} €`
-      : null;
-  const detailHref = `/dashboard/plans/${planId}/valuations/${latest.runId}`;
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Calculator className="size-4" />
-              Valorisation IFRS 2
-              <Badge variant="outline" className="ml-2 font-mono text-xs">
-                {latest.engineVersion ?? 'V8'}
-              </Badge>
-              <Badge variant="outline" className="text-xs font-normal">
-                {latest.pricerUsed ?? 'BLACK_SCHOLES'}
-              </Badge>
-            </CardTitle>
-            <CardDescription>
-              Calculée le {formatDateTime(latest.completedAt)}
-              {ci ? ` · ${ci}` : ''}
-            </CardDescription>
-          </div>
-          <Link
-            href={detailHref}
-            className="text-muted-foreground hover:text-foreground inline-flex items-center whitespace-nowrap text-sm"
-            data-testid="valuation-card-detail-link"
-          >
-            Voir le détail
-          </Link>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <KpiCard
-            icon={<Sigma className="size-4" />}
-            label="Juste-valeur unitaire"
-            value={fvLabel}
-            sub={latest.stdError != null ? `± ${latest.stdError.toFixed(4)}` : undefined}
-          />
-          <KpiCard
-            icon={<TrendingUp className="size-4" />}
-            label="Juste-valeur totale (× 1)"
-            value={latest.fairValueTotal != null ? `${latest.fairValueTotal.toFixed(2)} €` : '—'}
-            sub="Pondération bénéficiaires en Module 3b"
-          />
-          <KpiCard
-            icon={<History className="size-4" />}
-            label="Run id"
-            value={latest.runId.slice(0, 8)}
-            sub="Cliquez « Voir le détail » pour audit"
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Onglet 2 — État du pool

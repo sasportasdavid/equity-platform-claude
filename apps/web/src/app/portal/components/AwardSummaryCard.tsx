@@ -1,18 +1,39 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
+import { StatusBadge, type StatusBadgeTone } from '@/components/ui/status-badge';
 import { computeVestedPercentage } from '@/lib/portal/vesting';
+import { cn } from '@/lib/utils';
 
 /**
- * Module 8 B3 — Card résumé d'un award sur la liste portail (§4.2).
+ * Module 8 + Étape 14 Design System V1 — Card résumé d'un award sur
+ * la liste portail (§4.2).
  *
- * Layout :
- *   - Header : award_number · plan_type · plan_name
- *   - Body : units acquises / total + %, exercise_price si présent,
- *     grant_date
- *   - Footer : lien "Voir le détail →"
+ * Refonte editorial :
+ *   - Header : StatusBadge plan_type + award_number mono ink-500
+ *   - Title : plan_name en text-h3 Fraunces
+ *   - Body : 3 lignes éditoriales serif italic + numbers tabular
+ *   - Progress bar bond-500 / paper-200
+ *   - Footer : lien "Voir le détail →" brass-700 hover brass-900
  */
+
+const PLAN_TYPE_TONE: Record<string, StatusBadgeTone> = {
+  BSPCE: 'brass',
+  AGA: 'bond',
+  STOCK_OPTION: 'saffron',
+  PHANTOM: 'slate',
+  BSA: 'brass',
+  RSU: 'slate',
+};
+
+const PLAN_TYPE_LABEL: Record<string, string> = {
+  BSPCE: 'BSPCE',
+  AGA: 'AGA',
+  STOCK_OPTION: 'Stock Option',
+  PHANTOM: 'Phantom',
+  BSA: 'BSA',
+  RSU: 'RSU',
+};
+
 export function AwardSummaryCard({
   awardId,
   awardNumber,
@@ -33,55 +54,65 @@ export function AwardSummaryCard({
   grantDate: string;
 }) {
   const percent = computeVestedPercentage(unitsVested, unitsGranted);
+  const tone = PLAN_TYPE_TONE[planType] ?? 'slate';
+  const label = PLAN_TYPE_LABEL[planType] ?? planType;
 
   return (
-    <Card className="hover:border-primary/40 transition-colors">
-      <CardContent className="space-y-4 p-6">
-        <div className="space-y-1">
-          <div className="text-muted-foreground flex items-center gap-2 text-xs">
-            <span className="bg-muted text-foreground rounded px-1.5 py-0.5 font-mono text-[11px] font-semibold">
-              {planType}
-            </span>
-            <span className="font-mono">{awardNumber}</span>
-          </div>
-          <h2 className="text-lg font-semibold tracking-tight">{planName}</h2>
+    <Link
+      href={`/portal/awards/${awardId}`}
+      className="bg-paper-50 border-paper-300 hover:border-brass-300 group relative block rounded-lg border p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_24px_-6px_rgba(11,24,56,0.10),0_4px_8px_-4px_rgba(11,24,56,0.06)]"
+      data-testid={`portal-award-card-${awardId}`}
+    >
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-2">
+          <StatusBadge tone={tone} pattern="solid">
+            {label}
+          </StatusBadge>
+          <span className="text-ink-500 font-mono text-[11px]">{awardNumber}</span>
         </div>
 
-        <div className="space-y-2 text-sm">
+        <div>
+          <h2 className="text-h3 text-ink-900 leading-tight">{planName}</h2>
+        </div>
+
+        {/* Body editorial */}
+        <div className="space-y-2.5 text-sm">
           <div className="flex items-baseline justify-between gap-4">
-            <span className="text-muted-foreground">Acquises</span>
-            <span className="text-foreground tabular-nums">
-              <span className="font-semibold">{formatNumber(unitsVested)}</span>
-              <span className="text-muted-foreground"> / {formatNumber(unitsGranted)}</span>
-              <span className={cn('ml-2 text-xs', percentColor(percent))}>({percent}%)</span>
+            <span className="text-ink-500">Unités acquises</span>
+            <span className="font-mono tabular-nums">
+              <span className="text-ink-900 font-semibold">{formatNumber(unitsVested)}</span>
+              <span className="text-ink-400"> / {formatNumber(unitsGranted)}</span>
+              <span className={cn('ml-2 font-mono text-xs', percentColor(percent))}>
+                ({percent} %)
+              </span>
             </span>
           </div>
           {exercisePrice !== null && exercisePrice !== undefined ? (
             <div className="flex items-baseline justify-between gap-4">
-              <span className="text-muted-foreground">Prix d&apos;exercice</span>
-              <span className="tabular-nums">{formatPrice(exercisePrice)}</span>
+              <span className="text-ink-500">Prix d&apos;exercice</span>
+              <span className="text-ink-900 font-mono tabular-nums">
+                {formatPrice(exercisePrice)}
+              </span>
             </div>
           ) : null}
           <div className="flex items-baseline justify-between gap-4">
-            <span className="text-muted-foreground">Date d&apos;attribution</span>
-            <span className="text-foreground">{formatLongDate(grantDate)}</span>
+            <span className="text-ink-500">Date d&apos;attribution</span>
+            <span className="text-ink-900">{formatLongDate(grantDate)}</span>
           </div>
         </div>
 
         <ProgressBar percent={percent} />
 
+        {/* Footer CTA */}
         <div className="flex justify-end pt-1">
-          <Link
-            href={`/portal/awards/${awardId}`}
-            className="text-primary inline-flex items-center gap-1 text-sm font-medium hover:underline"
-            data-testid={`portal-award-detail-link-${awardId}`}
-          >
+          <span className="text-brass-700 group-hover:text-brass-900 inline-flex items-center gap-1 text-sm font-medium">
             Voir le détail
-            <ArrowRight className="size-4" />
-          </Link>
+            <ArrowRight className="size-4" strokeWidth={1.5} />
+          </span>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Link>
   );
 }
 
@@ -89,21 +120,24 @@ function ProgressBar({ percent }: { percent: number }) {
   const clamped = Math.min(100, Math.max(0, percent));
   return (
     <div
-      className="bg-muted h-1.5 w-full overflow-hidden rounded-full"
+      className="bg-paper-200 h-1.5 w-full overflow-hidden rounded-full"
       role="progressbar"
       aria-valuenow={clamped}
       aria-valuemin={0}
       aria-valuemax={100}
     >
-      <div className="bg-primary h-full transition-all" style={{ width: `${clamped}%` }} />
+      <div
+        className="bg-bond-500 h-full transition-all duration-500"
+        style={{ width: `${clamped}%` }}
+      />
     </div>
   );
 }
 
 function percentColor(percent: number): string {
-  if (percent >= 75) return 'text-emerald-600 dark:text-emerald-400';
-  if (percent >= 25) return 'text-amber-600 dark:text-amber-400';
-  return 'text-muted-foreground';
+  if (percent >= 75) return 'text-bond-700';
+  if (percent >= 25) return 'text-saffron-700';
+  return 'text-ink-500';
 }
 
 function formatNumber(n: number): string {
@@ -123,7 +157,6 @@ function formatPrice(p: string | number): string {
 
 function formatLongDate(iso: string): string {
   if (!iso || iso.length < 10) return iso;
-  // Format français : "30 avril 2026"
   const months = [
     'janvier',
     'février',

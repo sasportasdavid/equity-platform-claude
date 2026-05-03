@@ -8,16 +8,18 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground [a]:hover:bg-primary/80',
+        // Editorial Finance — primary cuivre avec hover lift + shadow brass
+        default:
+          'bg-primary text-primary-foreground hover:bg-brass-700 transition-[transform,box-shadow,background-color] duration-150 hover:-translate-y-px hover:shadow-[0_6px_16px_-4px_rgba(184,134,91,0.25),0_2px_4px_-2px_rgba(184,134,91,0.15)] active:translate-y-0 active:shadow-none',
         outline:
-          'border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50',
+          'border-brass-500 bg-background text-brass-700 hover:bg-brass-50 hover:text-brass-900 aria-expanded:bg-brass-50 dark:border-brass-500 dark:hover:bg-brass-100/50',
         secondary:
           'bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground',
         ghost:
-          'hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50',
+          'text-ink-700 hover:bg-paper-200 hover:text-ink-900 aria-expanded:bg-paper-200 aria-expanded:text-ink-900 dark:text-ink-700 dark:hover:bg-paper-300/50',
         destructive:
-          'bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40',
-        link: 'text-primary underline-offset-4 hover:underline',
+          'bg-destructive hover:bg-title-700 text-white transition-colors duration-150 active:translate-y-0',
+        link: 'text-brass-700 decoration-brass-300 hover:decoration-brass-500 underline-offset-4 hover:underline',
       },
       size: {
         default:

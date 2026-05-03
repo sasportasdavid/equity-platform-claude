@@ -12,11 +12,14 @@ const PORTAL_NAV_ITEMS = [
 ] as const;
 
 /**
- * Module 8 — Navigation principale du portail bénéficiaire (3 liens).
+ * Module 8 + Étape 14 Design System V1 — Navigation du portail (3 liens).
  *
- * Variante :
+ * Variantes :
  *   - `desktop` : nav inline horizontale dans le header (md+).
+ *     L'item actif a un fond brass-100 + barre verticale brass-500
+ *     côté gauche (signature DS V1, cohérent avec la sidebar dashboard).
  *   - `mobile`  : bottom-bar fixée (md:hidden).
+ *     L'item actif a un dot brass-500 sous l'icône (espace réduit).
  */
 export function PortalNav({ variant = 'desktop' }: { variant?: 'desktop' | 'mobile' }) {
   const pathname = usePathname();
@@ -26,7 +29,7 @@ export function PortalNav({ variant = 'desktop' }: { variant?: 'desktop' | 'mobi
   if (variant === 'mobile') {
     return (
       <nav
-        className="border-border/40 bg-background/95 fixed bottom-0 left-0 right-0 z-20 flex items-center justify-around border-t px-2 py-2 backdrop-blur-md md:hidden"
+        className="border-paper-300 bg-paper-50/95 fixed bottom-0 left-0 right-0 z-20 flex items-center justify-around border-t px-2 py-2 backdrop-blur-md md:hidden"
         aria-label="Navigation portail (mobile)"
       >
         {PORTAL_NAV_ITEMS.map((item) => {
@@ -37,13 +40,19 @@ export function PortalNav({ variant = 'desktop' }: { variant?: 'desktop' | 'mobi
               key={item.href}
               href={item.href}
               className={cn(
-                'flex flex-1 flex-col items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors',
-                active ? 'text-primary font-medium' : 'text-muted-foreground hover:text-foreground',
+                'relative flex flex-1 flex-col items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-colors',
+                active ? 'text-brass-700 font-medium' : 'text-ink-500 hover:text-ink-900',
               )}
               aria-current={active ? 'page' : undefined}
             >
-              <Icon className="size-5" />
+              <Icon className="size-5" strokeWidth={active ? 1.75 : 1.5} />
               <span>{item.label}</span>
+              {active ? (
+                <span
+                  aria-hidden="true"
+                  className="bg-brass-500 absolute -top-0.5 size-1 rounded-full"
+                />
+              ) : null}
             </Link>
           );
         })}
@@ -61,14 +70,20 @@ export function PortalNav({ variant = 'desktop' }: { variant?: 'desktop' | 'mobi
             key={item.href}
             href={item.href}
             className={cn(
-              'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors',
+              'relative flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors',
               active
-                ? 'text-primary bg-primary/10 font-medium'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                ? 'bg-brass-100 text-brass-700 font-medium'
+                : 'text-ink-500 hover:bg-paper-200 hover:text-ink-900',
             )}
             aria-current={active ? 'page' : undefined}
           >
-            <Icon className="size-4" />
+            {active ? (
+              <span
+                aria-hidden="true"
+                className="bg-brass-500 absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r"
+              />
+            ) : null}
+            <Icon className="size-4" strokeWidth={1.5} />
             <span>{item.label}</span>
           </Link>
         );

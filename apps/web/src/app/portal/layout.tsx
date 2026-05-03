@@ -77,7 +77,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
   const fullName = `${beneficiary.first_name} ${beneficiary.last_name}`.trim();
 
   return (
-    <div className="bg-background flex min-h-screen flex-col">
+    <div className="bg-paper-100 flex min-h-screen flex-col">
       <PortalHeader
         fullName={fullName}
         email={user.email}

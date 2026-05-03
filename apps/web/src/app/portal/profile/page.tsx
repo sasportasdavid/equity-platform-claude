@@ -38,14 +38,18 @@ export default async function PortalProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6" data-testid="portal-profile-page">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Mon profil</h1>
-        <p className="text-muted-foreground text-sm">
+    <div className="mx-auto max-w-2xl space-y-8" data-testid="portal-profile-page">
+      <header className="space-y-2">
+        <p className="text-overline text-brass-500">VOTRE PROFIL</p>
+        <h1 className="text-h1 text-ink-900">
+          Vos <span className="serif-italic text-brass-500">coordonnées</span>
+        </h1>
+        <div className="bg-brass-500 animate-draw-line mt-3 h-[2px] w-16" aria-hidden="true" />
+        <p className="text-ink-500 mt-3 max-w-2xl text-sm leading-relaxed">
           Mettez à jour vos coordonnées personnelles. Pour modifier votre identité (nom, prénom,
-          résidence fiscale), contactez votre RH.
+          résidence fiscale), contactez votre service RH.
         </p>
-      </div>
+      </header>
 
       <ProfileEditForm
         firstName={bene.first_name ?? ''}

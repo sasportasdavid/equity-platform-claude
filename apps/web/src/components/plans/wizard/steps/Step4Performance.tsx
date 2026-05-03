@@ -107,13 +107,22 @@ export function Step4Performance() {
 
   return (
     <section className="space-y-6" data-testid="step-4-performance">
-      <p className="text-muted-foreground text-sm">
-        Les conditions de performance permettent de subordonner l’acquisition à l’atteinte
-        d’objectifs (financiers, marché, ESG…). Elles s’appliquent à toutes les attributions émises
-        sous ce plan.
-      </p>
+      {/* Header éditorial — Étape 13 Design System V1 */}
+      <header className="space-y-2">
+        <p className="text-overline text-brass-500">ÉTAPE 4 · CONDITIONS DE PERFORMANCE</p>
+        <h2 className="text-h2 text-ink-900">
+          Subordonnez <span className="serif-italic text-brass-500">l&apos;acquisition</span> à
+          l&apos;atteinte d&apos;objectifs
+        </h2>
+        <div className="bg-brass-500 animate-draw-line mt-2 h-[2px] w-16" aria-hidden="true" />
+        <p className="text-ink-500 mt-3 max-w-2xl text-sm leading-relaxed">
+          Les conditions de performance permettent de soumettre l&apos;acquisition à l&apos;atteinte
+          d&apos;objectifs (financiers, marché, ESG…). Elles s&apos;appliquent à toutes les
+          attributions émises sous ce plan.
+        </p>
+      </header>
 
-      {/* Toggle */}
+      {/* Toggle — éditorial */}
       <Card data-testid="toggle-card">
         <CardContent className="flex items-start gap-3 py-4">
           <Checkbox
@@ -123,12 +132,12 @@ export function Step4Performance() {
             className="mt-0.5"
           />
           <div className="flex-1 space-y-1">
-            <Label htmlFor={toggleId} className="cursor-pointer text-base font-medium">
+            <Label htmlFor={toggleId} className="text-ink-900 cursor-pointer text-base font-medium">
               Activer les conditions de performance
             </Label>
-            <p className="text-muted-foreground text-xs">
-              Si désactivé, l’acquisition est soumise uniquement aux dates du calendrier de vesting
-              (Step 3) et aux règles de départ (Step 5).
+            <p className="text-ink-500 text-xs leading-relaxed">
+              Si désactivé, l&apos;acquisition est soumise uniquement aux dates du calendrier de
+              vesting (étape 3) et aux règles de départ (étape 5).
             </p>
           </div>
         </CardContent>
@@ -160,7 +169,7 @@ export function Step4Performance() {
                     </option>
                   ))}
                 </select>
-                <p className="text-muted-foreground text-xs">
+                <p className="text-ink-500 text-xs">
                   {combinationType ? COMBINATION_LABELS[combinationType] : ''}
                 </p>
               </div>
@@ -178,7 +187,7 @@ export function Step4Performance() {
                     </option>
                   ))}
                 </select>
-                <p className="text-muted-foreground text-xs">
+                <p className="text-ink-500 text-xs">
                   {watch('evaluationMoment') ? EVALUATION_LABELS[watch('evaluationMoment')!] : ''}
                 </p>
               </div>
@@ -196,7 +205,7 @@ export function Step4Performance() {
                     </option>
                   ))}
                 </select>
-                <p className="text-muted-foreground text-xs">
+                <p className="text-ink-500 text-xs">
                   {watch('failureAction') ? FAILURE_LABELS[watch('failureAction')!] : ''}
                 </p>
               </div>
@@ -222,8 +231,8 @@ export function Step4Performance() {
             </CardHeader>
             <CardContent className="space-y-3">
               {conditions.length === 0 ? (
-                <p className="text-muted-foreground rounded-md border border-dashed py-8 text-center text-sm">
-                  Aucune condition pour l’instant.
+                <p className="border-paper-300 text-ink-500 serif-italic rounded-md border border-dashed py-8 text-center text-sm">
+                  Aucune condition pour l&apos;instant.
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -250,10 +259,7 @@ export function Step4Performance() {
                   <Plus className="size-4" /> Ajouter une condition
                 </Button>
                 {conditions.length >= PLAN_WIZARD_LIMITS.MAX_CONDITIONS ? (
-                  <p
-                    className="text-muted-foreground text-xs"
-                    data-testid="add-condition-limit-message"
-                  >
+                  <p className="text-ink-500 text-xs" data-testid="add-condition-limit-message">
                     Limite atteinte ({PLAN_WIZARD_LIMITS.MAX_CONDITIONS} /{' '}
                     {PLAN_WIZARD_LIMITS.MAX_CONDITIONS}). Supprimez une condition pour en ajouter
                     une nouvelle.

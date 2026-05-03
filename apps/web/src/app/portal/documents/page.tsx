@@ -14,13 +14,19 @@ export default async function PortalDocumentsPage() {
   const documents = await getBeneficiaryDocuments();
 
   return (
-    <div className="space-y-6" data-testid="portal-documents-page">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Mes documents</h1>
-        <p className="text-muted-foreground text-sm">
-          Tous les documents que vous avez signés liés à vos attributions.
+    <div className="space-y-8" data-testid="portal-documents-page">
+      <header className="space-y-2">
+        <p className="text-overline text-brass-500">VOS DOCUMENTS</p>
+        <h1 className="text-h1 text-ink-900">
+          Documents <span className="serif-italic text-brass-500">contractuels signés</span>
+        </h1>
+        <div className="bg-brass-500 animate-draw-line mt-3 h-[2px] w-16" aria-hidden="true" />
+        <p className="text-ink-500 mt-3 max-w-2xl text-sm leading-relaxed">
+          {documents.length === 0
+            ? 'Aucun document signé pour le moment.'
+            : `${documents.length} document${documents.length > 1 ? 's' : ''} signé${documents.length > 1 ? 's' : ''} liés à vos attributions, à votre disposition pour téléchargement.`}
         </p>
-      </div>
+      </header>
 
       <PortalDocumentsTable documents={documents} />
     </div>
