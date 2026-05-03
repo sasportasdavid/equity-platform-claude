@@ -357,6 +357,16 @@ function buildConditionsPayload(data: PlanWizardData): Record<string, unknown>[]
     peer_group: c.peerGroup,
     weighted_peer_groups: c.weightedPeerGroups,
     acquisition_scale: c.acquisitionScale,
+    // V2 — Market Data (migrations 00070 + 00073). Snake_case côté DB.
+    market_data_fetch_mode: c.marketDataFetchMode ?? 'SNAPSHOT_AT_GRANT',
+    reference_index_s0: c.reference_index_s0 ?? null,
+    reference_index_sigma: c.reference_index_sigma ?? null,
+    reference_index_correlation: c.reference_index_correlation ?? null,
+    reference_index_dividend_yield: c.reference_index_dividend_yield ?? null,
+    reference_index_data_source: c.reference_index_data_source ?? null,
+    reference_index_data_captured_at: c.reference_index_data_captured_at ?? null,
+    reference_index_resolved_ticker: c.reference_index_resolved_ticker ?? null,
+    market_data_warnings: c.market_data_warnings ?? null,
   }));
 }
 

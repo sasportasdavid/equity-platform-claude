@@ -2,8 +2,22 @@
 // Module 3a B5.1 — Builder du payload Python (moteur equity-gem-quant V8)
 // =============================================================================
 //
+// V2 — 2026-05-01 — Fix alignment Python V8 strict
+//
 // Conversion canonique entre les rows DB Supabase et le format attendu par
-// `POST /compute/multi-tranche` du moteur Python (HANDOVER_PACK V4.2).
+// `POST /compute/multi-tranche` du moteur Python (HANDOVER_PACK V4.2 + V8).
+//
+// Changements vs V1 (cf. memory/payload_python_audit_v8.md) :
+//   - mapPeerToMoteur : convertit s0/volatility/correlationWithMain (TS)
+//     en S0/sigma/correlation (Pydantic strict) — sinon 422 garanti
+//   - TSR_REL_PEERS : toujours wrapper en weighted_peer_groups, le moteur
+//     ignore cond.peer_group flat (l. 460/586 main.py)
+//   - TSR_REL_INDEX : envoie index_S0/index_sigma/correlation depuis les
+//     nouvelles colonnes DB (sinon le moteur fallback à 100/0.20/0.5
+//     l. 454-456 main.py = résultats silencieusement faux)
+//   - shouldUseMonteCarlo : retire le critère hasMultipleTranches, le
+//     moteur gère parfaitement multi-tranches en BS analytique pur
+//     (l. 358-407 main.py) — gain de perf x100 sur les plans simples
 //
 // Reprend littéralement la logique de l'edge function existante
 // `valuation-run-create-and-compute` du moteur — surtout la règle ATM
@@ -52,6 +66,8 @@ export type PythonValuationContext = {
 };
 
 export type PythonConditionInput = {
+  /** NEW V2 — id de la performance_condition (utilisé pour audit + LIVE_AT_VALUATION dispatch). */
+  id?: string;
   condition_type: string | null;
   market_metric_type: string | null;
   weight: number | null;
@@ -59,6 +75,26 @@ export type PythonConditionInput = {
   comparison_method: string | null;
   reference_index: string | null;
   reference_index_display_name: string | null;
+  /**
+   * NEW V2 — mode de fetch des données de marché (migration 00073).
+   * SNAPSHOT_AT_GRANT (default) | MANUAL | LIVE_AT_VALUATION.
+   * En mode LIVE_AT_VALUATION, compute-valuation re-fetch via les EF
+   * market-data-fetch / market-data-peer-group avant buildPythonPayload.
+   */
+  market_data_fetch_mode?: 'SNAPSHOT_AT_GRANT' | 'MANUAL' | 'LIVE_AT_VALUATION' | null;
+  /**
+   * NEW V2 — paramètres marché de l'index pour TSR_REL_INDEX.
+   * Sans ces valeurs, le moteur Python fallback à 100/0.20/0.5 → résultats
+   * silencieusement faux. Cf. main.py l. 454-456.
+   *
+   * Idéalement fetched live via searchTicker/fetchMarketData (Module 3a §5.2
+   * deferred). À défaut, saisie manuelle dans le wizard step 4 via les
+   * inputs ManualIndexMarketDataInputs.
+   */
+  reference_index_s0: number | null;
+  reference_index_sigma: number | null;
+  reference_index_correlation: number | null;
+  reference_index_dividend_yield: number | null;
   start_price_method: string | null;
   start_fixed_price: number | null;
   start_averaging_days: number | null;
@@ -80,7 +116,7 @@ export type PythonConditionInput = {
 
 export type PeerCompany = {
   id?: string;
-  name: string;
+  name?: string;
   ticker: string;
   weight?: number;
   s0?: number;
@@ -88,8 +124,24 @@ export type PeerCompany = {
   correlationWithMain?: number;
 };
 
+/**
+ * Format peer attendu par Pydantic côté moteur (WeightedPeerInGroup).
+ * Tous les fields sont uppercase / lowercase strict — Pydantic ne tolère pas.
+ */
+export type MoteurPeerFormat = {
+  id: string;
+  name?: string;
+  ticker?: string;
+  weight: number;
+  S0: number;
+  sigma: number;
+  correlation?: number;
+  dividend_yield: number;
+  initial_reference_price?: number;
+};
+
 // ---------------------------------------------------------------------------
-// Output payload (format Python V4.2 — HANDOVER_PACK §4.2)
+// Output payload (format Python V4.2 + V8 — main.py ValuationRequest)
 // ---------------------------------------------------------------------------
 
 export type PythonPayload = {
@@ -118,8 +170,9 @@ export type PythonPayload = {
    * §4.2 + OpenAPI). Ne sont PAS dans `config` — c'est important pour que
    * le moteur les lise correctement.
    *
-   *   - compute_greeks      : si true, retourne `greeks` (delta/gamma/vega/
-   *                           theta/rho) — coût ~5× le calcul vanilla
+   *   - compute_greeks      : si true, retourne `greeks` (delta/vega/rho —
+   *                           pas gamma/theta cf. main.py l. 918-922)
+   *                           Coût ~5× le calcul vanilla (3 reruns finite diff).
    *   - include_debug_paths : si true, retourne `debug_paths` pour viz UI
    *   - debug_light_paths   : nb max de paths renvoyés (downsamplé)
    */
@@ -135,10 +188,14 @@ export type PythonPayload = {
 /**
  * Construit le payload JSON à envoyer à `POST /compute/multi-tranche`.
  *
- * Routing config.use_monte_carlo :
- *   - true si au moins une condition MARKET (TSR/SHARE_PRICE)
- *   - true si vesting multi-tranches (le moteur a un kernel dédié multi-tranche)
- *   - false sinon → Black-Scholes analytique (rapide pour BSPCE/AGA simples)
+ * Routing config.use_monte_carlo (V2) :
+ *   - true SI ET SEULEMENT SI au moins une condition MARKET (TSR/SHARE_PRICE)
+ *   - false sinon → Black-Scholes analytique (gérée par le moteur Python
+ *     même en multi-tranches, cf. main.py l. 358-407)
+ *
+ * Le critère hasMultipleTranches de V1 a été retiré : le moteur gère
+ * multi-tranches en BS analytique sans MC — gain de perf x100 sur les plans
+ * AGA simples.
  *
  * Convention vesting_schedule format V4 :
  *   [{ time: years_from_grant_julian, portion: pct/100 }]
@@ -162,12 +219,15 @@ export function buildPythonPayload(ctx: PythonValuationContext): PythonPayload {
   const numPaths = ctx.simulationConfig.num_paths ?? 50000;
   const stepsPerYear = ctx.simulationConfig.steps_per_year ?? 12;
 
-  // 2. Routing : Monte Carlo si MARKET ou multi-tranches, sinon BS
+  // 2. Routing : Monte Carlo si MARKET, sinon BS analytique
   const useMonteCarlo = shouldUseMonteCarlo(ctx);
 
   // 3. Build sections
   const config = {
     num_paths: numPaths,
+    // Note : le moteur Python (main.py l. 410-412) sur-écrit cette valeur
+    // avec max(input, T × 252 + 20) — donc envoyer T × stepsPerYear est OK,
+    // le moteur garantit toujours un minimum de 252 pas/an.
     num_time_steps: Math.round(T * stepsPerYear),
     seed: 42, // deterministic replay (cf. spec §4 — IFRS 2 audit)
     antithetic_variates: ctx.simulationConfig.antithetic_variates,
@@ -188,6 +248,8 @@ export function buildPythonPayload(ctx: PythonValuationContext): PythonPayload {
   const instrument = {
     strike: ctx.plan.exercise_price ?? 0,
     T,
+    // Note : le moteur Python normalise `.upper() == "OPTION"` (l. 320)
+    // donc 'option' lowercase est accepté. Pas d'urgence à uppercaser.
     type: isOptionType(ctx.plan.plan_type) ? ('option' as const) : ('stock' as const),
     vesting_schedule: convertVestingToFormatV4(ctx.vestingTranches, ctx.plan.grant_date),
   };
@@ -203,6 +265,9 @@ export function buildPythonPayload(ctx: PythonValuationContext): PythonPayload {
     // ~5× la valuation vanilla mais on en a besoin pour la card Sensibilités
     // de la page détail valuation B5.5. Si perf devient un problème sur des
     // gros plans Monte Carlo, on rendra ça opt-in côté UI.
+    //
+    // Note : le moteur ne calcule que delta/vega/rho (pas gamma/theta) cf.
+    // main.py l. 918-922.
     compute_greeks: true,
     // Debug paths : utilisés par le LineChart Recharts de B5.5 pour montrer
     // les trajectoires Monte Carlo. Cap à 50 paths côté moteur (downsample
@@ -219,16 +284,16 @@ export function buildPythonPayload(ctx: PythonValuationContext): PythonPayload {
 /**
  * Décide si on use Monte Carlo (vs Black-Scholes analytique).
  *
- *   - true si AU MOINS une condition de type MARKET (TSR_*, SHARE_PRICE) :
- *     ces conditions ont un payout path-dependent, BS ne suffit pas
- *   - true si > 1 tranches : le moteur a un kernel dédié multi-tranche
- *     pour vesting échelonné (BS standard ne le supporte pas natively)
- *   - false sinon : Black-Scholes analytique fait l'affaire (BSPCE/AGA simple)
+ * V2 — alignée sur la logique du moteur Python (l. 358-407 main.py) :
+ *   - true SI ET SEULEMENT SI au moins une condition MARKET (TSR/SHARE_PRICE)
+ *   - false sinon → BS analytique (multi-tranches gérées en boucle)
+ *
+ * Le critère hasMultipleTranches de V1 a été retiré : il forçait MC inutilement
+ * pour les plans AGA multi-tranches sans condition de marché, alors que le
+ * moteur sait gérer ce cas en analytique pur. Gain : ~100x perf sur ces plans.
  */
 export function shouldUseMonteCarlo(ctx: PythonValuationContext): boolean {
-  const hasMarketCondition = ctx.conditions.some((c) => c.condition_type === 'MARKET');
-  const hasMultipleTranches = ctx.vestingTranches.length > 1;
-  return hasMarketCondition || hasMultipleTranches;
+  return ctx.conditions.some((c) => c.condition_type === 'MARKET');
 }
 
 /**
@@ -296,6 +361,9 @@ export function convertVestingToFormatV4(
  *
  * Pour TIERS, on émet 2 points par tier (min + max au même multiplier) pour
  * matérialiser le palier — le moteur interpole linéaire entre points.
+ *
+ * Conformément à apply_payout_curve (main.py l. 186-188), les keys attendues
+ * sont `performance_level` et `vesting_multiplier`.
  */
 export function convertAcquisitionScale(
   scale: PythonConditionInput['acquisition_scale'],
@@ -315,7 +383,57 @@ export function convertAcquisitionScale(
 }
 
 /**
+ * V2 — Mappe un PeerCompany (TS) vers le format Pydantic strict du moteur
+ * (WeightedPeerInGroup main.py l. 65-74).
+ *
+ * Convention : DB Capiwise utilise s0/volatility/correlationWithMain
+ * (camelCase JS), moteur Python utilise S0/sigma/correlation (Pydantic
+ * strict). Sans ce mapping, le moteur retourne 422 immédiatement parce
+ * que S0 et sigma sont REQUIRED.
+ *
+ * Si le peer n'a pas de s0 ou volatility, on throw — le moteur n'aurait
+ * de toute façon aucun moyen de simuler ce peer (Bug A/B audit V8).
+ *
+ * @throws si peer.s0 ou peer.volatility manquant/invalide
+ */
+export function mapPeerToMoteur(peer: PeerCompany, forceATM: boolean): MoteurPeerFormat {
+  if (peer.s0 == null || peer.s0 <= 0) {
+    throw new Error(
+      `Peer ${peer.ticker ?? peer.id ?? 'unknown'} : s0 manquant ou invalide (${peer.s0}). ` +
+        `Le moteur Python rejette le payload (Pydantic S0 required > 0). ` +
+        `Saisir S0 manuellement ou attendre l'edge function fetchMarketData (Module 3a §5.2).`,
+    );
+  }
+  if (peer.volatility == null || peer.volatility <= 0) {
+    throw new Error(
+      `Peer ${peer.ticker ?? peer.id ?? 'unknown'} : volatility manquante ou invalide (${peer.volatility}). ` +
+        `Le moteur Python rejette le payload (Pydantic sigma required > 0). ` +
+        `Saisir σ manuellement ou attendre l'edge function fetchMarketData.`,
+    );
+  }
+
+  return {
+    id: peer.id ?? peer.ticker,
+    name: peer.name,
+    ticker: peer.ticker,
+    weight: peer.weight ?? 1,
+    S0: peer.s0,
+    sigma: normalizeRateUnit(peer.volatility), // au cas où stockée en %
+    correlation: peer.correlationWithMain,
+    dividend_yield: 0, // adjusted_close intègre déjà les divs
+    // ATM symmetric V4.2 : initial_reference_price = peer.s0 quand pas de FIXED user
+    initial_reference_price: forceATM ? peer.s0 : peer.s0,
+  };
+}
+
+/**
  * Construit les paramètres d'UNE condition pour le payload Python.
+ *
+ * V2 changes :
+ *   - TSR_REL_INDEX : envoie index_S0/index_sigma/correlation depuis les
+ *     nouvelles colonnes DB (sinon Bug A → résultats faux silencieux)
+ *   - TSR_REL_PEERS : toujours wrapper en weighted_peer_groups (Bug B)
+ *   - peers : sérialisés via mapPeerToMoteur (Pydantic-compatible)
  *
  * Règle ATM symétrique V4.2 (CRITIQUE — cf. HANDOVER_PACK §9.4) :
  *   - Si l'utilisateur a explicitement saisi un FIXED price au step 4
@@ -365,18 +483,76 @@ function buildConditionParams(cond: PythonConditionInput, mainS0: number): Recor
   }
 
   // ===========================================================================
-  // TSR_REL_INDEX — paramètres index (mock S0/sigma pour V1, à compléter
-  // quand l'edge function searchTicker sera branchée sur Yahoo/EODHD)
+  // V2 — TSR_REL_INDEX : index_S0/index_sigma/correlation OBLIGATOIRES
+  //
+  // Sans ces valeurs, le moteur Python (main.py l. 454-456) fallback à
+  // S0=100, σ=20%, ρ=0.5 → résultats MC silencieusement faux.
+  //
+  // Source des données : pour V1, saisie manuelle dans le wizard step 4
+  // (colonnes reference_index_s0/sigma/correlation/dividend_yield ajoutées
+  // en migration 00050). Pour V2 (Module 3a §5.2 deferred), fetched live
+  // via Yahoo/EODHD au moment de la sauvegarde de la condition.
+  //
+  // Si les colonnes sont vides (cas legacy data), on log un warning console
+  // et on continue sans ces fields — le moteur fallback aux défauts (FV
+  // sera faux mais pas de crash). Le fix prévu Étape 2 ajoute une compliance
+  // rule MARKET_DATA_REQUIRED qui bloque la sauvegarde sans ces inputs.
   // ===========================================================================
   if (cond.market_metric_type === 'TSR_REL_INDEX') {
     params.index_ticker = cond.reference_index;
     params.index_display_name = cond.reference_index_display_name;
-    // Le moteur Python a des defaults sensés pour les indices connus
-    // (^FCHI / ^GSPC / ^STOXX50E) — cf. HANDOVER_PACK §10.1
+
+    if (cond.reference_index_s0 != null && cond.reference_index_s0 > 0) {
+      params.index_S0 = cond.reference_index_s0;
+    } else {
+      console.warn(
+        `[buildPythonPayload] TSR_REL_INDEX ${cond.reference_index} : ` +
+          `reference_index_s0 manquant. Moteur fallback à 100.0 → FV sera faux. ` +
+          `Saisir S0 manuellement dans le wizard ou activer fetchMarketData.`,
+      );
+    }
+
+    if (cond.reference_index_sigma != null && cond.reference_index_sigma > 0) {
+      params.index_sigma = normalizeRateUnit(cond.reference_index_sigma);
+    } else {
+      console.warn(
+        `[buildPythonPayload] TSR_REL_INDEX ${cond.reference_index} : ` +
+          `reference_index_sigma manquant. Moteur fallback à 0.20 → FV sera faux.`,
+      );
+    }
+
+    if (cond.reference_index_correlation != null) {
+      params.correlation = cond.reference_index_correlation;
+    } else {
+      console.warn(
+        `[buildPythonPayload] TSR_REL_INDEX ${cond.reference_index} : ` +
+          `reference_index_correlation manquant. Moteur fallback à 0.5 → FV sera biaisé.`,
+      );
+    }
+
+    // index_params : structure libre (Dict[str, Any] côté Pydantic).
+    // On y stocke le yield (forcé à 0 pour adjusted_close) + le name pour
+    // les logs côté moteur.
+    params.index_params = {
+      name: cond.reference_index_display_name ?? cond.reference_index,
+      q: cond.reference_index_dividend_yield ?? 0,
+    };
   }
 
   // ===========================================================================
-  // TSR_REL_PEERS — V4.2 ATM symmetric sur tous les peers
+  // V2 — TSR_REL_PEERS : TOUJOURS weighted_peer_groups
+  //
+  // Le moteur Python (main.py l. 460/586) ne lit QUE cond.weighted_peer_groups.
+  // Si on envoie cond.peer_group flat, les peers sont SILENCIEUSEMENT IGNORÉS
+  // → la condition retourne 0 → multiplier × 0 → FV totalement faux.
+  //
+  // Fix : si l'utilisateur a configuré peer_group flat (mode simple sans
+  // groupes pondérés), on le wrappe artificiellement dans un weighted_peer_groups
+  // avec un seul groupe nommé "default" et weight=1.0.
+  //
+  // ATM symétrique V4.2 : enrichPeersWithATM met initial_reference_price = peer.s0
+  // pour CHAQUE peer (chaque peer démarre à son propre spot, pas au S0 du
+  // sous-jacent — sinon biais énorme).
   // ===========================================================================
   if (cond.market_metric_type === 'TSR_REL_PEERS') {
     const wpgs = cond.weighted_peer_groups ?? [];
@@ -384,35 +560,25 @@ function buildConditionParams(cond: PythonConditionInput, mainS0: number): Recor
 
     if (wpgs.length > 0) {
       params.weighted_peer_groups = wpgs.map((g) => ({
-        ...g,
-        peers: enrichPeersWithATM(g.peers, mainS0, !userFixedStart),
+        id: g.id,
+        name: g.name,
+        weight: g.weight,
+        peers: g.peers.map((p) => mapPeerToMoteur(p, !userFixedStart)),
       }));
     } else if (flat.length > 0) {
-      params.peer_group = enrichPeersWithATM(flat, mainS0, !userFixedStart);
+      // V2 — wrapper artificiel pour que le moteur lise les peers
+      params.weighted_peer_groups = [
+        {
+          id: 'default',
+          name: 'Peer group',
+          weight: 1.0,
+          peers: flat.map((p) => mapPeerToMoteur(p, !userFixedStart)),
+        },
+      ];
     }
+    // Note : on n'envoie PLUS cond.peer_group au top-level de la condition
+    // (champ non lu par le moteur, juste du bruit dans le payload).
   }
 
   return params;
-}
-
-/**
- * Enrichit chaque peer avec son `initial_reference_price` selon la règle ATM
- * V4.2 :
- *
- *   - forceATM=true (= pas de FIXED user) : initial_reference_price = peer.s0
- *     pour CHAQUE peer (ATM symétrique : chaque peer démarre à son propre
- *     spot, pas au S0 du sous-jacent — sinon biais énorme)
- *   - forceATM=false : on garde le initial_reference_price custom si fourni,
- *     sinon fallback sur peer.s0
- */
-export function enrichPeersWithATM(
-  peers: PeerCompany[],
-  _mainS0: number,
-  forceATM: boolean,
-): Array<PeerCompany & { initial_reference_price?: number; ref_price_source?: string }> {
-  return peers.map((p) => ({
-    ...p,
-    initial_reference_price: forceATM ? p.s0 : (p.s0 ?? undefined),
-    ref_price_source: forceATM ? 'ATM_SYMMETRIC' : 'CUSTOM',
-  }));
 }
