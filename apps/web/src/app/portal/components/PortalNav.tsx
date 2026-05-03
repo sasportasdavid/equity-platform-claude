@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Briefcase, FileText, User } from 'lucide-react';
+import { Briefcase, FileText, TrendingUp, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const PORTAL_NAV_ITEMS = [
   { href: '/portal/awards', label: 'Mes attributions', icon: Briefcase },
+  { href: '/portal/exercises', label: 'Mes exercices', icon: TrendingUp },
   { href: '/portal/documents', label: 'Documents', icon: FileText },
   { href: '/portal/profile', label: 'Profil', icon: User },
 ] as const;

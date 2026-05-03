@@ -1,10 +1,13 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { Calculator, TrendingUp } from 'lucide-react';
 import { EditorialAwardHero } from '../../components/EditorialAwardHero';
 import { EditorialVestingSection } from '../../components/EditorialVestingSection';
 import { VestingTranchesTable } from '../../components/VestingTranchesTable';
 import { PortalDocumentsList } from '../../components/PortalDocumentsList';
 import { EditorialLeaverSimulator } from '../../components/EditorialLeaverSimulator';
 import { buildVestingTimeline } from '@/lib/portal/vesting';
+import { computeMaxUnitsAvailable } from '@/components/exercises/format-helpers';
 import {
   AwardPortalDetailError,
   getAwardPortalDetail,
@@ -72,6 +75,24 @@ export default async function PortalAwardDetailPage({
 
   const fromSnapshot = timeline.length > 0 && timeline[0]?.fromSnapshot === true;
 
+  // CTAs exercise — disponible pour BSPCE/SO/BSA uniquement (pas AGA),
+  // et seulement si l'award est en statut exerçable.
+  const isExercisablePlanType = ['BSPCE', 'STOCK_OPTION', 'BSA'].includes(plan.plan_type);
+  const isExercisableStatus = [
+    'GRANTED',
+    'VESTING',
+    'PARTIALLY_VESTED',
+    'FULLY_VESTED',
+    'PARTIALLY_EXERCISED',
+  ].includes(award.status);
+  const showExerciseCTA = isExercisablePlanType && isExercisableStatus;
+  const unitsAvailable = computeMaxUnitsAvailable(
+    Number(award.units_granted),
+    Number(award.units_exercised),
+    award.vesting_schedule_snapshot,
+  );
+  const canExerciseNow = showExerciseCTA && unitsAvailable > 0;
+
   return (
     <div className="space-y-12" data-testid="portal-award-detail">
       {/* Hero éditorial — 3 lignes typographiques + 3 cards adaptatives */}
@@ -86,6 +107,94 @@ export default async function PortalAwardDetailPage({
         planType={plan.plan_type}
         timeline={timeline}
       />
+
+      {/* CTAs — Exercise (Module 9 B3, BSPCE/SO/BSA uniquement) */}
+      {showExerciseCTA && (
+        <section className="space-y-4" data-testid="exercise-cta-section">
+          <header>
+            <p className="text-overline text-brass-500">EXERCISE · DE VOS TITRES</p>
+            <h2 className="text-h3 text-ink-900 mt-1">Convertir vos unités en actions</h2>
+          </header>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Tax simulator — toujours accessible (exploration sans engagement) */}
+            <Link
+              href={`/portal/awards/${award.id}/tax-simulator`}
+              className="border-paper-300 bg-paper-50 hover:border-brass-500 hover:bg-brass-50 group rounded-lg border p-6 transition-colors"
+              data-testid="cta-tax-simulator"
+            >
+              <div className="flex items-start gap-4">
+                <div className="bg-paper-100 group-hover:bg-brass-100 rounded-md p-2 transition-colors">
+                  <Calculator
+                    className="text-ink-700 group-hover:text-brass-700 size-5"
+                    strokeWidth={1.5}
+                  />
+                </div>
+                <div className="flex-1">
+                  <p className="text-overline text-ink-500">SIMULER · D'ABORD</p>
+                  <h3 className="text-ink-900 group-hover:text-brass-700 mt-1 text-base font-medium">
+                    Simulateur fiscal
+                  </h3>
+                  <p className="text-ink-500 mt-2 text-sm leading-relaxed">
+                    Explorez 5 scénarios de prix de cession (50 / 75 / 100 / 150 / 200 % de la FMV)
+                    sans créer de demande. Idéal pour comparer le net après impôt.
+                  </p>
+                </div>
+              </div>
+            </Link>
+
+            {/* Demande d'exercice — désactivé si 0 unités vested */}
+            {canExerciseNow ? (
+              <Link
+                href={`/portal/awards/${award.id}/exercise/new`}
+                className="border-paper-300 bg-paper-50 hover:border-brass-500 hover:bg-brass-50 group rounded-lg border p-6 transition-colors"
+                data-testid="cta-exercise-new"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="bg-paper-100 group-hover:bg-brass-100 rounded-md p-2 transition-colors">
+                    <TrendingUp
+                      className="text-ink-700 group-hover:text-brass-700 size-5"
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-overline text-ink-500">DEMANDER · L'EXERCICE</p>
+                    <h3 className="text-ink-900 group-hover:text-brass-700 mt-1 text-base font-medium">
+                      Créer une demande
+                    </h3>
+                    <p className="text-ink-500 mt-2 text-sm leading-relaxed">
+                      Soumettez une demande pour exercer tout ou partie de vos {unitsAvailable}{' '}
+                      unités acquises. Workflow d'approbation puis émission du bulletin de
+                      souscription.
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            ) : (
+              <div
+                className="border-paper-300 bg-paper-50 cursor-not-allowed rounded-lg border p-6 opacity-60"
+                data-testid="cta-exercise-disabled"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="bg-paper-100 rounded-md p-2">
+                    <TrendingUp className="text-ink-500 size-5" strokeWidth={1.5} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-overline text-ink-500">DEMANDER · L'EXERCICE</p>
+                    <h3 className="text-ink-500 mt-1 text-base font-medium">
+                      Aucune unité disponible
+                    </h3>
+                    <p className="text-ink-500 mt-2 text-sm leading-relaxed">
+                      Aucune unité acquise (vested) à ce jour. La prochaine tranche se déverrouille
+                      à la date indiquée dans votre calendrier d'acquisition. Vous pouvez explorer
+                      le simulateur fiscal pour anticiper.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Section 1 — Calendrier de vesting (VestingTimeline DS V1 simplified) */}
       <EditorialVestingSection
