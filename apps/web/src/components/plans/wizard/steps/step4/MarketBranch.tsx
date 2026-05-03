@@ -18,6 +18,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { MarketDataInputs } from '../../MarketDataInputs';
 import { PeerGroupEditor } from './PeerGroupEditor';
 import { ReferencePriceConfig } from './ReferencePriceConfig';
 import { WeightedPeerGroupsEditor } from './WeightedPeerGroupsEditor';
@@ -422,6 +423,7 @@ function IndexSelector({ index }: { index: number }) {
   const value = (watch(`conditions.${index}.referenceIndex`) as string | undefined) ?? '';
   const displayName =
     (watch(`conditions.${index}.referenceIndexDisplayName`) as string | undefined) ?? '';
+  const grantDate = (watch('grantDate') as string | undefined) ?? undefined;
 
   const errors = formState.errors;
   const conditionErrors = (
@@ -429,7 +431,7 @@ function IndexSelector({ index }: { index: number }) {
   )?.[index];
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <YahooIndexSearch
         value={value}
         displayName={displayName}
@@ -447,6 +449,17 @@ function IndexSelector({ index }: { index: number }) {
       />
       {conditionErrors?.referenceIndex?.message ? (
         <p className="text-destructive text-xs">{String(conditionErrors.referenceIndex.message)}</p>
+      ) : null}
+
+      {/* V2 — Market Data : 3 modes (SNAPSHOT / MANUAL / LIVE) avec
+          auto-fetch EODHD/Yahoo en mode SNAPSHOT. */}
+      {value ? (
+        <MarketDataInputs
+          conditionIndex={index}
+          indexDisplayName={displayName || value}
+          ticker={value}
+          asOfDate={grantDate}
+        />
       ) : null}
     </div>
   );

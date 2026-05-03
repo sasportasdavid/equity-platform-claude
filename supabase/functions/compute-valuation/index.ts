@@ -2,14 +2,27 @@
 // Module 3a B5.2 — Edge Function compute-valuation
 // =============================================================================
 //
+// V2 — 2026-05-01 — Persist payload_sent + response_received pour audit IFRS 2.46
+// V2.1 — 2026-05-03 — Bloc LIVE_AT_VALUATION (re-fetch market data avant build)
+//
 // Pipeline asynchrone (déclenché par la Server Action runValuation B5.3) qui :
 //   1. Charge le contexte du run depuis Supabase (plan + hypothesis_set
-//      + volatility_scheme + simulation_config + conditions + vesting_tranches)
+//      + volatility_scheme + simulation_config + conditions + vesting_tranches
+//      + companyTicker pour TSR_REL_PEERS LIVE)
+//   1.bis. NEW V2.1 — Pour les conditions configurées en market_data_fetch_mode
+//      = LIVE_AT_VALUATION, re-fetch les paramètres marché depuis EODHD/Yahoo
+//      via les EF market-data-fetch (TSR_REL_INDEX) et market-data-peer-group
+//      (TSR_REL_PEERS). Patch in-place les valeurs sur context.python.conditions
+//      avant le buildPythonPayload. Si fetch fail → throw (mark ERROR), pas de
+//      fallback DB stale (cohérence mode LIVE).
 //   2. Construit le payload Python via buildPythonPayload (helper B5.1)
 //   3. Update valuation_runs.status = 'RUNNING' + started_at = now
+//      + payload_sent = JSON snapshot (NEW V2 — audit IFRS 2.46)
+//      + live_fetch_metadata si applicable (V2.1)
 //   4. POST vers QUANT_ENGINE_URL/compute/multi-tranche (avec API key si fournie)
 //   5. Insert valuation_results avec fair_value + sensitivities + audit_trail
 //   6. Update valuation_runs.status = 'DONE' / 'ERROR' + finished_at + pricer_used
+//      + response_received = JSON brut (NEW V2)
 //   7. Trigger compute-ifrs2-expense (Edge Function future, non bloquant)
 //
 // Sécurité : appelle Supabase via SUPABASE_SERVICE_ROLE_KEY (bypass RLS)
@@ -20,6 +33,7 @@
 //   - SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (auto-injectées par Supabase)
 //   - QUANT_ENGINE_URL                        (https://equity-gem-quant.fly.dev)
 //   - QUANT_ENGINE_API_KEY                    (optionnel — sk_live_xxx)
+//   - EODHD_API_KEY                           (V2.1 — utilisé indirect via market-data-fetch EF)
 //
 // Fallback mock : si MOCK_PYTHON_ENGINE='true', l'Edge Function génère un
 // résultat synthétique sans appeler le vrai moteur. Utile pour dev/test
@@ -53,6 +67,23 @@ type PythonResponse = {
   engine_version?: string;
 };
 
+type LiveFetchMetadata = {
+  conditions_refetched: string[];
+  fetch_timestamps: Record<string, string>;
+  data_sources: Record<string, string>;
+  resolved_tickers: Record<string, string>;
+  warnings: Record<string, unknown>;
+};
+
+type LoadedContext = {
+  orgId: string;
+  planId: string;
+  /** Ticker du sous-jacent pour TSR_REL_PEERS LIVE (via plans.company_id → companies.ticker). */
+  companyTicker: string | null;
+  python: PythonValuationContext;
+  marketDataSnapshot: Record<string, unknown>;
+};
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -78,13 +109,41 @@ Deno.serve(async (req: Request) => {
       return jsonError(404, `Run ${runId} introuvable ou contexte incomplet`);
     }
 
-    // 2. Build payload
+    // 1.bis (V2.1) — LIVE_AT_VALUATION : re-fetch market data pour les conditions
+    // configurées avec ce mode. Les autres modes (SNAPSHOT_AT_GRANT, MANUAL)
+    // utilisent les valeurs déjà figées en DB par loadValuationContext.
+    //
+    // Mode "déconseillé IFRS 2" — la reproductibilité des résultats est
+    // dégradée (ré-évaluation à chaque run avec données du jour). L'audit reste
+    // possible via valuation_runs.payload_sent qui contient le payload final
+    // post-merge + live_fetch_metadata.
+    const liveFetchResult = await refreshLiveMarketData(supabase, context);
+    if (!liveFetchResult.ok) {
+      // Fail-fast — NE PAS retomber sur valeurs DB stale (contradiction mode LIVE)
+      throw new Error(
+        `LIVE_AT_VALUATION fetch failed for ${liveFetchResult.failedConditionId}: ` +
+          liveFetchResult.error,
+      );
+    }
+    const liveFetchMetadata = liveFetchResult.data;
+
+    // 2. Build payload (utilise context.python avec valeurs LIVE patchées si applicable)
     const payload = buildPythonPayload(context.python);
 
-    // 3. Mark RUNNING
+    // 3. Mark RUNNING + persist payload_sent (V2 — audit IFRS 2.46)
     await supabase
       .from('valuation_runs')
-      .update({ status: 'RUNNING', started_at: new Date().toISOString() })
+      .update({
+        status: 'RUNNING',
+        started_at: new Date().toISOString(),
+        payload_sent: {
+          ...payload,
+          // V2.1 — trace les conditions re-fetched live pour audit
+          ...(liveFetchMetadata.conditions_refetched.length > 0
+            ? { live_fetch_metadata: liveFetchMetadata }
+            : {}),
+        },
+      })
       .eq('id', runId);
 
     // 4. Appel Python (ou mock)
@@ -135,7 +194,7 @@ Deno.serve(async (req: Request) => {
       audit_data: { source: 'compute-valuation', engine_version: result.engine_version },
     });
 
-    // 6. Mark DONE
+    // 6. Mark DONE + persist response_received (V2 — audit IFRS 2.46)
     await supabase
       .from('valuation_runs')
       .update({
@@ -143,6 +202,7 @@ Deno.serve(async (req: Request) => {
         completed_at: new Date().toISOString(),
         pricer_used: payload.config.use_monte_carlo ? 'MONTE_CARLO_MULTI_TRANCHE' : 'BLACK_SCHOLES',
         engine_version: result.engine_version ?? 'V8',
+        response_received: result, // ← NEW V2 — snapshot brut moteur
       })
       .eq('id', runId);
 
@@ -194,19 +254,222 @@ function jsonError(status: number, message: string): Response {
   });
 }
 
+function emptyLiveFetchMetadata(): LiveFetchMetadata {
+  return {
+    conditions_refetched: [],
+    fetch_timestamps: {},
+    data_sources: {},
+    resolved_tickers: {},
+    warnings: {},
+  };
+}
+
+/**
+ * V2.1 — Pour chaque condition `market_data_fetch_mode = 'LIVE_AT_VALUATION'` :
+ *   - TSR_REL_INDEX : invoke EF `market-data-fetch` avec ticker + as_of_date=today.
+ *     Patch in-place reference_index_s0/sigma/dividend_yield sur la condition.
+ *     `correlation` NON re-fetched ici (calcul vs main asset → délégué au moteur).
+ *   - TSR_REL_PEERS : invoke EF `market-data-peer-group` avec company_ticker du plan.
+ *     Patch in-place s0/volatility/correlationWithMain sur chaque peer (flat ou
+ *     dans weighted_peer_groups) via assetStats + correlationMatrix.
+ *
+ * Fail-fast : si une condition LIVE foire le fetch, retourne ok:false (le caller
+ * throw → status='ERROR' avec message clair). On NE retombe PAS sur valeurs DB
+ * stale (contradiction mode LIVE).
+ *
+ * Si aucune condition LIVE : return ok:true avec metadata vide, no-op.
+ */
+async function refreshLiveMarketData(
+  supabase: ReturnType<typeof createClient>,
+  context: LoadedContext,
+): Promise<
+  { ok: true; data: LiveFetchMetadata } | { ok: false; failedConditionId: string; error: string }
+> {
+  const liveConditions = context.python.conditions.filter(
+    (c) => c.market_data_fetch_mode === 'LIVE_AT_VALUATION',
+  );
+  if (liveConditions.length === 0) {
+    return { ok: true, data: emptyLiveFetchMetadata() };
+  }
+
+  const today = new Date().toISOString().split('T')[0]!;
+  const metadata = emptyLiveFetchMetadata();
+
+  for (const c of liveConditions) {
+    const condKey =
+      c.id ?? c.reference_index ?? `${c.market_metric_type}-${liveConditions.indexOf(c)}`;
+
+    // -------------------------------------------------------------------------
+    // TSR_REL_INDEX
+    // -------------------------------------------------------------------------
+    if (c.market_metric_type === 'TSR_REL_INDEX' && c.reference_index) {
+      const lookbackDays = c.measurement_period_years
+        ? Math.round(c.measurement_period_years * 252)
+        : 252;
+      const { data, error } = await supabase.functions.invoke<{
+        success: boolean;
+        data?: {
+          spot_price: number;
+          annualized_volatility: number;
+          dividend_yield: number;
+          data_source?: string;
+          resolved_ticker?: string;
+          warnings?: unknown;
+        };
+        error?: string;
+      }>('market-data-fetch', {
+        body: {
+          org_id: context.orgId,
+          plan_id: context.planId,
+          ticker: c.reference_index,
+          as_of_date: today,
+          lookback_days: lookbackDays,
+          preview_only: true, // ne pas écrire en DB performance_conditions
+        },
+      });
+
+      if (error || !data?.success || !data.data) {
+        return {
+          ok: false,
+          failedConditionId: condKey,
+          error: error?.message ?? data?.error ?? 'unknown EF error',
+        };
+      }
+
+      // Patch in-place les valeurs sur la condition
+      c.reference_index_s0 = data.data.spot_price;
+      c.reference_index_sigma = data.data.annualized_volatility;
+      c.reference_index_dividend_yield = data.data.dividend_yield;
+      // correlation : conservée telle quelle (calcul vs main asset délégué au moteur)
+
+      metadata.conditions_refetched.push(condKey);
+      metadata.fetch_timestamps[condKey] = new Date().toISOString();
+      metadata.data_sources[condKey] = data.data.data_source ?? 'EODHD';
+      metadata.resolved_tickers[condKey] = data.data.resolved_ticker ?? c.reference_index;
+      if (data.data.warnings) metadata.warnings[condKey] = data.data.warnings;
+      continue;
+    }
+
+    // -------------------------------------------------------------------------
+    // TSR_REL_PEERS
+    // -------------------------------------------------------------------------
+    if (c.market_metric_type === 'TSR_REL_PEERS') {
+      // Construit la liste des peers à partir de weighted_peer_groups OU peer_group flat
+      const wpgPeers = (c.weighted_peer_groups ?? []).flatMap((g) => g.peers ?? []);
+      const flatPeers = c.peer_group ?? [];
+      const peersList = wpgPeers.length > 0 ? wpgPeers : flatPeers;
+
+      if (peersList.length === 0) {
+        return {
+          ok: false,
+          failedConditionId: condKey,
+          error: 'TSR_REL_PEERS sans peer défini en mode LIVE_AT_VALUATION',
+        };
+      }
+      if (!context.companyTicker) {
+        return {
+          ok: false,
+          failedConditionId: condKey,
+          error:
+            'TSR_REL_PEERS LIVE_AT_VALUATION requiert companies.ticker du sous-jacent — non renseigné',
+        };
+      }
+
+      const lookbackDays = c.measurement_period_years
+        ? Math.round(c.measurement_period_years * 252)
+        : 252;
+
+      const { data, error } = await supabase.functions.invoke<{
+        success: boolean;
+        data?: {
+          tickers: string[];
+          assets: Array<{
+            ticker: string;
+            s0: number;
+            volatility: number;
+            dividendYield: number;
+            resolvedSymbol?: string;
+          }>;
+          correlation_matrix: number[][];
+          data_quality?: { warnings?: unknown };
+        };
+        error?: string;
+      }>('market-data-peer-group', {
+        body: {
+          org_id: context.orgId,
+          plan_id: context.planId,
+          condition_id: c.id ?? null,
+          company_ticker: context.companyTicker,
+          peers: peersList.map((p) => ({ ticker: p.ticker, name: p.name })),
+          lookback_days: lookbackDays,
+          as_of_date: today,
+        },
+      });
+
+      if (error || !data?.success || !data.data) {
+        return {
+          ok: false,
+          failedConditionId: condKey,
+          error: error?.message ?? data?.error ?? 'unknown EF error',
+        };
+      }
+
+      // Patch in-place chaque peer avec assetStats + correlation vs target.
+      // Convention market-data-peer-group : data.tickers[0] = company_ticker,
+      // data.tickers[1..] = peers. Donc correlation_matrix[targetIdx][peerIdx]
+      // est la corrélation peer ↔ target.
+      const tickers = data.data.tickers;
+      const assets = data.data.assets;
+      const matrix = data.data.correlation_matrix;
+      const targetIdx = tickers.indexOf(context.companyTicker);
+
+      for (const peer of peersList) {
+        const stats = assets.find((s) => s.ticker === peer.ticker);
+        if (stats) {
+          peer.s0 = stats.s0;
+          peer.volatility = stats.volatility;
+          const peerIdx = tickers.indexOf(peer.ticker);
+          if (targetIdx >= 0 && peerIdx >= 0 && matrix[targetIdx]?.[peerIdx] != null) {
+            peer.correlationWithMain = matrix[targetIdx][peerIdx]!;
+          }
+        }
+      }
+
+      metadata.conditions_refetched.push(condKey);
+      metadata.fetch_timestamps[condKey] = new Date().toISOString();
+      metadata.data_sources[condKey] = 'EODHD_PEERS';
+      metadata.resolved_tickers[condKey] = peersList.map((p) => p.ticker).join(',');
+      if (data.data.data_quality?.warnings) {
+        metadata.warnings[condKey] = data.data.data_quality.warnings;
+      }
+      continue;
+    }
+
+    // Type non géré (NON_MARKET, etc.) → skip silencieux
+    // (LIVE_AT_VALUATION sur condition non-marché est une mauvaise config —
+    // mais pas bloquant pour V1).
+  }
+
+  return { ok: true, data: metadata };
+}
+
 /**
  * Charge tout le contexte nécessaire à la valorisation à partir du run_id.
  * 6 queries parallèles via Promise.all. Retourne null si le plan ou le
  * hypothesis_set/simulation_config/volatility_scheme manquent.
+ *
+ * V2 : étend la query performance_conditions avec les nouvelles colonnes
+ * reference_index_s0/sigma/correlation/dividend_yield (migration 00050 → 00070).
+ *
+ * V2.1 : étend la query performance_conditions avec id + market_data_fetch_mode
+ * (migration 00073) pour permettre le dispatch LIVE_AT_VALUATION. Ajoute aussi
+ * la query companies pour récupérer le ticker du sous-jacent (companyTicker
+ * pour TSR_REL_PEERS LIVE).
  */
 async function loadValuationContext(
   supabase: ReturnType<typeof createClient>,
   runId: string,
-): Promise<{
-  orgId: string;
-  python: PythonValuationContext;
-  marketDataSnapshot: Record<string, unknown>;
-} | null> {
+): Promise<LoadedContext | null> {
   const { data: run } = await supabase
     .from('valuation_runs')
     .select('id, plan_id, org_id, simulation_config_id')
@@ -217,13 +480,21 @@ async function loadValuationContext(
   const [planRes, conditionsRes, vestingRes, hypoRes] = await Promise.all([
     supabase
       .from('plans')
-      .select('id, plan_type, exercise_price, grant_date')
+      .select('id, plan_type, exercise_price, grant_date, company_id')
       .eq('id', run.plan_id)
       .maybeSingle(),
     supabase
       .from('performance_conditions')
       .select(
-        'condition_type, market_metric_type, weight, measurement_period_years, comparison_method, reference_index, reference_index_display_name, start_price_method, start_fixed_price, start_averaging_days, end_price_method, end_fixed_price, end_averaging_days, peer_group, weighted_peer_groups, acquisition_scale',
+        // V2 : ajout reference_index_s0/sigma/correlation/dividend_yield
+        // V2.1 : ajout id + market_data_fetch_mode (migration 00073)
+        'id, condition_type, market_metric_type, weight, measurement_period_years, comparison_method, ' +
+          'reference_index, reference_index_display_name, ' +
+          'reference_index_s0, reference_index_sigma, reference_index_correlation, reference_index_dividend_yield, ' +
+          'market_data_fetch_mode, ' +
+          'start_price_method, start_fixed_price, start_averaging_days, ' +
+          'end_price_method, end_fixed_price, end_averaging_days, ' +
+          'peer_group, weighted_peer_groups, acquisition_scale',
       )
       .eq('plan_id', run.plan_id),
     supabase
@@ -242,8 +513,17 @@ async function loadValuationContext(
 
   if (!planRes.data || !hypoRes.data) return null;
 
+  const planRow = planRes.data as {
+    id: string;
+    plan_type: string;
+    exercise_price: number | null;
+    grant_date: string;
+    company_id: string | null;
+  };
+
   // Volatility + simulation : chaînés depuis hypothesis_set
-  const [volRes, simRes] = await Promise.all([
+  // V2.1 : + companies pour récupérer le ticker du sous-jacent
+  const [volRes, simRes, companyRes] = await Promise.all([
     supabase
       .from('volatility_schemes')
       .select('annualized_sigma, heston_params, jump_params')
@@ -254,6 +534,9 @@ async function loadValuationContext(
       .select('num_paths, steps_per_year, time_horizon_years, antithetic_variates')
       .eq('hypothesis_set_id', hypoRes.data.id)
       .maybeSingle(),
+    planRow.company_id
+      ? supabase.from('companies').select('ticker').eq('id', planRow.company_id).maybeSingle()
+      : Promise.resolve({ data: null as { ticker: string | null } | null }),
   ]);
 
   if (!volRes.data || !simRes.data) return null;
@@ -266,9 +549,11 @@ async function loadValuationContext(
 
   return {
     orgId: run.org_id,
+    planId: run.plan_id,
+    companyTicker: (companyRes.data as { ticker: string | null } | null)?.ticker ?? null,
     python: {
       orgId: run.org_id,
-      plan: planRes.data,
+      plan: planRow,
       hypothesisSet: hypoRes.data,
       volatilityScheme: volRes.data,
       simulationConfig: simRes.data,
@@ -279,8 +564,8 @@ async function loadValuationContext(
       captured_at: new Date().toISOString(),
       hypothesis_set_id: hypoRes.data.id,
       // En B5 : on capture juste les inputs hypothesis. La snapshot complète
-      // (peers + index live data depuis Yahoo) arrivera quand l'edge function
-      // searchTicker sera branchée (Module 3a §5.2).
+      // (peers + index live data depuis EODHD/Yahoo) arrive maintenant via
+      // payload_sent.live_fetch_metadata pour les conditions LIVE_AT_VALUATION.
     },
   };
 }

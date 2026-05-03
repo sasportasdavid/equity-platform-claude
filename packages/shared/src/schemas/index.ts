@@ -10,3 +10,4 @@ export * from './notification';
 export * from './portal';
 export * from './tax-simulation';
 export * from './exercise';
+export * from './market-data';

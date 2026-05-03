@@ -343,6 +343,34 @@ export const performanceConditionSchema = z.object({
   endAveragingDays: z.string().optional(),
   measurementPeriodYears: z.string().optional(),
   acquisitionScale: acquisitionScaleSchema.optional(),
+
+  // -------------------------------------------------------------------------
+  // V2 — Module 3a payload V2 / Market Data
+  //   migrations 00070 (TSR_REL_INDEX columns) + 00073 (fetch mode).
+  //   Ces champs sont remplis :
+  //    - manuellement (mode MANUAL) — saisie directe S0/σ
+  //    - via auto-fetch EODHD/Yahoo (mode SNAPSHOT_AT_GRANT, default)
+  //    - laissés vides à la création (mode LIVE_AT_VALUATION) — refetch
+  //      à chaque run de valuation côté EF compute-valuation.
+  // -------------------------------------------------------------------------
+  /** Mode de fetch des données de marché (TSR_REL_INDEX/PEERS uniquement). */
+  marketDataFetchMode: z.enum(['SNAPSHOT_AT_GRANT', 'MANUAL', 'LIVE_AT_VALUATION']).optional(),
+  /** Spot S0 capturé à la grant_date (TSR_REL_INDEX). */
+  reference_index_s0: z.number().positive().optional().nullable(),
+  /** Volatilité σ annualisée (fraction, 0.18 = 18 %). */
+  reference_index_sigma: z.number().min(0).max(5).optional().nullable(),
+  /** Corrélation Pearson avec sous-jacent ∈ [-1, 1]. */
+  reference_index_correlation: z.number().min(-1).max(1).optional().nullable(),
+  /** Dividend yield de l'indice (decimal — 0.025 = 2.5 %). */
+  reference_index_dividend_yield: z.number().min(0).max(1).optional().nullable(),
+  /** Source data : MANUAL / EODHD / YAHOO. */
+  reference_index_data_source: z.enum(['MANUAL', 'EODHD', 'YAHOO']).optional().nullable(),
+  /** Timestamp ISO de capture (audit IFRS 2.46). */
+  reference_index_data_captured_at: z.string().optional().nullable(),
+  /** Ticker EODHD résolu (ex: CAC.PA pour ^FCHI Yahoo). */
+  reference_index_resolved_ticker: z.string().max(30).optional().nullable(),
+  /** Warnings de fetch (downgrades, fallback, low overlap…). */
+  market_data_warnings: z.array(z.string()).optional().nullable(),
 });
 export type PerformanceConditionInput = z.infer<typeof performanceConditionSchema>;
 
@@ -834,6 +862,41 @@ export const planWizardSchema = planWizardBase.superRefine((data, ctx) => {
             path: ['conditions', idx, 'referenceIndex'],
             message: 'Indice de référence requis pour TSR relatif vs indice',
           });
+        }
+
+        // V2 — Validation conditionnelle du mode de fetch market data.
+        // mode SNAPSHOT_AT_GRANT (default IFRS 2) ou MANUAL :
+        //   S0/sigma/correlation OBLIGATOIRES (sinon le moteur Python tombe sur
+        //   les défauts 100/0.20/0.5 et la valuation est silencieusement biaisée).
+        // mode LIVE_AT_VALUATION : S0/sigma fetchés à chaque run depuis Yahoo,
+        //   donc on n'exige que le ticker (déjà validé au-dessus).
+        const mode = cond.marketDataFetchMode ?? 'SNAPSHOT_AT_GRANT';
+        if (mode === 'SNAPSHOT_AT_GRANT' || mode === 'MANUAL') {
+          if (cond.reference_index_s0 == null || cond.reference_index_s0 <= 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['conditions', idx, 'reference_index_s0'],
+              message: 'Spot S₀ requis (mode SNAPSHOT/MANUAL — sinon biais Monte Carlo)',
+            });
+          }
+          if (cond.reference_index_sigma == null || cond.reference_index_sigma <= 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['conditions', idx, 'reference_index_sigma'],
+              message: 'Volatilité σ requise (mode SNAPSHOT/MANUAL — sinon biais Monte Carlo)',
+            });
+          }
+          if (
+            cond.reference_index_correlation == null ||
+            cond.reference_index_correlation < -1 ||
+            cond.reference_index_correlation > 1
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['conditions', idx, 'reference_index_correlation'],
+              message: 'Corrélation ρ requise dans [-1, 1]',
+            });
+          }
         }
       }
 
@@ -1369,6 +1432,16 @@ const CONDITION_FIELDS_BY_TYPE: Record<
     'endFixedPrice',
     'endAveragingDays',
     'measurementPeriodYears',
+    // V2 — Market Data (migrations 00070 + 00073)
+    'marketDataFetchMode',
+    'reference_index_s0',
+    'reference_index_sigma',
+    'reference_index_correlation',
+    'reference_index_dividend_yield',
+    'reference_index_data_source',
+    'reference_index_data_captured_at',
+    'reference_index_resolved_ticker',
+    'market_data_warnings',
   ],
   SERVICE: [],
 };

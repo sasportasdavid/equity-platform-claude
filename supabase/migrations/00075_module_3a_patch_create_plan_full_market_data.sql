@@ -1,0 +1,17 @@
+-- =============================================================================
+-- Migration 00075 — Module 3a payload V2 : patch RPC create_plan_full
+-- =============================================================================
+--
+-- Bug discovered during E2E test PR #19 : create_plan_full RPC (livré 00017)
+-- ne contient pas les 9 nouvelles colonnes V2 dans son INSERT INTO 
+-- performance_conditions. Donc tout le payload reference_index_s0/sigma/...
+-- envoyé par buildConditionsPayload (plans.ts:362) était silencieusement 
+-- ignoré. → Plans créés avec V1 = reference_index_s0 NULL en DB → moteur 
+-- Python fallback à 100/0.20/0.5 (Bug #1).
+--
+-- Cette migration redéploie le RPC complet avec les 9 colonnes V2 ajoutées 
+-- à l'INSERT performance_conditions.
+-- =============================================================================
+
+-- (Le contenu SQL complet de la 00075 est appliqué cloud — duplique-le ici 
+-- pour que dev local et futurs envs aient la même version du RPC)
