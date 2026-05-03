@@ -1,33 +1,29 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ChevronLeft } from 'lucide-react';
-import { AwardOverview } from '../../components/AwardOverview';
-import { VestingChart } from '../../components/VestingChart';
+import { EditorialAwardHero } from '../../components/EditorialAwardHero';
+import { EditorialVestingSection } from '../../components/EditorialVestingSection';
 import { VestingTranchesTable } from '../../components/VestingTranchesTable';
 import { PortalDocumentsList } from '../../components/PortalDocumentsList';
 import { LeaverSimulator } from '../../components/LeaverSimulator';
-import { Card, CardContent } from '@/components/ui/card';
 import { buildVestingTimeline } from '@/lib/portal/vesting';
 import { AwardPortalDetailError, getAwardPortalDetail } from '@/server/queries/portal';
 
 /**
- * Module 8 B3 — Page détail award portail (§4.3).
+ * Module 8 B3 + Étape 14 Design System V1 — Page détail award portail.
  *
- * Server Component qui appelle le RPC SECURITY DEFINER `get_award_portal_detail`
- * (Module 8 B1) pour charger en 1 round-trip :
- *   - L'award + plan
- *   - vesting_events (potentiellement vide)
- *   - leaver_rules (utilisé en B4 simulator, pas en B3)
- *   - performance_conditions
- *   - documents SIGNED
+ * Refonte editorial :
+ *   - Hero typographique 3 lignes (EditorialAwardHero) : breadcrumb +
+ *     overline + titre Fraunces + TitleRule + StatusBadges + 3 cards
+ *     adaptatives (Card 2 conditionnelle à 3 niveaux : exercise_price /
+ *     grant_date / status)
+ *   - Calendrier de vesting (EditorialVestingSection) : VestingTimeline
+ *     DS V1 mode simplified (labels mois courts) + tableau tranches
+ *     en dessous
+ *   - Simulateur de départ (LeaverSimulator inchangé V1, refonte dark
+ *     theme reportée au commit 4)
+ *   - Documents (PortalDocumentsList inchangé)
+ *   - Conditions de performance (read-only V1, restylé editorial)
  *
- * 4 sections rendues stack (pas de tabs V1) :
- *   1. Synthèse (4 cards stat)
- *   2. Calendrier de vesting (chart Recharts + table tranches)
- *   3. Documents (PDFs signés + bouton télécharger)
- *   4. Conditions de performance (read-only V1)
- *
- * Section "Simulateur de départ" reportée à B4.
+ * **Aucun calcul de gain en €** (interdit spec Module 8 §1111).
  */
 export default async function PortalAwardDetailPage({
   params,
@@ -61,59 +57,48 @@ export default async function PortalAwardDetailPage({
     0,
   );
 
+  const fromSnapshot = timeline.length > 0 && timeline[0]?.fromSnapshot === true;
+
   return (
-    <div className="space-y-8" data-testid="portal-award-detail">
-      {/* Breadcrumb + title */}
-      <div className="space-y-3">
-        <Link
-          href="/portal/awards"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-sm"
-        >
-          <ChevronLeft className="size-4" />
-          Mes attributions
-        </Link>
-        <div className="flex flex-wrap items-baseline gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{plan.name}</h1>
-          <span className="text-muted-foreground font-mono text-xs">{award.award_number}</span>
-          <span className="bg-muted text-foreground rounded px-2 py-0.5 font-mono text-[11px] font-semibold">
-            {plan.plan_type}
-          </span>
+    <div className="space-y-12" data-testid="portal-award-detail">
+      {/* Hero éditorial — 3 lignes typographiques + 3 cards adaptatives */}
+      <EditorialAwardHero
+        awardNumber={award.award_number}
+        awardStatus={award.status}
+        unitsGranted={Number(award.units_granted)}
+        unitsVested={unitsVested}
+        exercisePrice={award.exercise_price ?? null}
+        grantDate={award.grant_date}
+        planName={plan.name}
+        planType={plan.plan_type}
+        timeline={timeline}
+      />
+
+      {/* Section 1 — Calendrier de vesting (VestingTimeline DS V1 simplified) */}
+      <EditorialVestingSection
+        timeline={timeline}
+        unitsGranted={Number(award.units_granted)}
+        grantDate={award.grant_date}
+        fromSnapshot={fromSnapshot}
+      />
+
+      {/* Tableau détaillé des tranches */}
+      <section className="space-y-4">
+        <header>
+          <p className="text-overline text-brass-500">DÉTAIL · DES TRANCHES</p>
+          <h2 className="text-h3 text-ink-900 mt-1">Tableau d&apos;acquisition</h2>
+        </header>
+        <div className="bg-paper-50 border-paper-300 rounded-lg border p-4 sm:p-6">
+          <VestingTranchesTable timeline={timeline} />
         </div>
-        {plan.description ? (
-          <p className="text-muted-foreground text-sm">{plan.description}</p>
-        ) : null}
-      </div>
-
-      {/* Section 1 — Synthèse */}
-      <section className="space-y-3">
-        <AwardOverview
-          unitsGranted={Number(award.units_granted)}
-          unitsVested={unitsVested}
-          exercisePrice={award.exercise_price ?? null}
-          grantDate={award.grant_date}
-        />
       </section>
 
-      {/* Section 2 — Vesting */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Calendrier d&apos;acquisition</h2>
-        <Card>
-          <CardContent className="space-y-4 p-4 sm:p-6">
-            <VestingChart timeline={timeline} />
-            <VestingTranchesTable timeline={timeline} />
-          </CardContent>
-        </Card>
-        {timeline.length > 0 && timeline[0]?.fromSnapshot ? (
-          <p className="text-muted-foreground text-xs">
-            Calendrier indicatif basé sur le contrat. Les unités seront officiellement acquises
-            selon les dates affichées.
-          </p>
-        ) : null}
-      </section>
-
-      {/* Section 3 — Simulateur de départ (Module 8 B4) */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Simulateur de départ</h2>
+      {/* Section 2 — Simulateur de départ (LeaverSimulator dark theme : commit 4) */}
+      <section className="space-y-4">
+        <header>
+          <p className="text-overline text-brass-500">SIMULATION · DE DÉPART</p>
+          <h2 className="text-h3 text-ink-900 mt-1">What-if : départ hypothétique</h2>
+        </header>
         <LeaverSimulator
           awardId={award.id}
           planType={plan.plan_type}
@@ -122,37 +107,47 @@ export default async function PortalAwardDetailPage({
         />
       </section>
 
-      {/* Section 4 — Documents */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Documents</h2>
+      {/* Section 3 — Documents */}
+      <section className="space-y-4">
+        <header>
+          <p className="text-overline text-brass-500">DOCUMENTS · CONTRACTUELS</p>
+          <h2 className="text-h3 text-ink-900 mt-1">PDF signés à votre disposition</h2>
+        </header>
         <PortalDocumentsList documents={documents} />
       </section>
 
-      {/* Section 5 — Performance conditions (read-only V1) */}
+      {/* Section 4 — Performance conditions (read-only V1) */}
       {performance_conditions && performance_conditions.length > 0 ? (
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Conditions de performance</h2>
-          <Card>
-            <CardContent className="space-y-3 p-4 sm:p-6">
-              <ul className="space-y-2 text-sm">
-                {performance_conditions.map(
-                  (c: { id?: string; name: string; threshold?: number | null }, idx: number) => (
-                    <li key={c.id ?? idx} className="flex items-baseline justify-between gap-3">
-                      <span className="font-medium">{c.name}</span>
-                      {c.threshold != null ? (
-                        <span className="text-muted-foreground tabular-nums">
-                          Seuil : {c.threshold}
-                        </span>
-                      ) : null}
-                    </li>
-                  ),
-                )}
-              </ul>
-              <p className="text-muted-foreground text-xs">
-                Le suivi en temps réel des conditions de performance sera disponible prochainement.
-              </p>
-            </CardContent>
-          </Card>
+        <section className="space-y-4">
+          <header>
+            <p className="text-overline text-brass-500">CONDITIONS · DE PERFORMANCE</p>
+            <h2 className="text-h3 text-ink-900 mt-1">
+              {performance_conditions.length}{' '}
+              {performance_conditions.length > 1 ? 'critères' : 'critère'} à atteindre
+            </h2>
+          </header>
+          <div className="bg-paper-50 border-paper-300 rounded-lg border p-6">
+            <ul className="divide-paper-300 -mx-2 divide-y">
+              {performance_conditions.map(
+                (c: { id?: string; name: string; threshold?: number | null }, idx: number) => (
+                  <li
+                    key={c.id ?? idx}
+                    className="flex items-baseline justify-between gap-3 px-2 py-3"
+                  >
+                    <span className="text-ink-900 text-sm font-medium">{c.name}</span>
+                    {c.threshold != null ? (
+                      <span className="text-ink-500 font-mono text-xs tabular-nums">
+                        Seuil · {c.threshold}
+                      </span>
+                    ) : null}
+                  </li>
+                ),
+              )}
+            </ul>
+            <p className="text-ink-500 mt-4 font-mono text-xs">
+              ⚠ Le suivi en temps réel des conditions de performance sera disponible prochainement.
+            </p>
+          </div>
         </section>
       ) : null}
     </div>
