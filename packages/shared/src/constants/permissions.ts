@@ -106,6 +106,18 @@ export const PERMISSIONS = [
   'notifications.cancel',
   'notification_templates.read',
   'notification_templates.update',
+
+  // Exercises (Module 9 B1 — seedés en migration 00060)
+  'exercises.request.own',
+  'exercises.read.own',
+  'exercises.read.all',
+  'exercises.approve',
+  'exercises.cancel.own',
+  'exercises.cancel.any',
+  'exercises.confirm_payment',
+  'exercise_workflows.read',
+  'exercise_workflows.update',
+  'companies.fmv.update',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

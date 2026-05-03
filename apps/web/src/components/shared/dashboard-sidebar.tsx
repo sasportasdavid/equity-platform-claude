@@ -9,6 +9,7 @@ import {
   PieChart,
   Settings as SettingsIcon,
   ShieldCheck,
+  TrendingUp,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -65,6 +66,7 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
     items: [
       { href: '/dashboard/valuations', label: 'Valorisations', icon: Calculator, comingSoon: true },
       { href: '/dashboard/approvals', label: 'Approbations', icon: ShieldCheck },
+      { href: '/dashboard/exercises', label: 'Exercices', icon: TrendingUp },
     ],
   },
   {
