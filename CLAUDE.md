@@ -378,6 +378,32 @@ identiques + service_role injecté automatiquement.
 - [ ] Module 12 — Compliance Engine V2 (configurable)
 - [ ] Module 13 — Audit Trail & Reporting
 
+### Design System V1 — Editorial Finance (PR #12 ready-for-review)
+
+**14 étapes livrées** sur la branche `feat/design-system-v1` :
+
+- [x] Étape 1 — Bootstrap kickoff (`90e9a27`)
+- [x] Étape 2 — Tokens v1 + 3 fonts (`25ae22c`)
+- [x] Étape 3 — Theme provider (`ffa97da`)
+- [x] Étape 4 — UI primitives + status-badge + animations (`1b8caed`)
+- [x] Étape 5 — Editorial layout & sidebar refactor (`450035d`)
+- [x] Étape 6 — KPICard signature (`97c143e`)
+- [x] Étape 7 — EmptyState + 8 illustrations (`e61072b`)
+- [x] Étape 8 — DataTable editorial typography (`dd79390`)
+- [x] Étape 9 — VestingTimeline editorial chart (`eaf2910` / `f4ccdde`)
+- [x] Étape 10 — ApprovalRequestTimeline horizontal (`ee28c93`)
+- [x] Étape 11 — Editorial chart components (`46eed20`)
+- [x] Étape 12 — Dashboard CFO refonte (`f8c1815` → `a0e9ac2`, 5 commits)
+- [x] Étape 13 — Plan Detail + Wizard Step 4 (`d67873b` → `02097c1`, 7 commits)
+- [x] Étape 14 — Beneficiary Portal + QA polish (`6f9f548` → finalisation, 7 commits)
+
+PR #12 prête pour review. **Rebase à faire avant merge** : PR #11
+(Module 8) toujours OPEN sur master, à merger en priorité.
+
+Référence design : `memory/design_system_v1_recon.md` (recon Étape 1
+
+- adaptations détaillées par étape + dette V1 → V2 consolidée).
+
 ## Dette technique connue
 
 1. **Migration de cohérence DB** : `rate_flat` / `dividend_yield`
