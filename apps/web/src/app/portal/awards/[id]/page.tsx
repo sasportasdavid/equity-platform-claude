@@ -3,9 +3,13 @@ import { EditorialAwardHero } from '../../components/EditorialAwardHero';
 import { EditorialVestingSection } from '../../components/EditorialVestingSection';
 import { VestingTranchesTable } from '../../components/VestingTranchesTable';
 import { PortalDocumentsList } from '../../components/PortalDocumentsList';
-import { LeaverSimulator } from '../../components/LeaverSimulator';
+import { EditorialLeaverSimulator } from '../../components/EditorialLeaverSimulator';
 import { buildVestingTimeline } from '@/lib/portal/vesting';
-import { AwardPortalDetailError, getAwardPortalDetail } from '@/server/queries/portal';
+import {
+  AwardPortalDetailError,
+  getAwardPortalDetail,
+  getPortalDashboard,
+} from '@/server/queries/portal';
 
 /**
  * Module 8 B3 + Étape 14 Design System V1 — Page détail award portail.
@@ -32,9 +36,18 @@ export default async function PortalAwardDetailPage({
 }) {
   const { id } = await params;
 
+  // Charge en parallèle : detail (RPC sécurisé) + dashboard (pour org.name
+  // utilisé par le simulator dark theme). Le RPC dashboard est cheap (1
+  // round-trip) et déjà autorisé pour le bénéficiaire courant.
   let detail;
+  let orgName = '';
   try {
-    detail = await getAwardPortalDetail(id);
+    const [detailResult, dashboard] = await Promise.all([
+      getAwardPortalDetail(id),
+      getPortalDashboard().catch(() => null),
+    ]);
+    detail = detailResult;
+    orgName = dashboard?.org.name ?? '';
   } catch (err) {
     if (err instanceof AwardPortalDetailError && err.code === 'NOT_FOUND') {
       notFound();
@@ -93,17 +106,14 @@ export default async function PortalAwardDetailPage({
         </div>
       </section>
 
-      {/* Section 2 — Simulateur de départ (LeaverSimulator dark theme : commit 4) */}
+      {/* Section 2 — Simulateur de départ (EditorialLeaverSimulator dark theme) */}
       <section className="space-y-4">
-        <header>
-          <p className="text-overline text-brass-500">SIMULATION · DE DÉPART</p>
-          <h2 className="text-h3 text-ink-900 mt-1">What-if : départ hypothétique</h2>
-        </header>
-        <LeaverSimulator
+        <EditorialLeaverSimulator
           awardId={award.id}
           planType={plan.plan_type}
           leaverRulesSnapshot={award.leaver_rules_snapshot}
           unitsGranted={Number(award.units_granted)}
+          orgName={orgName || 'votre société'}
         />
       </section>
 
