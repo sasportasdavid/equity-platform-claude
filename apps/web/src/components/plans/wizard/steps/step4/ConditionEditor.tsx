@@ -100,51 +100,52 @@ export function ConditionEditor({
       )}
       data-testid={`condition-editor-${index}`}
     >
-      {/* Header */}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="hover:bg-muted/30 flex w-full items-center gap-3 px-4 py-3 text-left"
-        aria-expanded={open}
-        aria-controls={`condition-body-${index}`}
-      >
-        {open ? (
-          <ChevronDown className="text-muted-foreground size-4 shrink-0" />
-        ) : (
-          <ChevronRight className="text-muted-foreground size-4 shrink-0" />
-        )}
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="text-muted-foreground font-mono text-xs">#{index + 1}</span>
-          <span className="truncate text-sm font-medium">
-            {condition.name?.trim() || (
-              <span className="text-muted-foreground italic">Condition sans nom</span>
-            )}
-          </span>
-          <Badge variant="secondary" className="font-normal">
-            {CONDITION_TYPE_LABELS[condition.conditionType]}
-          </Badge>
-          <Badge variant="outline" className="font-normal">
-            {CATEGORY_LABELS[condition.category]}
-          </Badge>
-          {showWeight ? (
-            <Badge variant="outline" className="font-mono font-normal">
-              {(condition.weight ?? 0).toFixed(0)} %
+      {/* Header — toggle + delete séparés en sibling buttons (PR #24).
+          Avant : un <button> toggle wrappait un <Button> delete → HTML
+          invalide (button-in-button) + warning hydration React. */}
+      <div className="hover:bg-muted/30 flex w-full items-center gap-1 pr-2">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
+          aria-expanded={open}
+          aria-controls={`condition-body-${index}`}
+        >
+          {open ? (
+            <ChevronDown className="text-muted-foreground size-4 shrink-0" />
+          ) : (
+            <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+          )}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="text-muted-foreground font-mono text-xs">#{index + 1}</span>
+            <span className="truncate text-sm font-medium">
+              {condition.name?.trim() || (
+                <span className="text-muted-foreground italic">Condition sans nom</span>
+              )}
+            </span>
+            <Badge variant="secondary" className="font-normal">
+              {CONDITION_TYPE_LABELS[condition.conditionType]}
             </Badge>
-          ) : null}
-        </div>
+            <Badge variant="outline" className="font-normal">
+              {CATEGORY_LABELS[condition.category]}
+            </Badge>
+            {showWeight ? (
+              <Badge variant="outline" className="font-mono font-normal">
+                {(condition.weight ?? 0).toFixed(0)} %
+              </Badge>
+            ) : null}
+          </div>
+        </button>
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
           aria-label={`Supprimer la condition ${index + 1}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
+          onClick={onRemove}
         >
           <Trash2 className="text-destructive size-4" />
         </Button>
-      </button>
+      </div>
 
       {/* Body */}
       {open ? (
