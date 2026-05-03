@@ -494,6 +494,36 @@ describe('Payload structure (parity with main.py ValuationRequest)', () => {
     expect(payload.market.q).toBe(0.02);
   });
 
+  // PR #21 regression — borne `>= 1` au lieu de `> 1`.
+  // Bug E2E PR #19 : un user qui saisissait `dividend_yield = 1` (1 % en
+  // wizard %) recevait `q = 1` (= 100 %) côté moteur → option ATM crash.
+  it('dividend_yield=1 (% boundary) → market.q=0.01 (PR #21 fix)', () => {
+    const ctx = makeMinimalContext({
+      hypothesisSet: { s0: 100, rate_flat: 3, dividend_yield: 1 },
+    });
+    const payload = buildPythonPayload(ctx);
+    expect(payload.market.q).toBe(0.01);
+  });
+
+  it('rate_flat=1 (% boundary) → market.r=0.01 (PR #21 fix)', () => {
+    const ctx = makeMinimalContext({
+      hypothesisSet: { s0: 100, rate_flat: 1, dividend_yield: 0 },
+    });
+    const payload = buildPythonPayload(ctx);
+    expect(payload.market.r).toBe(0.01);
+  });
+
+  it('rate_flat=0.5 (sub-1) → market.r=0.5 (heuristique fraction)', () => {
+    // Note : 0.5 reste interprété comme fraction (= 50 %) — comportement
+    // limite documenté. Pour éliminer cette ambiguïté, V2 = split en 2
+    // normalizers contextuels (rate vs sigma). Cf. dette V2 dans memory.
+    const ctx = makeMinimalContext({
+      hypothesisSet: { s0: 100, rate_flat: 0.5, dividend_yield: 0 },
+    });
+    const payload = buildPythonPayload(ctx);
+    expect(payload.market.r).toBe(0.5);
+  });
+
   it('vesting multi-tranches → ordonné par sort_order, fractions [0,1]', () => {
     const ctx = makeMinimalContext({
       vestingTranches: [

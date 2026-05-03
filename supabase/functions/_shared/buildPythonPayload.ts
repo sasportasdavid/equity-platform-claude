@@ -315,15 +315,23 @@ function isOptionType(planType: string): boolean {
  * que `annualized_sigma` l'est déjà en fraction. Le moteur Python attend
  * tout en fractions.
  *
- * Heuristique : si la valeur strictement > 1, elle est probablement un
- * pourcent → on divise par 100. Sinon on suppose une fraction déjà
- * correcte. Une valeur 1.0 est ambigüe (= 100 % = 1.0) ; on tranche pour
- * « pourcent » (un taux flat de 100 % serait absurde dans tous les cas
- * réalistes).
+ * Heuristique : si la valeur ≥ 1, elle est traitée comme un pourcent →
+ * on divise par 100. Sinon on suppose une fraction déjà correcte.
+ *
+ * PR #21 fix — borne corrigée à `>= 1` (anciennement `> 1`).
+ * Bug E2E PR #19 : un utilisateur saisissant `dividend_yield = 1` (= 1 %
+ * dans le wizard %) voyait la valeur survivre intacte (1 > 1 faux), donc
+ * le moteur recevait `q = 1` (= 100 % de yield) → l'actif décroissait
+ * exponentiellement et l'option ATM finissait à fair_value = 0.
+ *
+ * Edge case accepté : si quelqu'un stocke `volatility = 1.0` exactement
+ * (= 100 % de vol annualisée, plausible pour smallcap biotech / crypto),
+ * elle sera désormais divisée à 0.01 = 1 %. Cas extrême en pratique —
+ * documenté en dette V2 (split en 2 normalizers contextuels).
  */
 function normalizeRateUnit(value: number | null | undefined): number {
   if (value == null) return 0;
-  return value > 1 ? value / 100 : value;
+  return value >= 1 ? value / 100 : value;
 }
 
 /**
