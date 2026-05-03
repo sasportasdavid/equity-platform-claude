@@ -10,11 +10,17 @@ import { resolveTemplateCodeFromPlanType, SUPPORTED_TEMPLATE_CODES } from '../te
  */
 
 describe('SUPPORTED_TEMPLATE_CODES', () => {
-  it('expose les 3 templates V1 attendus', () => {
+  it('expose les 5 templates V1 (3 award Module 6 + 2 exercise Module 9 B5)', () => {
     expect(SUPPORTED_TEMPLATE_CODES).toEqual(
-      expect.arrayContaining(['BSPCE_GRANT_LETTER', 'AGA_GRANT_LETTER', 'SO_GRANT_LETTER']),
+      expect.arrayContaining([
+        'BSPCE_GRANT_LETTER',
+        'AGA_GRANT_LETTER',
+        'SO_GRANT_LETTER',
+        'EXERCISE_NOTIFICATION',
+        'SUBSCRIPTION_BULLETIN',
+      ]),
     );
-    expect(SUPPORTED_TEMPLATE_CODES).toHaveLength(3);
+    expect(SUPPORTED_TEMPLATE_CODES).toHaveLength(5);
   });
 });
 

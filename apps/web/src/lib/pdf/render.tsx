@@ -4,30 +4,47 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { BspceGrantLetterTemplate } from './templates/BspceGrantLetterTemplate';
 import { AgaGrantLetterTemplate } from './templates/AgaGrantLetterTemplate';
 import { StockOptionGrantLetterTemplate } from './templates/StockOptionGrantLetterTemplate';
-import type { TemplateCode } from './template-resolver';
-import type { DocumentContext } from './types';
+import { ExerciseNotificationTemplate } from './templates/ExerciseNotificationTemplate';
+import { SubscriptionBulletinTemplate } from './templates/SubscriptionBulletinTemplate';
+import {
+  isExerciseTemplateCode,
+  type AwardTemplateCode,
+  type ExerciseTemplateCode,
+  type TemplateCode,
+} from './template-resolver';
+import type { DocumentContext, DocumentContextExercise } from './types';
 
 export {
   resolveTemplateCodeFromPlanType,
   SUPPORTED_TEMPLATE_CODES,
+  SUPPORTED_AWARD_TEMPLATE_CODES,
+  SUPPORTED_EXERCISE_TEMPLATE_CODES,
+  isExerciseTemplateCode,
   type TemplateCode,
+  type AwardTemplateCode,
+  type ExerciseTemplateCode,
 } from './template-resolver';
 
 /**
- * Module 6 B2 — Render serveur PDF.
+ * Module 6 B2 + Module 9 B5 — Render serveur PDF.
  *
  * `renderToBuffer` doit être appelé UNIQUEMENT côté Server Action / Edge
  * Function (pas Client Component). Le `'server-only'` ci-dessus garantit
  * la build error si import dans un client component.
  *
- * Le helper pur `resolveTemplateCodeFromPlanType` est dans `./template-resolver.ts`
- * pour être testable en Vitest sans plugin React.
+ * 2 maps : AWARD (Module 6, shape DocumentContext) et EXERCISE (Module 9 B5,
+ * shape DocumentContextExercise). Dispatch via `isExerciseTemplateCode`.
  */
 
-const TEMPLATE_MAP = {
+const AWARD_TEMPLATE_MAP = {
   BSPCE_GRANT_LETTER: BspceGrantLetterTemplate,
   AGA_GRANT_LETTER: AgaGrantLetterTemplate,
   SO_GRANT_LETTER: StockOptionGrantLetterTemplate,
+} as const;
+
+const EXERCISE_TEMPLATE_MAP = {
+  EXERCISE_NOTIFICATION: ExerciseNotificationTemplate,
+  SUBSCRIPTION_BULLETIN: SubscriptionBulletinTemplate,
 } as const;
 
 export type RenderResult = {
@@ -37,15 +54,30 @@ export type RenderResult = {
 };
 
 export async function renderPdfFromTemplate(
-  templateCode: TemplateCode,
+  templateCode: AwardTemplateCode,
   data: DocumentContext,
+): Promise<RenderResult>;
+export async function renderPdfFromTemplate(
+  templateCode: ExerciseTemplateCode,
+  data: DocumentContextExercise,
+): Promise<RenderResult>;
+export async function renderPdfFromTemplate(
+  templateCode: TemplateCode,
+  data: DocumentContext | DocumentContextExercise,
 ): Promise<RenderResult> {
-  const Template = TEMPLATE_MAP[templateCode];
-  if (!Template) {
-    throw new Error(`Unknown template code: ${templateCode}`);
+  let element;
+  if (isExerciseTemplateCode(templateCode)) {
+    const Template = EXERCISE_TEMPLATE_MAP[templateCode];
+    element = <Template data={data as DocumentContextExercise} />;
+  } else {
+    const Template = AWARD_TEMPLATE_MAP[templateCode as AwardTemplateCode];
+    if (!Template) {
+      throw new Error(`Unknown template code: ${templateCode}`);
+    }
+    element = <Template data={data as DocumentContext} />;
   }
 
-  const buffer = await renderToBuffer(<Template data={data} />);
+  const buffer = await renderToBuffer(element);
   const nodeBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   const hash = crypto.createHash('sha256').update(nodeBuffer).digest('hex');
 
