@@ -1,20 +1,32 @@
 /**
- * Module 8 — Footer minimal du portail bénéficiaire.
+ * Module 8 + Étape 14 Design System V1 — Footer minimal du portail.
  *
- * V1 simple : copyright + lien support. Mentions légales = placeholder V2.
+ * Layout editorial : copyright mono ink-500 + lien support brass +
+ * mentions légales/confidentialité ink-400. Ligne de séparation
+ * paper-300.
+ *
+ * V1 simple : pas de menu étendu. Mentions légales = placeholder V2
+ * (à brancher quand les pages CGU/privacy seront créées).
  */
 export function PortalFooter() {
   const year = new Date().getFullYear();
   return (
-    <footer className="border-border/40 text-muted-foreground mt-12 border-t px-4 py-6 text-xs sm:px-6">
+    <footer className="border-paper-300 mt-16 border-t px-4 py-6 text-xs sm:px-6">
       <div className="mx-auto flex max-w-5xl flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
-        <p>
+        <p className="text-ink-500 font-mono">
           © {year} Capiwise · Aide :{' '}
-          <a className="underline-offset-2 hover:underline" href="mailto:support@capiwise.com">
+          <a
+            className="text-brass-700 hover:text-brass-900 underline-offset-2 hover:underline"
+            href="mailto:support@capiwise.com"
+          >
             support@capiwise.com
           </a>
         </p>
-        <p className="text-muted-foreground/70">Mentions légales · Confidentialité</p>
+        <p className="text-ink-400 font-mono">
+          <span className="text-overline">MENTIONS LÉGALES</span>
+          <span className="text-paper-300 mx-2">·</span>
+          <span className="text-overline">CONFIDENTIALITÉ</span>
+        </p>
       </div>
     </footer>
   );
