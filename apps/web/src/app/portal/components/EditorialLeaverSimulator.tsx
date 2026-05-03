@@ -31,11 +31,14 @@ import { cn } from '@/lib/utils';
  * reste celle de `LeaverSimulator` legacy — ce composant est un
  * **rewrap visuel** sans modification de la logique business.
  */
+// Note : `unitsGranted` est dans la signature publique (parité avec
+// LeaverSimulator legacy + future utilisation pour afficher "X / total"
+// dans le résultat) mais non destructuré ici car le calcul se fait
+// côté RPC via simulateLeaverScenario. Pas de `_unitsGranted` lint-only.
 export function EditorialLeaverSimulator({
   awardId,
   planType,
   leaverRulesSnapshot,
-  unitsGranted,
   orgName,
 }: {
   awardId: string;

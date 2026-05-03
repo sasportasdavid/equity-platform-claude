@@ -143,99 +143,13 @@ export function PlanDetailClient({
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Card « Valorisation » (Synthèse) — affiche la dernière valorisation DONE.
-//
-// Trois états :
-//   - latest = null → empty state avec hint pour cliquer sur « Lancer »
-//   - latest avec fair_value chiffrée → KpiCard centrale + métadonnées
-//   - latest sans fair_value (cas dégénéré) → état d'erreur léger
+// Card « Valorisation » : supprimée Étape 14 (cleanup QA polish).
+// L'ancien composant `ValuationCard` était orphelin depuis l'Étape 13
+// (refonte Synthesis tab → EditorialSynthesisTab qui n'utilise pas
+// cette carte). Si une vue valorisation est nécessaire à l'avenir,
+// la lien `RunValuationButton` du PageShell pointe déjà vers
+// /dashboard/plans/[id]/valuations/[runId].
 // ---------------------------------------------------------------------------
-function ValuationCard({
-  planId,
-  latest,
-}: {
-  planId: string;
-  latest: PlanDetail['latestValuation'];
-}) {
-  if (!latest) {
-    return (
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Calculator className="size-4" />
-            Valorisation
-          </CardTitle>
-          <CardDescription>
-            Aucune valorisation lancée. Cliquez sur « Lancer une valorisation » en haut de la page
-            pour calculer la juste-valeur IFRS 2.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-
-  const fv = latest.fairValuePerInstrument;
-  const fvLabel = fv != null ? `${fv.toFixed(2)} €` : '—';
-  const ci =
-    latest.ci95Low != null && latest.ci95High != null
-      ? `IC 95 % : ${latest.ci95Low.toFixed(2)} – ${latest.ci95High.toFixed(2)} €`
-      : null;
-  const detailHref = `/dashboard/plans/${planId}/valuations/${latest.runId}`;
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Calculator className="size-4" />
-              Valorisation IFRS 2
-              <Badge variant="outline" className="ml-2 font-mono text-xs">
-                {latest.engineVersion ?? 'V8'}
-              </Badge>
-              <Badge variant="outline" className="text-xs font-normal">
-                {latest.pricerUsed ?? 'BLACK_SCHOLES'}
-              </Badge>
-            </CardTitle>
-            <CardDescription>
-              Calculée le {formatDateTime(latest.completedAt)}
-              {ci ? ` · ${ci}` : ''}
-            </CardDescription>
-          </div>
-          <Link
-            href={detailHref}
-            className="text-muted-foreground hover:text-foreground inline-flex items-center whitespace-nowrap text-sm"
-            data-testid="valuation-card-detail-link"
-          >
-            Voir le détail
-          </Link>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <KpiCard
-            icon={<Sigma className="size-4" />}
-            label="Juste-valeur unitaire"
-            value={fvLabel}
-            sub={latest.stdError != null ? `± ${latest.stdError.toFixed(4)}` : undefined}
-          />
-          <KpiCard
-            icon={<TrendingUp className="size-4" />}
-            label="Juste-valeur totale (× 1)"
-            value={latest.fairValueTotal != null ? `${latest.fairValueTotal.toFixed(2)} €` : '—'}
-            sub="Pondération bénéficiaires en Module 3b"
-          />
-          <KpiCard
-            icon={<History className="size-4" />}
-            label="Run id"
-            value={latest.runId.slice(0, 8)}
-            sub="Cliquez « Voir le détail » pour audit"
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Onglet 2 — État du pool
