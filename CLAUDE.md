@@ -794,3 +794,7 @@ PR #9 (en cours) :
 - P0 (Bug #34 + #35) ✅ validé E2E via UI
 - P1/P2 en cours
 - Merge ETA : J+1
+
+#85 (Module 2/8) Investigation custom_access_token_hook +
+active_org_id robustesse — bénéficiaires purs peuvent être routés
+vers /dashboard si JWT mal initialisé. Fix manuel SQL possible.
