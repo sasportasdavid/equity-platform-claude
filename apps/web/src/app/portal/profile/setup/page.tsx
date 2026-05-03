@@ -43,13 +43,18 @@ export default async function PortalProfileSetupPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Finalisez votre profil</h1>
-        <p className="text-muted-foreground text-sm">
-          Ces informations sont nécessaires pour les documents légaux liés à vos attributions.
+    <div className="mx-auto max-w-2xl space-y-8">
+      <header className="space-y-2">
+        <p className="text-overline text-brass-500">ÉTAPE 2 · ONBOARDING</p>
+        <h1 className="text-h1 text-ink-900">
+          Finalisez <span className="serif-italic text-brass-500">votre profil</span>
+        </h1>
+        <div className="bg-brass-500 animate-draw-line mt-3 h-[2px] w-16" aria-hidden="true" />
+        <p className="text-ink-500 mt-3 max-w-2xl text-sm leading-relaxed">
+          Ces informations sont nécessaires pour les documents légaux liés à vos attributions
+          (contrats, exercice, sortie). Elles ne seront utilisées qu&apos;à cette fin.
         </p>
-      </div>
+      </header>
 
       <ProfileSetupForm
         initialFirstName={bene.first_name ?? ''}
