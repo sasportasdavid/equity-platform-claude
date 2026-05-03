@@ -26,6 +26,11 @@ type Props = {
   /** Préfill optionnel depuis tax-simulator. */
   prefillUnits?: number;
   prefillCessionPrice?: number;
+  /** Module 9 B5 — coordonnées de paiement entreprise (UX #108). */
+  orgName?: string | null;
+  bankIban?: string | null;
+  bankBic?: string | null;
+  bankName?: string | null;
 };
 
 /**
@@ -49,6 +54,10 @@ export function ExerciseRequestForm({
   hireDate,
   prefillUnits,
   prefillCessionPrice,
+  orgName,
+  bankIban,
+  bankBic,
+  bankName,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -258,6 +267,62 @@ export function ExerciseRequestForm({
           <TaxBreakdownDisplay breakdown={breakdown} />
         </section>
       )}
+
+      {/* Module 9 B5 — Coordonnées de paiement (UX #108) */}
+      <section className="space-y-4">
+        <header>
+          <p className="text-overline text-brass-500">PAIEMENT · COORDONNÉES BANCAIRES</p>
+          <h3 className="text-h4 text-ink-900 mt-1">Comment payer après approbation</h3>
+        </header>
+
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-slate-800">
+          <p>
+            Pour exercer ces{' '}
+            <strong className="font-mono">
+              {formatUnits(units)} {planType}
+            </strong>
+            , vous virerez <strong className="font-mono">{formatEuro(totalExerciseCost)}</strong>{' '}
+            (coût d'exercice = <span className="font-mono">{formatUnits(units)}</span> ×{' '}
+            <span className="font-mono">{formatEuro(strikePrice)}</span>) sur le compte bancaire de{' '}
+            <strong>{orgName ?? "l'entreprise"}</strong>. Vous deviendrez actionnaire dès réception
+            du paiement par l'entreprise.
+          </p>
+        </div>
+
+        {bankIban || bankBic || bankName ? (
+          <div className="border-paper-300 grid grid-cols-1 gap-4 rounded-md border bg-white p-4 text-sm sm:grid-cols-3">
+            {bankName ? (
+              <div>
+                <p className="text-overline text-ink-500">Banque</p>
+                <p className="text-ink-900 mt-1">{bankName}</p>
+              </div>
+            ) : null}
+            {bankIban ? (
+              <div className="sm:col-span-2">
+                <p className="text-overline text-ink-500">IBAN</p>
+                <p className="text-ink-900 mt-1 font-mono">{bankIban}</p>
+              </div>
+            ) : null}
+            {bankBic ? (
+              <div>
+                <p className="text-overline text-ink-500">BIC</p>
+                <p className="text-ink-900 mt-1 font-mono">{bankBic}</p>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            Coordonnées bancaires non renseignées par l'administration. Les coordonnées vous seront
+            communiquées dans l'email d'approbation, ou contactez votre administrateur avant
+            d'effectuer le virement.
+          </div>
+        )}
+
+        <p className="text-ink-500 text-xs">
+          Référence à indiquer sur le virement : le numéro de demande qui vous sera fourni dès
+          soumission.
+        </p>
+      </section>
 
       {/* Submit */}
       <footer className="border-paper-300 flex items-center justify-between border-t pt-6">

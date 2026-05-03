@@ -121,7 +121,7 @@ describe('enums', () => {
   it('notificationChannelEnum couvre EMAIL/IN_APP/SMS', () => {
     expect(notificationChannelEnum.options).toEqual(['EMAIL', 'IN_APP', 'SMS']);
   });
-  it('module7TemplateCodeEnum expose les 6 codes B2', () => {
+  it('module7TemplateCodeEnum expose les 11 codes (6 B2 + 5 Module 9 B5)', () => {
     expect(module7TemplateCodeEnum.options).toEqual([
       'approval_pending',
       'approval_approved',
@@ -129,6 +129,12 @@ describe('enums', () => {
       'award_granted',
       'team_member_invite',
       'beneficiary_first_invite',
+      // Module 9 B5
+      'exercise_request_submitted',
+      'exercise_request_approved',
+      'exercise_request_rejected',
+      'exercise_payment_confirmed',
+      'exercise_request_cancelled_by_admin',
     ]);
   });
 });

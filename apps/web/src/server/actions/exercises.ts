@@ -11,6 +11,7 @@ import {
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/rbac';
 import { simulateExerciseTax } from '@/lib/tax';
+import { notifyAdminsOfExerciseRequest } from '@/server/actions/_helpers/exercise-notifications';
 
 /**
  * Module 9 B3 — Server Actions du portail bénéficiaire pour les
@@ -142,6 +143,17 @@ export async function createExerciseRequest(input: CreateExerciseRequestInput): 
     total_amount: number;
     status: string;
   };
+
+  // Module 9 B5 hook : notifier les ADMIN_HR/OWNER en fire-and-forget.
+  // Ne bloque pas la Server Action si le hook foire — l'erreur est loggée.
+  void notifyAdminsOfExerciseRequest({
+    exerciseRequestId: result.exercise_request_id,
+  }).catch((err) => {
+    console.error(
+      `[createExerciseRequest] notifyAdminsOfExerciseRequest failed for ${result.exercise_request_id}:`,
+      err,
+    );
+  });
 
   revalidatePath('/portal/exercises');
   revalidatePath(`/portal/awards/${data.awardId}`);

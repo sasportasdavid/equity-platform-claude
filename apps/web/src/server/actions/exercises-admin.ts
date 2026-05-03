@@ -4,6 +4,15 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { hasPermission, requireUser } from '@/lib/auth/rbac';
+import { propagateExerciseApprovalDecision } from '@/server/actions/_helpers/propagate-exercise-status';
+import {
+  generateExerciseNotification,
+  generateSubscriptionBulletin,
+} from '@/server/actions/_helpers/exercise-documents';
+import {
+  notifyBeneficiaryOfExerciseDecision,
+  notifyBeneficiaryOfExercisePayment,
+} from '@/server/actions/_helpers/exercise-notifications';
 
 /**
  * Module 9 B4 — Server Actions admin pour les exercise_requests.
@@ -102,6 +111,14 @@ export async function approveExerciseDecision(input: unknown): Promise<{ ok: tru
   }
 
   const supabase = await createSupabaseServerClient();
+
+  // Récupère l'approval_request_id avant le record (évite re-fetch après)
+  const { data: req } = await supabase
+    .from('exercise_requests')
+    .select('approval_request_id')
+    .eq('id', parsed.data.exerciseRequestId)
+    .maybeSingle();
+
   const { error } = await supabase.rpc('record_approval_decision', {
     p_decision_id: decision.decisionId,
     p_status: 'APPROVED',
@@ -109,6 +126,37 @@ export async function approveExerciseDecision(input: unknown): Promise<{ ok: tru
   });
 
   if (error) return { ok: false, error: error.message };
+
+  // Module 9 B5 — propagation status (#106) + génération PDF + email
+  // bénéficiaire en fire-and-forget. La décision est persistée même si
+  // un de ces hooks foire — l'admin peut rejouer manuellement.
+  if (req?.approval_request_id) {
+    const propagation = await propagateExerciseApprovalDecision({
+      exerciseRequestId: parsed.data.exerciseRequestId,
+      approvalRequestId: req.approval_request_id,
+      decision: 'APPROVED',
+      reason: parsed.data.comment ?? null,
+      actorUserId: user.id,
+    });
+
+    if (propagation.ok && propagation.data.newExerciseStatus === 'APPROVED') {
+      // PDF EXERCISE_NOTIFICATION + email exercise_request_approved
+      void generateExerciseNotification({
+        exerciseRequestId: parsed.data.exerciseRequestId,
+      }).catch((err) =>
+        console.error('[approveExerciseDecision] generateExerciseNotification failed:', err),
+      );
+      void notifyBeneficiaryOfExerciseDecision({
+        exerciseRequestId: parsed.data.exerciseRequestId,
+        decision: 'APPROVED',
+        approverName: (user as { email?: string | null }).email ?? 'Approbateur',
+      }).catch((err) =>
+        console.error('[approveExerciseDecision] notifyBeneficiaryOfExerciseDecision failed:', err),
+      );
+    } else if (!propagation.ok) {
+      console.error('[approveExerciseDecision] propagation failed:', propagation.error);
+    }
+  }
 
   revalidatePath('/dashboard/exercises');
   revalidatePath(`/dashboard/exercises/${parsed.data.exerciseRequestId}`);
@@ -129,6 +177,13 @@ export async function rejectExerciseDecision(input: unknown): Promise<{ ok: true
   }
 
   const supabase = await createSupabaseServerClient();
+
+  const { data: req } = await supabase
+    .from('exercise_requests')
+    .select('approval_request_id')
+    .eq('id', parsed.data.exerciseRequestId)
+    .maybeSingle();
+
   const { error } = await supabase.rpc('record_approval_decision', {
     p_decision_id: decision.decisionId,
     p_status: 'REJECTED',
@@ -136,6 +191,31 @@ export async function rejectExerciseDecision(input: unknown): Promise<{ ok: true
   });
 
   if (error) return { ok: false, error: error.message };
+
+  // Module 9 B5 — propagation + email rejected (pas de PDF si rejected)
+  if (req?.approval_request_id) {
+    const propagation = await propagateExerciseApprovalDecision({
+      exerciseRequestId: parsed.data.exerciseRequestId,
+      approvalRequestId: req.approval_request_id,
+      decision: 'REJECTED',
+      reason: parsed.data.comment,
+      actorUserId: user.id,
+    });
+
+    if (propagation.ok && propagation.data.newExerciseStatus === 'REJECTED') {
+      void notifyBeneficiaryOfExerciseDecision({
+        exerciseRequestId: parsed.data.exerciseRequestId,
+        decision: 'REJECTED',
+        reason: parsed.data.comment,
+        approverName: (user as { email?: string | null }).email ?? 'Approbateur',
+        stepName: 'Validation',
+      }).catch((err) =>
+        console.error('[rejectExerciseDecision] notifyBeneficiaryOfExerciseDecision failed:', err),
+      );
+    } else if (!propagation.ok) {
+      console.error('[rejectExerciseDecision] propagation failed:', propagation.error);
+    }
+  }
 
   revalidatePath('/dashboard/exercises');
   revalidatePath(`/dashboard/exercises/${parsed.data.exerciseRequestId}`);
@@ -162,6 +242,18 @@ export async function confirmExercisePayment(input: unknown): Promise<{ ok: true
 
   if (error) return { ok: false, error: error.message };
 
+  // Module 9 B5 — bulletin PDF + email payment confirmed (fire-and-forget)
+  void generateSubscriptionBulletin({
+    exerciseRequestId: parsed.data.exerciseRequestId,
+  }).catch((err) =>
+    console.error('[confirmExercisePayment] generateSubscriptionBulletin failed:', err),
+  );
+  void notifyBeneficiaryOfExercisePayment({
+    exerciseRequestId: parsed.data.exerciseRequestId,
+  }).catch((err) =>
+    console.error('[confirmExercisePayment] notifyBeneficiaryOfExercisePayment failed:', err),
+  );
+
   revalidatePath('/dashboard/exercises');
   revalidatePath(`/dashboard/exercises/${parsed.data.exerciseRequestId}`);
   revalidatePath('/portal/exercises');
@@ -178,7 +270,7 @@ export async function adminCancelExercise(input: unknown): Promise<{ ok: true } 
   const parsed = adminCancelSchema.safeParse(input);
   if (!parsed.success) return validationError(parsed.error);
 
-  await requireUser();
+  const user = await requireUser();
   if (!(await hasPermission('exercises.cancel.any'))) {
     return { ok: false, error: 'Permission refusée : exercises.cancel.any (réservé OWNER).' };
   }
@@ -190,6 +282,16 @@ export async function adminCancelExercise(input: unknown): Promise<{ ok: true } 
   });
 
   if (error) return { ok: false, error: error.message };
+
+  // Module 9 B5 — email bénéficiaire (fire-and-forget). Pas de PDF.
+  void notifyBeneficiaryOfExerciseDecision({
+    exerciseRequestId: parsed.data.exerciseRequestId,
+    decision: 'CANCELLED_BY_ADMIN',
+    reason: parsed.data.reason,
+    adminName: (user as { email?: string | null }).email ?? 'Administrateur',
+  }).catch((err) =>
+    console.error('[adminCancelExercise] notifyBeneficiaryOfExerciseDecision failed:', err),
+  );
 
   revalidatePath('/dashboard/exercises');
   revalidatePath(`/dashboard/exercises/${parsed.data.exerciseRequestId}`);

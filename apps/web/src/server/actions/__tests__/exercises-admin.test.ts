@@ -16,6 +16,37 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
+// Module 9 B5 — mock des helpers fire-and-forget pour isoler le test du
+// comportement de la Server Action. Les helpers sont testés en C5/C6.
+vi.mock('@/server/actions/_helpers/propagate-exercise-status', () => ({
+  propagateExerciseApprovalDecision: vi.fn().mockResolvedValue({
+    ok: true,
+    data: { newExerciseStatus: 'APPROVED', approvalStatusFinal: true },
+  }),
+}));
+vi.mock('@/server/actions/_helpers/exercise-documents', () => ({
+  generateExerciseNotification: vi.fn().mockResolvedValue({
+    ok: true,
+    documentId: 'doc-99',
+    alreadyExists: false,
+    storagePath: 'org/exercises/x/file.pdf',
+  }),
+  generateSubscriptionBulletin: vi.fn().mockResolvedValue({
+    ok: true,
+    documentId: 'doc-100',
+    alreadyExists: false,
+    storagePath: 'org/exercises/x/bulletin.pdf',
+  }),
+}));
+vi.mock('@/server/actions/_helpers/exercise-notifications', () => ({
+  notifyBeneficiaryOfExerciseDecision: vi
+    .fn()
+    .mockResolvedValue({ ok: true, notificationId: 'n-1' }),
+  notifyBeneficiaryOfExercisePayment: vi
+    .fn()
+    .mockResolvedValue({ ok: true, notificationId: 'n-2' }),
+}));
+
 const { TEST_USER_ID, TEST_REQUEST_ID, TEST_DECISION_ID } = vi.hoisted(() => ({
   TEST_USER_ID: 'a0b0c0d0-0000-4000-8000-000000000099',
   TEST_REQUEST_ID: 'a1b1c1d1-1111-4111-8111-111111111111',

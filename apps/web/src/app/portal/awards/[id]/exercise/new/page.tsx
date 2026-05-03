@@ -60,7 +60,7 @@ export default async function NewExerciseRequestPage({
     .eq('id', plan.id)
     .maybeSingle();
 
-  const [{ data: company }, { data: bene }] = await Promise.all([
+  const [{ data: company }, { data: bene }, { data: org }] = await Promise.all([
     planRow?.company_id
       ? supabase
           .from('companies')
@@ -70,9 +70,16 @@ export default async function NewExerciseRequestPage({
       : Promise.resolve({ data: null }),
     supabase
       .from('beneficiaries')
-      .select('hire_date, first_name, last_name, address_line_1, country, tax_residence_country')
+      .select(
+        'hire_date, first_name, last_name, address_line_1, country, tax_residence_country, org_id',
+      )
       .eq('user_id', user.id)
       .is('deleted_at', null)
+      .maybeSingle(),
+    supabase
+      .from('organizations')
+      .select('id, name, bank_iban, bank_bic, bank_name')
+      .eq('id', user.activeOrgId ?? '')
       .maybeSingle(),
   ]);
 
@@ -114,6 +121,10 @@ export default async function NewExerciseRequestPage({
         hireDate={bene?.hire_date ?? null}
         prefillUnits={prefillUnits}
         prefillCessionPrice={prefillCessionPrice}
+        orgName={org?.name ?? null}
+        bankIban={org?.bank_iban ?? null}
+        bankBic={org?.bank_bic ?? null}
+        bankName={org?.bank_name ?? null}
       />
     </div>
   );

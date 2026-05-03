@@ -265,7 +265,7 @@ export function AdminConfirmPaymentButton({
           disabled={isPending || reference.trim().length === 0}
           data-testid="admin-confirm-payment-confirm"
         >
-          {isPending ? 'Confirmation…' : 'Confirmer le paiement'}
+          {isPending ? 'Confirmation…' : 'Confirmer la réception du paiement'}
         </Button>
       </div>
       {error && (

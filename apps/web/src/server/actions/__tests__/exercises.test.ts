@@ -11,6 +11,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
+// Module 9 B5 — mock des hooks fire-and-forget pour éviter la chaîne d'imports
+// (getSupabaseAdminClient + clientEnv) dans les tests Server Action.
+vi.mock('@/server/actions/_helpers/exercise-notifications', () => ({
+  notifyAdminsOfExerciseRequest: vi.fn().mockResolvedValue({ ok: true, created: 0 }),
+  notifyBeneficiaryOfExerciseDecision: vi
+    .fn()
+    .mockResolvedValue({ ok: true, notificationId: null }),
+  notifyBeneficiaryOfExercisePayment: vi.fn().mockResolvedValue({ ok: true, notificationId: null }),
+}));
+
 const { TEST_USER_ID, TEST_AWARD_ID, TEST_REQUEST_ID } = vi.hoisted(() => ({
   TEST_USER_ID: 'a0b0c0d0-0000-4000-8000-000000000099',
   TEST_AWARD_ID: 'a1b1c1d1-1111-4111-8111-111111111111',
