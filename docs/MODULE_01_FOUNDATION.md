@@ -1827,7 +1827,7 @@ Flags V1 :
 | 4   | Beneficiaries Management       | ✅ Livré       |
 | 5   | Approval Engine                | ✅ Livré       |
 | 6   | Document Engine & Signatures   | ✅ Livré       |
-| 7   | Notifications                  | À écrire       |
+| 7   | Notifications                  | ✅ Livré       |
 | 8   | Beneficiary Portal             | À écrire       |
 | 9   | Exercise Workflow              | À écrire       |
 | 10  | Cap Table                      | À écrire       |

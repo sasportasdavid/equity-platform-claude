@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       api_keys: {
@@ -3511,6 +3486,7 @@ export type Database = {
         Args: { p_request_id: string }
         Returns: Json
       }
+      get_award_portal_detail: { Args: { p_award_id: string }; Returns: Json }
       get_beneficiary_decrypted: {
         Args: { p_id: string }
         Returns: {
@@ -3531,6 +3507,7 @@ export type Database = {
           status: string
         }[]
       }
+      get_beneficiary_portal_dashboard: { Args: never; Returns: Json }
       get_invitation_by_token: {
         Args: { p_token: string }
         Returns: {
@@ -3646,6 +3623,14 @@ export type Database = {
         Args: { p_org_id: string }
         Returns: string
       }
+      simulate_leaver_scenario: {
+        Args: {
+          p_award_id: string
+          p_leaver_type: string
+          p_termination_date: string
+        }
+        Returns: Json
+      }
       start_approval_workflow: {
         Args: { p_award_id: string; p_workflow_id?: string }
         Returns: Json
@@ -3662,6 +3647,10 @@ export type Database = {
           p_to_status: string
         }
         Returns: string
+      }
+      update_beneficiary_self_phone: {
+        Args: { p_phone: string }
+        Returns: undefined
       }
       update_signer_from_webhook: {
         Args: {
@@ -3802,10 +3791,8 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },
 } as const
+
