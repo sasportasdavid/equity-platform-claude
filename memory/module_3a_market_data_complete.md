@@ -1,7 +1,8 @@
 # Module 3a payload V2 + Market Data Fetch — closure
 
 Branche : `fix/module-3a-payload-v2-and-market-data-fetch`
-PR draft : (à renseigner après création — étape 12)
+PR draft : [#19](https://github.com/sasportasdavid/equity-platform-claude/pull/19)
+Commit : `d8750d3`
 
 ## Objectif
 
