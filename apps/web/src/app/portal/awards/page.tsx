@@ -35,29 +35,40 @@ export default async function PortalAwardsListPage() {
   // le snapshot. Ça évite d'afficher 0% partout en V1.
   const enriched = awards.length > 0 ? await enrichWithSnapshotVested(awards) : [];
 
+  const firstName =
+    dashboard.beneficiary.full_name.split(' ')[0] ?? dashboard.beneficiary.full_name;
+
   return (
-    <div className="space-y-6" data-testid="portal-awards-list">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Mes attributions</h1>
-        <p className="text-muted-foreground text-sm">
-          Bonjour {dashboard.beneficiary.full_name}, voici les plans qui vous ont été attribués par{' '}
-          {dashboard.org.name}.
+    <div className="space-y-8" data-testid="portal-awards-list">
+      {/* Hero éditorial */}
+      <header className="space-y-2">
+        <p className="text-overline text-brass-500">VOS ATTRIBUTIONS</p>
+        <h1 className="text-h1 text-ink-900">
+          Bonjour {firstName},{' '}
+          <span className="serif-italic text-brass-500">voici votre capital partagé</span>
+        </h1>
+        <div className="bg-brass-500 animate-draw-line mt-3 h-[2px] w-16" aria-hidden="true" />
+        <p className="text-ink-500 mt-3 max-w-2xl text-sm leading-relaxed">
+          Plans d&apos;actionnariat salarié attribués par{' '}
+          <span className="text-ink-900 font-medium">{dashboard.org.name}</span>. Vos unités vous
+          sont remises selon le calendrier de vesting défini dans votre contrat.
         </p>
-      </div>
+      </header>
 
       {!dashboard.beneficiary.has_complete_profile ? (
         <div
-          className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40"
+          className="border-saffron-500 bg-saffron-50 flex items-start gap-3 rounded-md border-l-[3px] p-4"
           data-testid="portal-profile-incomplete-banner"
         >
-          <AlertCircle className="size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <AlertCircle className="text-saffron-700 size-5 shrink-0" strokeWidth={1.75} />
           <div className="flex-1 space-y-1">
-            <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
-              Profil incomplet
+            <p className="text-overline text-saffron-700">PROFIL · INCOMPLET</p>
+            <p className="text-ink-900 text-sm font-medium">
+              Quelques informations manquent pour exercer vos droits.
             </p>
-            <p className="text-xs text-amber-800 dark:text-amber-200">
-              Pour exercer vos droits, complétez vos informations personnelles (adresse, résidence
-              fiscale).
+            <p className="text-ink-700 text-xs">
+              Adresse, résidence fiscale — ce sont les données que nous transmettons à
+              l&apos;administration en cas d&apos;exercice.
             </p>
           </div>
           <Link
@@ -70,9 +81,12 @@ export default async function PortalAwardsListPage() {
       ) : null}
 
       {enriched.length === 0 ? (
-        <div className="border-border/40 bg-muted/20 rounded-md border border-dashed p-12 text-center">
-          <p className="text-muted-foreground text-sm">
-            Aucune attribution active. Si vous attendez une attribution, contactez votre RH.
+        <div className="border-paper-300 bg-paper-50 rounded-lg border border-dashed p-12 text-center">
+          <p className="serif-italic text-ink-500 text-base leading-relaxed">
+            Aucune attribution active.
+          </p>
+          <p className="text-ink-500 mt-2 text-sm">
+            Si vous attendez une attribution, contactez votre service RH.
           </p>
         </div>
       ) : (
