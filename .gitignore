@@ -62,3 +62,6 @@ supabase/functions/**/.env
 
 # Claude Code local config (per-developer)
 .claude/settings.local.json
+
+# Claude Code worktrees
+.claude/worktrees/
