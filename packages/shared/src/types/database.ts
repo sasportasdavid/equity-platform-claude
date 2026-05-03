@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       api_keys: {
@@ -311,6 +336,8 @@ export type Database = {
       }
       approval_workflow_steps: {
         Row: {
+          amount_threshold_max: number | null
+          amount_threshold_min: number | null
           approver_role: string | null
           approver_type: string
           approver_user_id: string | null
@@ -326,6 +353,8 @@ export type Database = {
           workflow_id: string
         }
         Insert: {
+          amount_threshold_max?: number | null
+          amount_threshold_min?: number | null
           approver_role?: string | null
           approver_type: string
           approver_user_id?: string | null
@@ -341,6 +370,8 @@ export type Database = {
           workflow_id: string
         }
         Update: {
+          amount_threshold_max?: number | null
+          amount_threshold_min?: number | null
           approver_role?: string | null
           approver_type?: string
           approver_user_id?: string | null
@@ -1046,13 +1077,20 @@ export type Database = {
         Row: {
           bspce_eligibility_assessed_at: string | null
           bspce_eligibility_data: Json | null
+          bspce_first_grant_date: string | null
           country_code: string
           created_at: string
           deleted_at: string | null
+          fmv_as_of_date: string | null
+          fmv_notes: string | null
+          fmv_source: string | null
+          fmv_updated_at: string | null
+          fmv_updated_by: string | null
           founded_date: string | null
           id: string
           is_bspce_eligible: boolean
           isin: string | null
+          last_known_fmv_per_share: number | null
           legal_form: string | null
           legal_name: string | null
           name: string
@@ -1067,13 +1105,20 @@ export type Database = {
         Insert: {
           bspce_eligibility_assessed_at?: string | null
           bspce_eligibility_data?: Json | null
+          bspce_first_grant_date?: string | null
           country_code?: string
           created_at?: string
           deleted_at?: string | null
+          fmv_as_of_date?: string | null
+          fmv_notes?: string | null
+          fmv_source?: string | null
+          fmv_updated_at?: string | null
+          fmv_updated_by?: string | null
           founded_date?: string | null
           id?: string
           is_bspce_eligible?: boolean
           isin?: string | null
+          last_known_fmv_per_share?: number | null
           legal_form?: string | null
           legal_name?: string | null
           name: string
@@ -1088,13 +1133,20 @@ export type Database = {
         Update: {
           bspce_eligibility_assessed_at?: string | null
           bspce_eligibility_data?: Json | null
+          bspce_first_grant_date?: string | null
           country_code?: string
           created_at?: string
           deleted_at?: string | null
+          fmv_as_of_date?: string | null
+          fmv_notes?: string | null
+          fmv_source?: string | null
+          fmv_updated_at?: string | null
+          fmv_updated_by?: string | null
           founded_date?: string | null
           id?: string
           is_bspce_eligible?: boolean
           isin?: string | null
+          last_known_fmv_per_share?: number | null
           legal_form?: string | null
           legal_name?: string | null
           name?: string
@@ -1508,86 +1560,126 @@ export type Database = {
       exercise_requests: {
         Row: {
           admin_notes: string | null
+          approval_request_id: string | null
           approved_at: string | null
           approved_by: string | null
           award_id: string
           beneficiary_id: string
           beneficiary_notes: string | null
+          bulletin_document_id: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           certificate_document_id: string | null
           certificate_issued_at: string | null
           completed_at: string | null
           compliance_checks: Json
           created_at: string
+          deleted_at: string | null
           exercise_price_per_unit: number
+          exercise_window_check: Json | null
           fmv_per_unit_at_request: number | null
           id: string
           is_within_exercise_window: boolean
+          notification_document_id: string | null
           org_id: string
+          payment_amount_received: number | null
+          payment_method: string | null
           payment_received_at: string | null
           payment_reference: string | null
           rejected_reason: string | null
           request_number: string | null
           requested_at: string
           status: string
+          tax_simulation_snapshot: Json | null
           total_exercise_amount: number | null
           units_to_exercise: number
           updated_at: string
         }
         Insert: {
           admin_notes?: string | null
+          approval_request_id?: string | null
           approved_at?: string | null
           approved_by?: string | null
           award_id: string
           beneficiary_id: string
           beneficiary_notes?: string | null
+          bulletin_document_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           certificate_document_id?: string | null
           certificate_issued_at?: string | null
           completed_at?: string | null
           compliance_checks?: Json
           created_at?: string
+          deleted_at?: string | null
           exercise_price_per_unit: number
+          exercise_window_check?: Json | null
           fmv_per_unit_at_request?: number | null
           id?: string
           is_within_exercise_window?: boolean
+          notification_document_id?: string | null
           org_id: string
+          payment_amount_received?: number | null
+          payment_method?: string | null
           payment_received_at?: string | null
           payment_reference?: string | null
           rejected_reason?: string | null
           request_number?: string | null
           requested_at?: string
           status?: string
+          tax_simulation_snapshot?: Json | null
           total_exercise_amount?: number | null
           units_to_exercise: number
           updated_at?: string
         }
         Update: {
           admin_notes?: string | null
+          approval_request_id?: string | null
           approved_at?: string | null
           approved_by?: string | null
           award_id?: string
           beneficiary_id?: string
           beneficiary_notes?: string | null
+          bulletin_document_id?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           certificate_document_id?: string | null
           certificate_issued_at?: string | null
           completed_at?: string | null
           compliance_checks?: Json
           created_at?: string
+          deleted_at?: string | null
           exercise_price_per_unit?: number
+          exercise_window_check?: Json | null
           fmv_per_unit_at_request?: number | null
           id?: string
           is_within_exercise_window?: boolean
+          notification_document_id?: string | null
           org_id?: string
+          payment_amount_received?: number | null
+          payment_method?: string | null
           payment_received_at?: string | null
           payment_reference?: string | null
           rejected_reason?: string | null
           request_number?: string | null
           requested_at?: string
           status?: string
+          tax_simulation_snapshot?: Json | null
           total_exercise_amount?: number | null
           units_to_exercise?: number
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "exercise_requests_approval_request_id_fkey"
+            columns: ["approval_request_id"]
+            isOneToOne: false
+            referencedRelation: "approval_requests"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "exercise_requests_award_id_fkey"
             columns: ["award_id"]
@@ -1603,8 +1695,22 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "exercise_requests_bulletin_document_id_fkey"
+            columns: ["bulletin_document_id"]
+            isOneToOne: false
+            referencedRelation: "document_instances"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "exercise_requests_certificate_document_id_fkey"
             columns: ["certificate_document_id"]
+            isOneToOne: false
+            referencedRelation: "document_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_requests_notification_document_id_fkey"
+            columns: ["notification_document_id"]
             isOneToOne: false
             referencedRelation: "document_instances"
             referencedColumns: ["id"]
@@ -2151,6 +2257,9 @@ export type Database = {
       }
       organizations: {
         Row: {
+          bank_bic: string | null
+          bank_iban: string | null
+          bank_name: string | null
           created_at: string
           created_by: string | null
           default_currency: string
@@ -2171,6 +2280,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bank_bic?: string | null
+          bank_iban?: string | null
+          bank_name?: string | null
           created_at?: string
           created_by?: string | null
           default_currency?: string
@@ -2191,6 +2303,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bank_bic?: string | null
+          bank_iban?: string | null
+          bank_name?: string | null
           created_at?: string
           created_by?: string | null
           default_currency?: string
@@ -3424,6 +3539,10 @@ export type Database = {
         Args: { p_reason: string; p_request_id: string }
         Returns: string
       }
+      cancel_exercise_request: {
+        Args: { p_exercise_request_id: string; p_reason: string }
+        Returns: Json
+      }
       cancel_signature_request: {
         Args: { p_reason: string; p_request_id: string }
         Returns: string
@@ -3435,6 +3554,16 @@ export type Database = {
           p_signed_pdf_storage_path: string
         }
         Returns: string
+      }
+      confirm_exercise_payment: {
+        Args: {
+          p_admin_notes?: string
+          p_exercise_request_id: string
+          p_payment_amount_received: number
+          p_payment_received_at?: string
+          p_payment_reference: string
+        }
+        Returns: Json
       }
       create_award_full: { Args: { p_data: Json }; Returns: string }
       create_document_for_award: {
@@ -3485,6 +3614,10 @@ export type Database = {
       evaluate_approval_request: {
         Args: { p_request_id: string }
         Returns: Json
+      }
+      generate_exercise_request_number: {
+        Args: { p_org_id: string }
+        Returns: string
       }
       get_award_portal_detail: { Args: { p_award_id: string }; Returns: Json }
       get_beneficiary_decrypted: {
@@ -3619,6 +3752,16 @@ export type Database = {
         Args: { p_comment: string; p_decision_id: string; p_status: string }
         Returns: Json
       }
+      request_exercise: {
+        Args: {
+          p_award_id: string
+          p_beneficiary_notes?: string
+          p_payment_method?: string
+          p_tax_simulation?: Json
+          p_units_to_exercise: number
+        }
+        Returns: Json
+      }
       seed_default_approval_workflow_for_org: {
         Args: { p_org_id: string }
         Returns: string
@@ -3634,6 +3777,14 @@ export type Database = {
       start_approval_workflow: {
         Args: { p_award_id: string; p_workflow_id?: string }
         Returns: Json
+      }
+      start_approval_workflow_for_exercise: {
+        Args: {
+          p_exercise_request_id: string
+          p_total_amount: number
+          p_workflow_id: string
+        }
+        Returns: string
       }
       transition_award_to_granted_after_signature: {
         Args: { p_award_id: string }
@@ -3791,8 +3942,10 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
 } as const
-
