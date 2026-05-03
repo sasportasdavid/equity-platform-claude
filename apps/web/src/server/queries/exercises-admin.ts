@@ -150,6 +150,8 @@ export type AdminExerciseDetail = {
     cancelled_at: string | null;
     approval_request_id: string | null;
     tax_simulation_snapshot: unknown;
+    notification_document_id: string | null;
+    bulletin_document_id: string | null;
   };
   award: {
     id: string;
@@ -251,6 +253,8 @@ export async function getExerciseRequestAdminDetail(
       cancelled_at: req.cancelled_at,
       approval_request_id: req.approval_request_id,
       tax_simulation_snapshot: req.tax_simulation_snapshot,
+      notification_document_id: req.notification_document_id ?? null,
+      bulletin_document_id: req.bulletin_document_id ?? null,
     },
     award: {
       id: aw.id,

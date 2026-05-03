@@ -3,6 +3,7 @@ import { ExerciseQueryError, getExerciseRequestDetail } from '@/server/queries/e
 import { ExerciseRequestStatusBadge } from '@/components/exercises/ExerciseRequestStatusBadge';
 import { CancelExerciseDialog } from '@/components/exercises/CancelExerciseDialog';
 import { TaxBreakdownDisplay } from '@/components/exercises/TaxBreakdownDisplay';
+import { ExerciseDocumentDownloadButton } from '@/components/exercises/ExerciseDocumentDownloadButton';
 import { formatDateFr, formatEuro, formatUnits } from '@/components/exercises/format-helpers';
 import type { TaxBreakdown } from '@/lib/tax';
 
@@ -164,6 +165,32 @@ export default async function PortalExerciseDetailPage({
               <DetailItem label="Reçu le" value={formatDateFr(request.payment_received_at)} />
               <DetailItem label="Référence" value={request.payment_reference ?? '—'} />
             </dl>
+          </div>
+        </section>
+      )}
+
+      {/* Documents générés (Module 9 B5) */}
+      {(request.notification_document_id || request.bulletin_document_id) && (
+        <section className="space-y-4">
+          <header>
+            <p className="text-overline text-brass-500">DOCUMENTS · DISPONIBLES</p>
+            <h2 className="text-h3 text-ink-900 mt-1">Pièces jointes</h2>
+          </header>
+          <div className="border-paper-300 bg-paper-50 space-y-3 rounded-lg border p-6">
+            {request.notification_document_id ? (
+              <ExerciseDocumentDownloadButton
+                documentId={request.notification_document_id}
+                label="Télécharger la notification d'exercice"
+                scope="portal"
+              />
+            ) : null}
+            {request.bulletin_document_id ? (
+              <ExerciseDocumentDownloadButton
+                documentId={request.bulletin_document_id}
+                label="Télécharger le bulletin de souscription"
+                scope="portal"
+              />
+            ) : null}
           </div>
         </section>
       )}
