@@ -115,7 +115,15 @@ const YAHOO_TO_EODHD_EXCHANGE: Record<string, string> = {
 // Fallback to iShares ETFs if direct index data is unavailable
 const INDEX_MAPPINGS: Record<string, string> = {
   // French indices
-  '^FCHI': 'CAC.PA', // CAC 40 on Euronext (direct)
+  // PR #23 fix — `CAC.PA` chez EODHD est l'action Crédit Agricole / Lyxor
+  // CAC 40 ETF (close ≈ 80 €), PAS l'indice CAC 40 (~7800-8200 pts).
+  // Bug E2E PR #19 : S0 = 80 € au lieu de ~8000 → moteur Python recevait
+  // un index_S0 100× trop petit → spread TSR_REL_INDEX biaisé.
+  // Fix : utiliser le suffixe .INDX (cohérent avec les autres indices :
+  // SX5E.INDX, GSPC.INDX, GDAXI.INDX, FTSE.INDX) pour pointer sur le
+  // VRAI indice côté EODHD. ETF fallback `CAC.PA` reste utile (cf.
+  // INDEX_ETF_FALLBACKS) si le user n'a pas la souscription Indices.
+  '^FCHI': 'FCHI.INDX', // CAC 40 (direct INDX), fallback ETF CAC.PA
   // European STOXX indices - try direct index first, mapped to INDX
   '^STOXX50E': 'SX5E.INDX', // Euro STOXX 50 (direct index)
   '^STOXX': 'SXXP.INDX', // STOXX Europe 600 (direct index)
@@ -148,6 +156,13 @@ const INDEX_MAPPINGS: Record<string, string> = {
 
 // Fallback ETF mappings if direct index data is unavailable from EODHD
 const INDEX_ETF_FALLBACKS: Record<string, string> = {
+  // PR #23 — Lyxor CAC 40 PEA ETF (close ≈ 80-90 €, base 100 du CAC).
+  // Utile si l'user EODHD n'a pas la souscription Indices (.INDX).
+  // ⚠️ Ce ticker NE retourne PAS la valeur de l'indice CAC 40 directement
+  // (qui est à ~7800-8200), mais le prix de l'ETF qui le réplique en
+  // base ~80 €. Pour TSR relatif vs indice, l'ETF marche aussi car le
+  // spread reste équivalent en %. Pour S0 absolu, préférer FCHI.INDX.
+  '^FCHI': 'CAC.PA',
   '^STOXX50E': 'SX5EEX.XETRA', // Euro STOXX 50 ETF
   '^STOXX': 'EXSA.XETRA', // STOXX Europe 600 ETF
   '^SX3P': 'EXV1.XETRA', // Food & Beverage -> iShares ETF
