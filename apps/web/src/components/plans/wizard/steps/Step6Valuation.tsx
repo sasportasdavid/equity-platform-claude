@@ -131,9 +131,9 @@ export function Step6Valuation() {
               min={PLAN_WIZARD_LIMITS.MIN_VOLATILITY}
               max={PLAN_WIZARD_LIMITS.MAX_VOLATILITY}
               step="any"
-              placeholder="Ex : 35"
+              placeholder="Ex : 25"
               errorMsg={errors.volatility?.message as string | undefined}
-              helpText={`Entre ${PLAN_WIZARD_LIMITS.MIN_VOLATILITY} % et ${PLAN_WIZARD_LIMITS.MAX_VOLATILITY} %.`}
+              helpText={`Entre ${PLAN_WIZARD_LIMITS.MIN_VOLATILITY} % et ${PLAN_WIZARD_LIMITS.MAX_VOLATILITY} %. Typique : 20-40 % pour une action européenne, 12-15 % pour un index fund.`}
             />
             <div className="grid gap-3 sm:grid-cols-2">
               <NumberField

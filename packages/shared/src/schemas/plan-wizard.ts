@@ -27,7 +27,13 @@ export const PLAN_WIZARD_LIMITS = {
   MAX_REFERENCE_PRICE: 1_000_000,
   MAX_CONDITIONS: 10,
   MAX_CURVE_POINTS: 20,
-  MIN_VOLATILITY: 1,
+  // PR #22 — borne min relevée de 1 → 5 (% annualisée).
+  // Bug E2E PR #19 : un user avait saisi `volatility = 2` (= 2 % vol),
+  // techniquement valide mais aberrant (typique 20-40 % pour une action,
+  // 12-15 % pour un index fund). Résultat : sigma = 0.02 dans le payload
+  // Python → simulations Monte Carlo sous-volatiles → fair_value irréaliste.
+  // 5 % est le seuil bas réaliste (utility stocks défensives).
+  MIN_VOLATILITY: 5,
   MAX_VOLATILITY: 200,
   MIN_RISK_FREE_RATE: -5,
   MAX_RISK_FREE_RATE: 20,

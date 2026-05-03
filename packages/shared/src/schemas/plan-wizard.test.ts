@@ -167,6 +167,27 @@ describe('step6Schema (strict guard)', () => {
     expect(result.success).toBe(false);
   });
 
+  // PR #22 — borne min relevée à 5 % (anti-bug E2E PR #19 où volatility=2
+  // passait la validation mais produisait sigma=0.02 = 2% vol aberrant
+  // pour un actif réel).
+  it('rejette si volatility = 2 (sous le seuil minimum 5 %, PR #22)', () => {
+    const result = step6Schema.safeParse({ ...validStep6, volatility: 2 });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => i.path.includes('volatility'))).toBe(true);
+    }
+  });
+
+  it('accepte volatility = 5 (borne min PR #22)', () => {
+    const result = step6Schema.safeParse({ ...validStep6, volatility: 5 });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepte volatility = 25 (typique action européenne)', () => {
+    const result = step6Schema.safeParse({ ...validStep6, volatility: 25 });
+    expect(result.success).toBe(true);
+  });
+
   it('rejette si timeHorizonYears = 0', () => {
     const result = step6Schema.safeParse({ ...validStep6, timeHorizonYears: 0 });
     expect(result.success).toBe(false);
