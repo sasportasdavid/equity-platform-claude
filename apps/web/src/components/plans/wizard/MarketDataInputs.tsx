@@ -199,11 +199,12 @@ export function MarketDataInputs({ conditionIndex, indexDisplayName, ticker, asO
             <AlertTitle>Reproductibilité IFRS 2 dégradée</AlertTitle>
             <AlertDescription className="space-y-2 text-xs">
               <p>
-                En mode <strong>Live à chaque run</strong>, S₀, σ et ρ sont refetchés à chaque
+                En mode <strong>Live à chaque run</strong>, S₀, σ et q sont refetchés à chaque
                 valorisation depuis Yahoo/EODHD avec la date du run comme
                 <code className="ml-1 font-mono">as_of_date</code>. Deux runs lancés à 30 secondes
                 d&apos;écart peuvent renvoyer des valeurs différentes (mouvements intra-day) — la
-                valeur IFRS 2 du plan ne sera donc PAS strictement reproductible.
+                valeur IFRS 2 du plan ne sera donc PAS strictement reproductible. La corrélation ρ
+                reste celle saisie manuellement (non refetchée).
               </p>
               <p>
                 Usage recommandé : <strong>backtest</strong>, <strong>reporting MTM</strong>, ou
@@ -226,10 +227,14 @@ export function MarketDataInputs({ conditionIndex, indexDisplayName, ticker, asO
                     <span className="font-mono">
                       {new Date(capturedAt).toLocaleString('fr-FR')}
                     </span>{' '}
-                    depuis <strong>{dataSource}</strong>.
+                    depuis <strong>{dataSource}</strong>. La corrélation ρ reste à saisir
+                    manuellement.
                   </>
                 ) : (
-                  <>Aucune capture — cliquez pour récupérer S₀ / σ / q en live.</>
+                  <>
+                    Aucune capture — cliquez pour récupérer <strong>S₀ / σ / q</strong>. La
+                    corrélation ρ reste à saisir manuellement.
+                  </>
                 )}
               </div>
               <Button
@@ -342,7 +347,10 @@ export function MarketDataInputs({ conditionIndex, indexDisplayName, ticker, asO
                 valueAsNumber: true,
               })}
             />
-            <p className="text-muted-foreground text-xs">ρ ∈ [-1, 1] avec sous-jacent.</p>
+            <p className="text-muted-foreground text-xs">
+              ρ ∈ [-1, 1] avec sous-jacent. <strong>Saisie manuelle requise</strong> — non calculée
+              par l&apos;auto-fetch (nécessite l&apos;historique du sous-jacent).
+            </p>
             {conditionErrors?.reference_index_correlation?.message ? (
               <p className="text-destructive text-xs">
                 {String(conditionErrors.reference_index_correlation.message)}

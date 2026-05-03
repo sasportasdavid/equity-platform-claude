@@ -437,6 +437,31 @@ describe('TSR_REL_INDEX payload (V2)', () => {
     expect(warnSpy).toHaveBeenCalledTimes(3);
     expect(warnSpy.mock.calls[0][0]).toMatch(/reference_index_s0 manquant/);
   });
+
+  // PR #20 — Post-EODHD-fetch state : l'auto-fetch ne calcule PAS la corrélation
+  // (il faudrait l'historique du sous-jacent côté EF). Donc S0 + σ + q proviennent
+  // d'EODHD, mais correlation reste null → 1 seul warning. L'UI hint
+  // (MarketDataInputs.tsx) informe l'utilisateur qu'il doit saisir ρ manuellement.
+  it('post-EODHD-fetch (S0+σ filled, correlation null) → 1 seul warning sur correlation', () => {
+    const ctx = makeMinimalContext({
+      conditions: [
+        makeMarketCondition('TSR_REL_INDEX', {
+          reference_index: 'GSPC.INDX',
+          reference_index_s0: 4500,
+          reference_index_sigma: 0.18,
+          reference_index_correlation: null, // <-- post-fetch : ρ pas saisi par l'user
+        }),
+      ],
+    });
+    const payload = buildPythonPayload(ctx);
+    const cond = payload.conditions[0] as Record<string, unknown>;
+
+    expect(cond.index_S0).toBe(4500);
+    expect(cond.index_sigma).toBe(0.18);
+    expect(cond.correlation).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toMatch(/reference_index_correlation manquant/);
+  });
 });
 
 // ---------------------------------------------------------------------------
