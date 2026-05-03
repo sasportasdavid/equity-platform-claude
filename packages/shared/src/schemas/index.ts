@@ -8,3 +8,4 @@ export * from './approval';
 export * from './document';
 export * from './notification';
 export * from './portal';
+export * from './tax-simulation';
