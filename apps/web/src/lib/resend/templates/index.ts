@@ -9,9 +9,13 @@
  * la signature : approval_pending, approval_approved, approval_rejected,
  * award_granted.
  *
+ * Module 9 B5 ajoute les 5 templates du workflow d'exercice :
+ * exercise_request_submitted/approved/rejected, exercise_payment_confirmed,
+ * exercise_request_cancelled_by_admin.
+ *
  * Les `code` keys ici matchent les `notification_templates.code` seedés
- * en migrations 00003 (Module 1, UPPERCASE deprecated V2) et 00045
- * (Module 7 lowercase EMAIL fr-FR).
+ * en migrations 00003 (Module 1, UPPERCASE deprecated V2), 00045
+ * (Module 7 lowercase EMAIL fr-FR) et 00068 (Module 9 B5 exercises).
  */
 
 import { ApprovalApproved, type ApprovalApprovedProps } from './ApprovalApproved';
@@ -19,6 +23,26 @@ import { ApprovalPending, type ApprovalPendingProps } from './ApprovalPending';
 import { ApprovalRejected, type ApprovalRejectedProps } from './ApprovalRejected';
 import { AwardGranted, type AwardGrantedProps } from './AwardGranted';
 import { BeneficiaryFirstInvite, type BeneficiaryFirstInviteProps } from './BeneficiaryFirstInvite';
+import {
+  ExercisePaymentConfirmed,
+  type ExercisePaymentConfirmedProps,
+} from './ExercisePaymentConfirmed';
+import {
+  ExerciseRequestApproved,
+  type ExerciseRequestApprovedProps,
+} from './ExerciseRequestApproved';
+import {
+  ExerciseRequestCancelledByAdmin,
+  type ExerciseRequestCancelledByAdminProps,
+} from './ExerciseRequestCancelledByAdmin';
+import {
+  ExerciseRequestRejected,
+  type ExerciseRequestRejectedProps,
+} from './ExerciseRequestRejected';
+import {
+  ExerciseRequestSubmitted,
+  type ExerciseRequestSubmittedProps,
+} from './ExerciseRequestSubmitted';
 import { InvitationRevoked, type InvitationRevokedProps } from './InvitationRevoked';
 import { MagicLinkLogin, type MagicLinkLoginProps } from './MagicLinkLogin';
 import { OrgRoleChanged, type OrgRoleChangedProps } from './OrgRoleChanged';
@@ -31,11 +55,17 @@ export type TemplateMap = {
   beneficiary_first_invite: BeneficiaryFirstInviteProps;
   invitation_revoked: InvitationRevokedProps;
   org_role_changed: OrgRoleChangedProps;
-  // Module 7 B2 (new)
+  // Module 7 B2
   approval_pending: ApprovalPendingProps;
   approval_approved: ApprovalApprovedProps;
   approval_rejected: ApprovalRejectedProps;
   award_granted: AwardGrantedProps;
+  // Module 9 B5 (new)
+  exercise_request_submitted: ExerciseRequestSubmittedProps;
+  exercise_request_approved: ExerciseRequestApprovedProps;
+  exercise_request_rejected: ExerciseRequestRejectedProps;
+  exercise_payment_confirmed: ExercisePaymentConfirmedProps;
+  exercise_request_cancelled_by_admin: ExerciseRequestCancelledByAdminProps;
 };
 
 export type TemplateCode = keyof TemplateMap;
@@ -82,6 +112,26 @@ export const TEMPLATES: { [K in TemplateCode]: TemplateEntry<K> } = {
     Component: AwardGranted,
     subject: AwardGranted.subject,
   },
+  exercise_request_submitted: {
+    Component: ExerciseRequestSubmitted,
+    subject: ExerciseRequestSubmitted.subject,
+  },
+  exercise_request_approved: {
+    Component: ExerciseRequestApproved,
+    subject: ExerciseRequestApproved.subject,
+  },
+  exercise_request_rejected: {
+    Component: ExerciseRequestRejected,
+    subject: ExerciseRequestRejected.subject,
+  },
+  exercise_payment_confirmed: {
+    Component: ExercisePaymentConfirmed,
+    subject: ExercisePaymentConfirmed.subject,
+  },
+  exercise_request_cancelled_by_admin: {
+    Component: ExerciseRequestCancelledByAdmin,
+    subject: ExerciseRequestCancelledByAdmin.subject,
+  },
 };
 
 /**
@@ -99,3 +149,16 @@ export const MODULE_7_TEMPLATE_CODES = [
 ] as const satisfies readonly TemplateCode[];
 
 export type Module7TemplateCode = (typeof MODULE_7_TEMPLATE_CODES)[number];
+
+/**
+ * Sous-ensemble des codes templates Module 9 B5 (workflow exercise).
+ */
+export const MODULE_9_TEMPLATE_CODES = [
+  'exercise_request_submitted',
+  'exercise_request_approved',
+  'exercise_request_rejected',
+  'exercise_payment_confirmed',
+  'exercise_request_cancelled_by_admin',
+] as const satisfies readonly TemplateCode[];
+
+export type Module9TemplateCode = (typeof MODULE_9_TEMPLATE_CODES)[number];

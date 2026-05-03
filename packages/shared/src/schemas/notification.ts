@@ -27,6 +27,9 @@ export type NotificationChannel = z.infer<typeof notificationChannelEnum>;
  * Codes templates Module 7 B2 + B5 (workflow approval + signature +
  * onboarding). Garde les 5 templates Module 2 hors de cet enum car
  * ils ont leurs propres call-sites typés (auth.ts, identity.ts).
+ *
+ * Module 9 B5 ajoute 5 templates exercise — étendus dans le même enum
+ * pour réutiliser le wrapper queue Module 7 (insertNotificationWithRender).
  */
 export const MODULE_7_TEMPLATE_CODES = [
   'approval_pending',
@@ -35,6 +38,12 @@ export const MODULE_7_TEMPLATE_CODES = [
   'award_granted',
   'team_member_invite',
   'beneficiary_first_invite',
+  // Module 9 B5 — workflow exercise
+  'exercise_request_submitted',
+  'exercise_request_approved',
+  'exercise_request_rejected',
+  'exercise_payment_confirmed',
+  'exercise_request_cancelled_by_admin',
 ] as const;
 export const module7TemplateCodeEnum = z.enum(MODULE_7_TEMPLATE_CODES);
 export type Module7TemplateCode = z.infer<typeof module7TemplateCodeEnum>;
