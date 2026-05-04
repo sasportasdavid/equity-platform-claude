@@ -206,14 +206,14 @@ describe('loadAllEffectiveRules', () => {
     mockState.viewReturn = {
       data: [
         makeRow(),
-        makeRow({ rule_code: 'AWARD_UNITS_POSITIVE', scope: 'award', effective_params: {} }),
+        makeRow({ rule_code: 'POOL_AVAILABLE', scope: 'award', effective_params: {} }),
       ],
       error: null,
     };
     const rules = await loadAllEffectiveRules();
     expect(rules).toHaveLength(2);
     expect(rules[0]?.rule_code).toBe('VALUATION_STALE_BLOCKING');
-    expect(rules[1]?.rule_code).toBe('AWARD_UNITS_POSITIVE');
+    expect(rules[1]?.rule_code).toBe('POOL_AVAILABLE');
   });
 
   it('skip silently les rows malformées (continue avec les autres)', async () => {
@@ -222,7 +222,7 @@ describe('loadAllEffectiveRules', () => {
       data: [
         makeRow(),
         // Row malformée — severity invalide
-        makeRow({ rule_code: 'AWARD_UNITS_POSITIVE', effective_severity: 'BLOCKING' }),
+        makeRow({ rule_code: 'POOL_AVAILABLE', effective_severity: 'BLOCKING' }),
       ],
       error: null,
     };

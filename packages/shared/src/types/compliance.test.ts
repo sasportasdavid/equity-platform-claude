@@ -67,23 +67,52 @@ describe('ruleScopeSchema', () => {
 });
 
 describe('ruleCodeSchema', () => {
-  it('contient exactement 22 codes (parite avec migration 00094 §6)', () => {
-    expect(ruleCodeSchema.options).toHaveLength(22);
+  it('contient exactement 23 codes (parite avec migration 00094b realign)', () => {
+    expect(ruleCodeSchema.options).toHaveLength(23);
   });
 
-  it('accepte VALUATION_STALE_BLOCKING (Module 11 B6 livree)', () => {
+  it('accepte VALUATION_STALE_BLOCKING (Module 11 B6 livree, conservee B3b)', () => {
     expect(ruleCodeSchema.parse('VALUATION_STALE_BLOCKING')).toBe('VALUATION_STALE_BLOCKING');
   });
 
-  it('accepte les 4 rules plan', () => {
-    const planRules = [
-      'PLAN_VESTING_SCHEDULE_VALID',
-      'PLAN_DRAFT_HAS_REQUIRED_FIELDS',
-      'PLAN_PUBLISH_REQUIRES_VALUATION',
-      'PLAN_TYPE_FRENCH_REQUIRES_AGREEMENT',
+  it('accepte les 5 rules award (post-B3b realign)', () => {
+    const awardRules = [
+      'BSPCE_BENEFICIARY_TYPE',
+      'AGA_30_PERCENT_CAP',
+      'AGA_APPROACHING_CAP',
+      'POOL_AVAILABLE',
+      'GRANT_DATE_RECENT',
     ];
-    for (const r of planRules) {
+    for (const r of awardRules) {
       expect(ruleCodeSchema.parse(r)).toBe(r);
+    }
+  });
+
+  it('accepte les 6 rules beneficiary (post-B3b realign)', () => {
+    const benRules = [
+      'EMAIL_UNIQUE_IN_ORG',
+      'TAX_RESIDENCE_FRANCE_CONSISTENCY',
+      'HIRE_DATE_REASONABLE',
+      'MANAGER_NOT_SELF',
+      'IBAN_FORMAT',
+      'BSPCE_BENEFICIARY_TYPE_REVERSE',
+    ];
+    for (const r of benRules) {
+      expect(ruleCodeSchema.parse(r)).toBe(r);
+    }
+  });
+
+  it('rejette les 20 rules aspirationnelles supprimees en B3b', () => {
+    const removed = [
+      'PLAN_VESTING_SCHEDULE_VALID',
+      'AWARD_UNITS_POSITIVE',
+      'BENEFICIARY_TAX_PROFILE_REQUIRED',
+      'EXERCISE_WINDOW_VALID',
+      'APPROVAL_QUORUM_REQUIRED',
+      'DOCUMENT_TEMPLATE_REQUIRED',
+    ];
+    for (const r of removed) {
+      expect(ruleCodeSchema.safeParse(r).success).toBe(false);
     }
   });
 
@@ -160,7 +189,7 @@ describe('effectiveRuleSchema (output RPC get_effective_rule)', () => {
 
   it('accepte cta_url_template null', () => {
     const r = effectiveRuleSchema.safeParse({
-      rule_code: 'AWARD_UNITS_POSITIVE',
+      rule_code: 'POOL_AVAILABLE',
       scope: 'award',
       is_active: true,
       effective_severity: 'error',
@@ -255,7 +284,7 @@ describe('complianceRuleOverrideInputSchema (input updateOverride SA)', () => {
 
   it('default paramsOverride={}, notes=null si non fournis', () => {
     const parsed = complianceRuleOverrideInputSchema.parse({
-      ruleCode: 'AWARD_UNITS_POSITIVE',
+      ruleCode: 'POOL_AVAILABLE',
       isActive: false,
     });
     expect(parsed.paramsOverride).toEqual({});
@@ -281,11 +310,12 @@ describe('complianceRuleOverrideInputSchema (input updateOverride SA)', () => {
 
   it('accepte paramsOverride avec types mixtes (number/boolean/string)', () => {
     const parsed = complianceRuleOverrideInputSchema.parse({
-      ruleCode: 'APPROVAL_DUAL_SIGNATURE',
+      ruleCode: 'HIRE_DATE_REASONABLE',
       isActive: true,
-      paramsOverride: { amountThreshold: 750000, requireBoardSignature: true, currency: 'EUR' },
+      paramsOverride: { minYear: 1950, maxFutureMonths: 6, label: 'strict' },
     });
-    expect(parsed.paramsOverride.amountThreshold).toBe(750000);
+    expect(parsed.paramsOverride.minYear).toBe(1950);
+    expect(parsed.paramsOverride.maxFutureMonths).toBe(6);
   });
 });
 

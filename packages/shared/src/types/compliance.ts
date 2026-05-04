@@ -43,40 +43,52 @@ export const ruleScopeSchema = z.enum([
 export type RuleScope = z.infer<typeof ruleScopeSchema>;
 
 /**
- * Liste des 22 rule_codes V1, alignée avec le seed migration 00094 §6.
- * Toute extension future devra ajouter ici ET dans la migration suivante.
+ * Liste des 23 rule_codes V1 — alignée avec migration 00094b (Module 12 B3b).
+ *
+ * Source de vérité : `compliance_rule_definitions` cloud post-realign DB↔code.
+ * Inventaire détaillé : `memory/module_12_b3a_inventory.md`.
+ *
+ * Toute extension future devra ajouter ici ET dans une migration séquentielle.
+ *
+ * BREAKING CHANGE Module 12 B3b vs B1 :
+ *   - Suppression des 20 rules aspirationnelles (PLAN_*, AWARD_UNITS_POSITIVE,
+ *     EXERCISE_*, etc.)
+ *   - Ajout des 21 rules réellement implémentées en code TS
+ *   - 2 valuation overlap conservées (VALUATION_STALE_BLOCKING + FMV_DEVIATION_WARNING)
+ *
+ * Total final : 23 codes (5 award + 6 beneficiary + 4 cap_table + 3 document
+ * + 3 approval + 2 valuation).
  */
 export const ruleCodeSchema = z.enum([
-  // plan (4)
-  'PLAN_VESTING_SCHEDULE_VALID',
-  'PLAN_DRAFT_HAS_REQUIRED_FIELDS',
-  'PLAN_PUBLISH_REQUIRES_VALUATION',
-  'PLAN_TYPE_FRENCH_REQUIRES_AGREEMENT',
   // award (5)
-  'AWARD_UNITS_POSITIVE',
-  'AWARD_BENEFICIARY_ACTIVE',
-  'AWARD_GRANT_DATE_VALID',
-  'AWARD_DRAFT_TO_PROPOSED_VALIDATION',
-  'AWARD_PROPOSED_TO_GRANTED_REQUIRES_APPROVAL',
-  // beneficiary (2)
-  'BENEFICIARY_TAX_PROFILE_REQUIRED',
-  'BENEFICIARY_TERMINATION_HAS_DATE',
-  // valuation (2)
+  'BSPCE_BENEFICIARY_TYPE',
+  'AGA_30_PERCENT_CAP',
+  'AGA_APPROACHING_CAP',
+  'POOL_AVAILABLE',
+  'GRANT_DATE_RECENT',
+  // beneficiary (6)
+  'EMAIL_UNIQUE_IN_ORG',
+  'TAX_RESIDENCE_FRANCE_CONSISTENCY',
+  'HIRE_DATE_REASONABLE',
+  'MANAGER_NOT_SELF',
+  'IBAN_FORMAT',
+  'BSPCE_BENEFICIARY_TYPE_REVERSE',
+  // cap_table (4)
+  'SHARE_CLASS_CODE_UNIQUE',
+  'ROUND_AMOUNT_CONSISTENCY',
+  'POOL_OVER_ALLOCATION',
+  'ESOP_PERCENT_BEST_PRACTICE',
+  // document (3)
+  'FMV_RECENT_ENOUGH',
+  'SIGNERS_COMPLETE_INFO',
+  'DOCUMENT_NOT_VOIDED',
+  // approval (3)
+  'WORKFLOW_REQUIRED_FOR_AGA',
+  'NO_SELF_APPROVAL',
+  'WORKFLOW_HAS_VALID_STEPS',
+  // valuation (2) — déjà présentes depuis B1, conservées
   'VALUATION_STALE_BLOCKING',
   'FMV_DEVIATION_WARNING',
-  // cap_table (3)
-  'DILUTION_THRESHOLD_WARNING',
-  'POOL_DEPLETION_WARNING',
-  'SHAREHOLDER_AGREEMENT_VIOLATION',
-  // exercise (3)
-  'EXERCISE_WINDOW_VALID',
-  'EXERCISE_AVAILABLE_UNITS',
-  'EXERCISE_TAX_WITHHOLDING_OK',
-  // approval (2)
-  'APPROVAL_QUORUM_REQUIRED',
-  'APPROVAL_DUAL_SIGNATURE',
-  // document (1)
-  'DOCUMENT_TEMPLATE_REQUIRED',
 ]);
 export type RuleCode = z.infer<typeof ruleCodeSchema>;
 
