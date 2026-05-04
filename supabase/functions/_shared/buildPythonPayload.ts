@@ -241,8 +241,8 @@ export function buildPythonPayload(ctx: PythonValuationContext): PythonPayload {
   // normalise ici. Détection : si la valeur est ≥ 1 ou < 0, on suppose un
   // pourcent (= 3.0 pour 3 %) et on divise. Sinon (≤ 1), on suppose déjà
   // une fraction. Cap dur à 0 pour q = 0 % usuel (pas de division 0/100).
-  const r = normalizeRateUnit(ctx.hypothesisSet.rate_flat);
-  const q = normalizeRateUnit(ctx.hypothesisSet.dividend_yield);
+  const r = normalizeRateOrDividend(ctx.hypothesisSet.rate_flat);
+  const q = normalizeRateOrDividend(ctx.hypothesisSet.dividend_yield);
   const market = { S0: s0, r, q, sigma };
 
   const instrument = {
@@ -308,22 +308,98 @@ function isOptionType(planType: string): boolean {
 }
 
 /**
- * Normalise un taux (rate ou yield) vers une fraction (0-1).
+ * Module 11 B2 — Refonte normalizers (résolution dette #1).
  *
- * Convention DB drift documentée dans buildPythonPayload : `rate_flat` et
- * `dividend_yield` sont stockés en pourcent bruts (ex. 3.0 = 3 %), alors
- * que `annualized_sigma` l'est déjà en fraction. Le moteur Python attend
- * tout en fractions.
+ * `normalizeRateUnit` historique faisait une heuristique unique pour rate ET
+ * sigma, alors que les conventions DB sont différentes :
+ *   - `rate_flat` / `dividend_yield` : stockés en pourcent bruts (3.0 = 3%)
+ *   - `annualized_sigma` : stocké en fraction (0.18 = 18%)
  *
- * Heuristique : si la valeur strictement > 1, elle est probablement un
- * pourcent → on divise par 100. Sinon on suppose une fraction déjà
- * correcte. Une valeur 1.0 est ambigüe (= 100 % = 1.0) ; on tranche pour
- * « pourcent » (un taux flat de 100 % serait absurde dans tous les cas
- * réalistes).
+ * Conséquence : un sigma=0.18 était traité comme déjà fraction (correct),
+ * mais un sigma=18 (saisie utilisateur erronée) aurait dû throw — l'ancienne
+ * fonction le passait à 0.18 silencieusement. Bug masqué.
+ *
+ * La refonte split en 2 fonctions contextuelles avec validation métier :
+ *   - `normalizeRateOrDividend` : conversion % → fraction si > 1, bornes [0, 1]
+ *   - `normalizeSigma` : pas de conversion (toujours fraction), bornes [0.01, 5.0]
  */
-function normalizeRateUnit(value: number | null | undefined): number {
+
+/**
+ * Normalise un taux d'intérêt ou un dividend yield vers une fraction.
+ *
+ * Convention de saisie DB : `rate_flat` et `dividend_yield` sont stockés en
+ * pourcent bruts (ex. 3.2 pour 3.2%). Le moteur Python attend tout en
+ * fractions, donc on convertit ici.
+ *
+ * Heuristique : si la valeur strictement > 1, elle est un pourcent → divise
+ * par 100. Sinon (≤ 1), on suppose déjà en fraction. Une valeur 1.0 est
+ * ambigüe (= 100% = 1.0 fraction); on tranche pour "fraction" (un taux flat
+ * de 100% serait absurde dans tous les cas réalistes).
+ *
+ * Bornes : [0, 1] (taux > 100% rejeté, taux négatif rejeté).
+ *
+ * @param value — Valeur en pourcent (3.2) ou fraction (0.032). Null/undefined → 0.
+ * @returns Valeur normalisée en fraction [0, 1].
+ * @throws si value < 0.
+ */
+export function normalizeRateOrDividend(value: number | null | undefined): number {
   if (value == null) return 0;
+  if (value < 0) {
+    throw new Error(`Rate cannot be negative (got ${value})`);
+  }
   return value > 1 ? value / 100 : value;
+}
+
+/**
+ * Normalise une volatilité (sigma) avec validation des bornes métier.
+ *
+ * Convention de saisie DB : `annualized_sigma` est TOUJOURS en fraction
+ * (0.18 = 18%). L'UI wizard label explicitement "Fraction (0,18 = 18%)".
+ * Donc PAS de conversion pourcent → fraction (différent de
+ * `normalizeRateOrDividend`).
+ *
+ * Cette fonction sert à :
+ *   1. Normaliser les sigmas qui pourraient venir de sources externes (peer
+ *      volatility EODHD, index sigma fetched) — qui peuvent par accident
+ *      arriver en pourcent
+ *   2. Valider les bornes métier : [0.01, 5.0] = [1%, 500%]
+ *
+ * Une sigma > 5 est probablement une erreur de saisie (% au lieu de fraction).
+ * Une sigma < 0.01 est typiquement un asset trop stable pour Black-Scholes
+ * (gilt-edged, low-vol equity ETF).
+ *
+ * @param value — Volatilité en fraction. Null/undefined → throw.
+ * @returns Valeur sigma validée en fraction [0.01, 5.0].
+ * @throws si value < 0.01 ("Volatility too low") ou value > 5.0 ("Volatility unrealistic").
+ */
+export function normalizeSigma(value: number | null | undefined): number {
+  if (value == null) {
+    throw new Error('Volatility is required (got null/undefined)');
+  }
+  if (value < 0.01) {
+    throw new Error(
+      `Volatility too low (min 1% = 0.01, got ${value}). Asset trop stable pour Black-Scholes ?`,
+    );
+  }
+  if (value > 5.0) {
+    throw new Error(
+      `Volatility unrealistic (max 500% = 5.0, got ${value}). Saisie en pourcent au lieu de fraction ?`,
+    );
+  }
+  return value;
+}
+
+/**
+ * @deprecated Use `normalizeRateOrDividend` (taux/yield) ou `normalizeSigma`
+ * (volatilité) à la place. Cette fonction sera supprimée en V2 (Module 12
+ * cleanup) une fois tous les callsites migrés.
+ *
+ * Conservée pour compat avec d'éventuels imports externes ou downstream
+ * (ex: tests anciens, scripts standalone). Délègue vers
+ * `normalizeRateOrDividend` qui a le même comportement pour les rates.
+ */
+export function normalizeRateUnit(value: number | null | undefined): number {
+  return normalizeRateOrDividend(value);
 }
 
 /**
@@ -418,7 +494,7 @@ export function mapPeerToMoteur(peer: PeerCompany, forceATM: boolean): MoteurPee
     ticker: peer.ticker,
     weight: peer.weight ?? 1,
     S0: peer.s0,
-    sigma: normalizeRateUnit(peer.volatility), // au cas où stockée en %
+    sigma: normalizeSigma(peer.volatility),
     correlation: peer.correlationWithMain,
     dividend_yield: 0, // adjusted_close intègre déjà les divs
     // ATM symmetric V4.2 : initial_reference_price = peer.s0 quand pas de FIXED user
@@ -513,7 +589,7 @@ function buildConditionParams(cond: PythonConditionInput, mainS0: number): Recor
     }
 
     if (cond.reference_index_sigma != null && cond.reference_index_sigma > 0) {
-      params.index_sigma = normalizeRateUnit(cond.reference_index_sigma);
+      params.index_sigma = normalizeSigma(cond.reference_index_sigma);
     } else {
       console.warn(
         `[buildPythonPayload] TSR_REL_INDEX ${cond.reference_index} : ` +

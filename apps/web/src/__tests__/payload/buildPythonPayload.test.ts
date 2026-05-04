@@ -208,8 +208,20 @@ describe('mapPeerToMoteur (V2)', () => {
     expect(() => mapPeerToMoteur(peer, true)).toThrow(/volatility manquante/);
   });
 
-  it('normalise volatility en % brut (e.g. 30 → 0.30)', () => {
+  it('rejette une volatility hors bornes (Module 11 B2 — résolution dette #1)', () => {
+    // AVANT M11 B2 : normalizeRateUnit acceptait silencieusement vol=30 et
+    // retournait 0.30 (heuristique unique rate+sigma). C'était un bug masqué :
+    // une saisie utilisateur sigma=30 (au lieu de 0.30) passait sans alerte.
+    //
+    // APRÈS M11 B2 : normalizeSigma throw "Volatility unrealistic" sur > 5.0
+    // car sigma est TOUJOURS en fraction par convention DB. La saisie en %
+    // est donc une erreur explicite à corriger côté UI.
     const peer: PeerCompany = { ticker: 'X', s0: 100, volatility: 30 };
+    expect(() => mapPeerToMoteur(peer, true)).toThrow(/Volatility unrealistic/);
+  });
+
+  it('accepte une volatility en fraction valide (e.g. 0.30)', () => {
+    const peer: PeerCompany = { ticker: 'X', s0: 100, volatility: 0.3 };
     const result = mapPeerToMoteur(peer, true);
     expect(result.sigma).toBe(0.3);
   });
@@ -401,13 +413,34 @@ describe('TSR_REL_INDEX payload (V2)', () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it('sigma stocké en % (18) → normalisé à 0.18', () => {
+  it('sigma index hors bornes throw (Module 11 B2 — résolution dette #1)', () => {
+    // AVANT M11 B2 : normalizeRateUnit convertissait silencieusement 18 → 0.18,
+    // masquant les saisies utilisateurs en pourcent au lieu de fraction.
+    //
+    // APRÈS M11 B2 : normalizeSigma throw "Volatility unrealistic" si > 5.0.
+    // L'utilisateur DOIT corriger sa saisie (sigma toujours en fraction par
+    // convention DB). Le warning UI wizard ("Fraction (0,18 = 18%)") est
+    // explicite à ce sujet.
     const ctx = makeMinimalContext({
       conditions: [
         makeMarketCondition('TSR_REL_INDEX', {
           reference_index: 'X',
           reference_index_s0: 100,
-          reference_index_sigma: 18, // % brut
+          reference_index_sigma: 18, // % brut → erreur de saisie
+          reference_index_correlation: 0.5,
+        }),
+      ],
+    });
+    expect(() => buildPythonPayload(ctx)).toThrow(/Volatility unrealistic/);
+  });
+
+  it('sigma index en fraction valide (0.18) → préservé tel quel', () => {
+    const ctx = makeMinimalContext({
+      conditions: [
+        makeMarketCondition('TSR_REL_INDEX', {
+          reference_index: 'X',
+          reference_index_s0: 100,
+          reference_index_sigma: 0.18, // fraction
           reference_index_correlation: 0.5,
         }),
       ],
