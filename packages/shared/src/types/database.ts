@@ -949,6 +949,93 @@ export type Database = {
           },
         ]
       }
+      cap_table_positions: {
+        Row: {
+          acquired_at: string
+          closed_reason: string | null
+          cost_basis_per_unit: number | null
+          cost_basis_total: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          org_id: string
+          position_closed_at: string | null
+          position_opened_at: string
+          share_class_id: string
+          source: string
+          source_id: string | null
+          stakeholder_email: string | null
+          stakeholder_id: string | null
+          stakeholder_name: string
+          stakeholder_type: string
+          units: number
+          updated_at: string
+          voting_units: number | null
+        }
+        Insert: {
+          acquired_at: string
+          closed_reason?: string | null
+          cost_basis_per_unit?: number | null
+          cost_basis_total?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          org_id: string
+          position_closed_at?: string | null
+          position_opened_at?: string
+          share_class_id: string
+          source: string
+          source_id?: string | null
+          stakeholder_email?: string | null
+          stakeholder_id?: string | null
+          stakeholder_name: string
+          stakeholder_type: string
+          units: number
+          updated_at?: string
+          voting_units?: number | null
+        }
+        Update: {
+          acquired_at?: string
+          closed_reason?: string | null
+          cost_basis_per_unit?: number | null
+          cost_basis_total?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          org_id?: string
+          position_closed_at?: string | null
+          position_opened_at?: string
+          share_class_id?: string
+          source?: string
+          source_id?: string | null
+          stakeholder_email?: string | null
+          stakeholder_id?: string | null
+          stakeholder_name?: string
+          stakeholder_type?: string
+          units?: number
+          updated_at?: string
+          voting_units?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cap_table_positions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cap_table_positions_share_class_id_fkey"
+            columns: ["share_class_id"]
+            isOneToOne: false
+            referencedRelation: "share_classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cap_table_scenarios: {
         Row: {
           assumptions: Json
@@ -1023,12 +1110,23 @@ export type Database = {
           created_by: string | null
           data: Json
           id: string
+          is_immutable: boolean
+          label: string | null
+          notes: string | null
           org_id: string
+          positions_json: Json | null
           snapshot_date: string
           snapshot_type: string
           total_shares_fully_diluted: number | null
           total_shares_outstanding: number | null
+          total_units_diluted: number | null
+          total_units_issued: number | null
+          totals_by_class: Json | null
+          totals_by_stakeholder: Json | null
           trigger_event: string | null
+          triggered_by_exercise_id: string | null
+          triggered_by_funding_round_id: string | null
+          updated_at: string
         }
         Insert: {
           company_id: string
@@ -1036,12 +1134,23 @@ export type Database = {
           created_by?: string | null
           data: Json
           id?: string
+          is_immutable?: boolean
+          label?: string | null
+          notes?: string | null
           org_id: string
+          positions_json?: Json | null
           snapshot_date: string
           snapshot_type: string
           total_shares_fully_diluted?: number | null
           total_shares_outstanding?: number | null
+          total_units_diluted?: number | null
+          total_units_issued?: number | null
+          totals_by_class?: Json | null
+          totals_by_stakeholder?: Json | null
           trigger_event?: string | null
+          triggered_by_exercise_id?: string | null
+          triggered_by_funding_round_id?: string | null
+          updated_at?: string
         }
         Update: {
           company_id?: string
@@ -1049,12 +1158,23 @@ export type Database = {
           created_by?: string | null
           data?: Json
           id?: string
+          is_immutable?: boolean
+          label?: string | null
+          notes?: string | null
           org_id?: string
+          positions_json?: Json | null
           snapshot_date?: string
           snapshot_type?: string
           total_shares_fully_diluted?: number | null
           total_shares_outstanding?: number | null
+          total_units_diluted?: number | null
+          total_units_issued?: number | null
+          totals_by_class?: Json | null
+          totals_by_stakeholder?: Json | null
           trigger_event?: string | null
+          triggered_by_exercise_id?: string | null
+          triggered_by_funding_round_id?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
@@ -1069,6 +1189,20 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cap_table_snapshots_triggered_by_exercise_id_fkey"
+            columns: ["triggered_by_exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cap_table_snapshots_triggered_by_funding_round_id_fkey"
+            columns: ["triggered_by_funding_round_id"]
+            isOneToOne: false
+            referencedRelation: "funding_rounds"
             referencedColumns: ["id"]
           },
         ]
@@ -1305,6 +1439,75 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "compliance_rules_catalog"
             referencedColumns: ["code"]
+          },
+        ]
+      }
+      dilution_scenarios: {
+        Row: {
+          base_asof_date: string | null
+          base_snapshot_id: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          is_shared: boolean
+          name: string
+          org_id: string
+          parameters: Json
+          result_cache: Json | null
+          result_computed_at: string | null
+          scenario_type: string
+          steps: Json | null
+          updated_at: string
+        }
+        Insert: {
+          base_asof_date?: string | null
+          base_snapshot_id?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          is_shared?: boolean
+          name: string
+          org_id: string
+          parameters: Json
+          result_cache?: Json | null
+          result_computed_at?: string | null
+          scenario_type: string
+          steps?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          base_asof_date?: string | null
+          base_snapshot_id?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          is_shared?: boolean
+          name?: string
+          org_id?: string
+          parameters?: Json
+          result_cache?: Json | null
+          result_computed_at?: string | null
+          scenario_type?: string
+          steps?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dilution_scenarios_base_snapshot_id_fkey"
+            columns: ["base_snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "cap_table_snapshots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dilution_scenarios_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1756,6 +1959,112 @@ export type Database = {
           },
         ]
       }
+      funding_rounds: {
+        Row: {
+          additional_terms: Json | null
+          amount_raised: number
+          anti_dilution_type: string | null
+          cancelled_at: string | null
+          cancelled_reason: string | null
+          closed_at: string | null
+          conversion_ratio: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          liquidation_preference_multiple: number | null
+          name: string
+          notes: string | null
+          org_id: string
+          pacte_actionnaires_doc_id: string | null
+          participating: boolean | null
+          participating_cap: number | null
+          post_money_valuation: number | null
+          pre_money_valuation: number
+          price_per_share: number
+          round_type: string
+          share_class_id: string
+          status: string
+          total_shares_issued: number
+          updated_at: string
+        }
+        Insert: {
+          additional_terms?: Json | null
+          amount_raised: number
+          anti_dilution_type?: string | null
+          cancelled_at?: string | null
+          cancelled_reason?: string | null
+          closed_at?: string | null
+          conversion_ratio?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          liquidation_preference_multiple?: number | null
+          name: string
+          notes?: string | null
+          org_id: string
+          pacte_actionnaires_doc_id?: string | null
+          participating?: boolean | null
+          participating_cap?: number | null
+          post_money_valuation?: number | null
+          pre_money_valuation: number
+          price_per_share: number
+          round_type: string
+          share_class_id: string
+          status?: string
+          total_shares_issued: number
+          updated_at?: string
+        }
+        Update: {
+          additional_terms?: Json | null
+          amount_raised?: number
+          anti_dilution_type?: string | null
+          cancelled_at?: string | null
+          cancelled_reason?: string | null
+          closed_at?: string | null
+          conversion_ratio?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          liquidation_preference_multiple?: number | null
+          name?: string
+          notes?: string | null
+          org_id?: string
+          pacte_actionnaires_doc_id?: string | null
+          participating?: boolean | null
+          participating_cap?: number | null
+          post_money_valuation?: number | null
+          pre_money_valuation?: number
+          price_per_share?: number
+          round_type?: string
+          share_class_id?: string
+          status?: string
+          total_shares_issued?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funding_rounds_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "funding_rounds_pacte_actionnaires_doc_id_fkey"
+            columns: ["pacte_actionnaires_doc_id"]
+            isOneToOne: false
+            referencedRelation: "document_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "funding_rounds_share_class_id_fkey"
+            columns: ["share_class_id"]
+            isOneToOne: false
+            referencedRelation: "share_classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hypothesis_sets: {
         Row: {
           as_of_date: string | null
@@ -1946,6 +2255,13 @@ export type Database = {
             referencedRelation: "valuation_runs"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ifrs2_expense_schedules_valuation_run_id_fkey"
+            columns: ["valuation_run_id"]
+            isOneToOne: false
+            referencedRelation: "valuation_runs_audit"
+            referencedColumns: ["id"]
+          },
         ]
       }
       invitations: {
@@ -2007,6 +2323,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      market_data_cache: {
+        Row: {
+          annualized_volatility: number
+          as_of_date: string
+          created_at: string
+          currency: string
+          dividend_yield: number
+          expires_at: string
+          id: string
+          lookback_days: number
+          price_points: number
+          raw_data: Json | null
+          spot_price: number
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          annualized_volatility: number
+          as_of_date: string
+          created_at?: string
+          currency: string
+          dividend_yield?: number
+          expires_at?: string
+          id?: string
+          lookback_days: number
+          price_points: number
+          raw_data?: Json | null
+          spot_price: number
+          ticker: string
+          updated_at?: string
+        }
+        Update: {
+          annualized_volatility?: number
+          as_of_date?: string
+          created_at?: string
+          currency?: string
+          dividend_yield?: number
+          expires_at?: string
+          id?: string
+          lookback_days?: number
+          price_points?: number
+          raw_data?: Json | null
+          spot_price?: number
+          ticker?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       memberships: {
         Row: {
@@ -2340,6 +2704,8 @@ export type Database = {
           end_fixed_price: number | null
           end_price_method: string | null
           id: string
+          market_data_fetch_mode: string
+          market_data_warnings: Json | null
           market_metric_type: string | null
           measurement_period_years: number | null
           metric: string | null
@@ -2351,7 +2717,14 @@ export type Database = {
           performance_start_date: string | null
           plan_id: string | null
           reference_index: string | null
+          reference_index_correlation: number | null
+          reference_index_data_captured_at: string | null
+          reference_index_data_source: string | null
           reference_index_display_name: string | null
+          reference_index_dividend_yield: number | null
+          reference_index_resolved_ticker: string | null
+          reference_index_s0: number | null
+          reference_index_sigma: number | null
           start_averaging_days: number | null
           start_fixed_price: number | null
           start_price_method: string | null
@@ -2375,6 +2748,8 @@ export type Database = {
           end_fixed_price?: number | null
           end_price_method?: string | null
           id?: string
+          market_data_fetch_mode?: string
+          market_data_warnings?: Json | null
           market_metric_type?: string | null
           measurement_period_years?: number | null
           metric?: string | null
@@ -2386,7 +2761,14 @@ export type Database = {
           performance_start_date?: string | null
           plan_id?: string | null
           reference_index?: string | null
+          reference_index_correlation?: number | null
+          reference_index_data_captured_at?: string | null
+          reference_index_data_source?: string | null
           reference_index_display_name?: string | null
+          reference_index_dividend_yield?: number | null
+          reference_index_resolved_ticker?: string | null
+          reference_index_s0?: number | null
+          reference_index_sigma?: number | null
           start_averaging_days?: number | null
           start_fixed_price?: number | null
           start_price_method?: string | null
@@ -2410,6 +2792,8 @@ export type Database = {
           end_fixed_price?: number | null
           end_price_method?: string | null
           id?: string
+          market_data_fetch_mode?: string
+          market_data_warnings?: Json | null
           market_metric_type?: string | null
           measurement_period_years?: number | null
           metric?: string | null
@@ -2421,7 +2805,14 @@ export type Database = {
           performance_start_date?: string | null
           plan_id?: string | null
           reference_index?: string | null
+          reference_index_correlation?: number | null
+          reference_index_data_captured_at?: string | null
+          reference_index_data_source?: string | null
           reference_index_display_name?: string | null
+          reference_index_dividend_yield?: number | null
+          reference_index_resolved_ticker?: string | null
+          reference_index_s0?: number | null
+          reference_index_sigma?: number | null
           start_averaging_days?: number | null
           start_fixed_price?: number | null
           start_price_method?: string | null
@@ -2828,6 +3219,80 @@ export type Database = {
           },
         ]
       }
+      share_classes: {
+        Row: {
+          anti_dilution_type: string | null
+          class_type: string
+          code: string
+          conversion_ratio: number | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          is_convertible_to_common: boolean | null
+          liquidation_preference_cap: number | null
+          liquidation_preference_multiple: number | null
+          liquidation_preference_type: string | null
+          name: string
+          org_id: string
+          par_value: number | null
+          pool_total_units: number | null
+          updated_at: string
+          voting_rights_per_share: number | null
+        }
+        Insert: {
+          anti_dilution_type?: string | null
+          class_type: string
+          code: string
+          conversion_ratio?: number | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_convertible_to_common?: boolean | null
+          liquidation_preference_cap?: number | null
+          liquidation_preference_multiple?: number | null
+          liquidation_preference_type?: string | null
+          name: string
+          org_id: string
+          par_value?: number | null
+          pool_total_units?: number | null
+          updated_at?: string
+          voting_rights_per_share?: number | null
+        }
+        Update: {
+          anti_dilution_type?: string | null
+          class_type?: string
+          code?: string
+          conversion_ratio?: number | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_convertible_to_common?: boolean | null
+          liquidation_preference_cap?: number | null
+          liquidation_preference_multiple?: number | null
+          liquidation_preference_type?: string | null
+          name?: string
+          org_id?: string
+          par_value?: number | null
+          pool_total_units?: number | null
+          updated_at?: string
+          voting_rights_per_share?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "share_classes_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       signature_requests: {
         Row: {
           completed_at: string | null
@@ -3159,6 +3624,13 @@ export type Database = {
             referencedRelation: "valuation_runs"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "valuation_award_results_valuation_run_id_fkey"
+            columns: ["valuation_run_id"]
+            isOneToOne: false
+            referencedRelation: "valuation_runs_audit"
+            referencedColumns: ["id"]
+          },
         ]
       }
       valuation_results: {
@@ -3218,6 +3690,13 @@ export type Database = {
             referencedRelation: "valuation_runs"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "valuation_results_valuation_run_id_fkey"
+            columns: ["valuation_run_id"]
+            isOneToOne: false
+            referencedRelation: "valuation_runs_audit"
+            referencedColumns: ["id"]
+          },
         ]
       }
       valuation_runs: {
@@ -3229,8 +3708,10 @@ export type Database = {
           id: string
           org_id: string | null
           parameters: Json | null
+          payload_sent: Json | null
           plan_id: string | null
           pricer_used: string | null
+          response_received: Json | null
           results_json: Json | null
           simulation_config_id: string | null
           started_at: string | null
@@ -3245,8 +3726,10 @@ export type Database = {
           id?: string
           org_id?: string | null
           parameters?: Json | null
+          payload_sent?: Json | null
           plan_id?: string | null
           pricer_used?: string | null
+          response_received?: Json | null
           results_json?: Json | null
           simulation_config_id?: string | null
           started_at?: string | null
@@ -3261,8 +3744,10 @@ export type Database = {
           id?: string
           org_id?: string | null
           parameters?: Json | null
+          payload_sent?: Json | null
           plan_id?: string | null
           pricer_used?: string | null
+          response_received?: Json | null
           results_json?: Json | null
           simulation_config_id?: string | null
           started_at?: string | null
@@ -3520,7 +4005,42 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      valuation_runs_audit: {
+        Row: {
+          ci95_high: number | null
+          ci95_low: number | null
+          completed_at: string | null
+          created_at: string | null
+          engine_version: string | null
+          fair_value_per_instrument: number | null
+          id: string | null
+          instrument_strike: number | null
+          instrument_t: number | null
+          instrument_type: string | null
+          market_q: number | null
+          market_r: number | null
+          market_s0: number | null
+          market_sigma: number | null
+          num_conditions: number | null
+          num_paths: number | null
+          org_id: string | null
+          plan_id: string | null
+          pricer_used: string | null
+          started_at: string | null
+          status: string | null
+          std_error: number | null
+          used_monte_carlo: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "valuation_runs_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       apply_award_modification: {
@@ -3531,6 +4051,10 @@ export type Database = {
           p_modification_type: string
           p_reason: string
         }
+        Returns: Json
+      }
+      apply_scenario: {
+        Args: { p_positions: Json; p_scenario: Json }
         Returns: Json
       }
       bulk_create_awards: { Args: { p_rows: Json }; Returns: Json }
@@ -3555,6 +4079,15 @@ export type Database = {
         }
         Returns: string
       }
+      compute_cap_table: {
+        Args: {
+          p_asof_date?: string
+          p_org_id: string
+          p_scenario_id?: string
+          p_view_mode?: string
+        }
+        Returns: Json
+      }
       confirm_exercise_payment: {
         Args: {
           p_admin_notes?: string
@@ -3574,6 +4107,19 @@ export type Database = {
           p_storage_path: string
           p_template_code: string
           p_variables_used: Json
+        }
+        Returns: string
+      }
+      create_funding_round: {
+        Args: {
+          p_amount_raised: number
+          p_investors: Json
+          p_name: string
+          p_org_id: string
+          p_pre_money_valuation: number
+          p_price_per_share: number
+          p_round_type: string
+          p_share_class_id: string
         }
         Returns: string
       }
@@ -3747,6 +4293,16 @@ export type Database = {
         Args: { p_beneficiary_id: string }
         Returns: string
       }
+      materialize_snapshot: {
+        Args: {
+          p_asof_date: string
+          p_label?: string
+          p_org_id: string
+          p_snapshot_type: string
+          p_triggered_by_round_id?: string
+        }
+        Returns: string
+      }
       materialize_vesting_events: {
         Args: { p_award_id: string }
         Returns: number
@@ -3818,6 +4374,14 @@ export type Database = {
       upsert_plan_draft: { Args: { p_data: Json }; Returns: Json }
       user_all_permissions: { Args: never; Returns: string[] }
       user_has_permission: { Args: { p_perm: string }; Returns: boolean }
+      validate_peer_group_market_data: {
+        Args: { peers: Json }
+        Returns: boolean
+      }
+      validate_weighted_peer_groups_market_data: {
+        Args: { wpgs: Json }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

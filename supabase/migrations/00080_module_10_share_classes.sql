@@ -80,14 +80,14 @@ CREATE POLICY share_classes_insert_admin
   ON share_classes FOR INSERT
   WITH CHECK (
     org_id = current_org_id()
-    AND user_has_permission('share_classes.create')
+    AND has_permission('captable.share_class.create')
   );
 
 CREATE POLICY share_classes_update_admin
   ON share_classes FOR UPDATE
   USING (
     org_id = current_org_id()
-    AND user_has_permission('share_classes.update')
+    AND has_permission('captable.share_class.update')
   );
 
 -- Pas de DELETE policy : les share_classes sont soft-deleted (is_active=FALSE)

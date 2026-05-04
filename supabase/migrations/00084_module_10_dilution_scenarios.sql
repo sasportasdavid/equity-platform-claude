@@ -63,14 +63,14 @@ CREATE POLICY scenarios_select_own_or_shared
   USING (
     org_id = current_org_id()
     AND (created_by = auth.uid() OR is_shared = TRUE)
-    AND user_has_permission('dilution_scenarios.read')
+    AND has_permission('captable.scenario.read')
   );
 
 CREATE POLICY scenarios_insert_admin
   ON dilution_scenarios FOR INSERT
   WITH CHECK (
     org_id = current_org_id()
-    AND user_has_permission('dilution_scenarios.create')
+    AND has_permission('captable.scenario.create')
     AND created_by = auth.uid()
   );
 

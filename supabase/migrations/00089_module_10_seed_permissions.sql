@@ -1,95 +1,119 @@
 -- =============================================================================
--- Module 10 B1 — Migration 00089 : seed permissions Module 10
+-- Module 10 B1 — Migration 00089 : seed permissions Module 10 (namespace captable.*)
 -- =============================================================================
 --
--- Role mappings ajustés vs spec §2.10 — cf chat user erratum Q4 :
---   - OWNER         : write complète (cap_table / share_classes / funding_rounds / scenarios / snapshots / import)
---   - ADMIN_HR      : read.all + scenarios.read/create/run_montecarlo + share_classes.read + funding_rounds.read
---                     PAS funding_rounds.create (acte engageant — OWNER only V1)
---                     PAS scenarios.delete (OWNER only)
---   - APPROVER      : read.all + funding_rounds.read (Module 5 workflow context)
---   - AUDITOR       : read.all + share_classes.read + funding_rounds.read
---   - BENEFICIARY   : read.own
+-- Aligne le seed sur le namespace captable.* (Module 1 + Module 10 cohérents)
+-- + has_permission() (pattern dominant repo).
 --
--- Reference : docs/MODULE_10_CAP_TABLE.md §2.10
+-- 4 permissions M1 legacy (`captable.read`, `.export`, `.simulate`, `.edit`)
+-- restent en place — utilisées dans packages/shared/src/constants/{permissions,
+-- roles}.ts. Pas de DELETE pour ne pas casser les imports TS. Cleanup en
+-- chore-PR séparée V2 (cf memory/module_10_recon.md).
+--
+-- 13 nouvelles permissions Module 10 :
+--
+--   captable.read.all                   (= legacy captable.read mais plus précis,
+--                                          pour distinguer read.own)
+--   captable.read.own                   (BENEFICIARY voit ses positions)
+--   captable.share_class.create
+--   captable.share_class.update
+--   captable.share_class.deactivate
+--   captable.round.read
+--   captable.round.create
+--   captable.round.cancel
+--   captable.scenario.read
+--   captable.scenario.create
+--   captable.scenario.run_montecarlo
+--   captable.scenario.delete
+--   captable.snapshot.create
+--   captable.import
+--
+-- Role mappings — Q4 ajusté chat user :
+--   - OWNER       : write complète
+--   - ADMIN_HR    : reads + scenarios.create/run/read (pas write critique)
+--   - APPROVER    : read.all + round.read (Module 5 workflow)
+--   - AUDITOR     : read.all + share_class/round.read (cohérent CAC)
+--   - BENEFICIARY : read.own
+--
+-- Reference : docs/MODULE_10_CAP_TABLE.md §2.10 (erratum namespace).
 -- =============================================================================
 
--- 1. Insert permissions catalog (idempotent ON CONFLICT)
+-- 1. Insert nouvelles permissions catalog (idempotent ON CONFLICT)
 INSERT INTO permissions_catalog (code, category, description, is_dangerous) VALUES
-  -- Cap table reads
-  ('cap_table.read.all', 'cap_table', 'Voir toute la cap table de son org', FALSE),
-  ('cap_table.read.own', 'cap_table', 'Voir ses propres positions (BENEFICIARY)', FALSE),
-  ('cap_table.import_csv', 'cap_table', 'Importer un cap table historique CSV', TRUE),
+  -- Lecture cap table
+  ('captable.read.all', 'CAP_TABLE', 'Voir toute la cap table de son org', FALSE),
+  ('captable.read.own', 'CAP_TABLE', 'Voir ses propres positions (BENEFICIARY)', FALSE),
 
   -- Share classes
-  ('share_classes.read', 'share_classes', 'Voir les classes d''actions', FALSE),
-  ('share_classes.create', 'share_classes', 'Créer une classe d''actions', TRUE),
-  ('share_classes.update', 'share_classes', 'Modifier une classe d''actions', TRUE),
-  ('share_classes.deactivate', 'share_classes', 'Désactiver une classe d''actions', TRUE),
+  ('captable.share_class.create', 'CAP_TABLE', 'Creer une classe d''actions', TRUE),
+  ('captable.share_class.update', 'CAP_TABLE', 'Modifier une classe d''actions', TRUE),
+  ('captable.share_class.deactivate', 'CAP_TABLE', 'Desactiver (soft-delete) une classe d''actions', TRUE),
 
   -- Funding rounds
-  ('funding_rounds.read', 'funding_rounds', 'Voir les levées', FALSE),
-  ('funding_rounds.create', 'funding_rounds', 'Créer une levée (atomique)', TRUE),
-  ('funding_rounds.cancel', 'funding_rounds', 'Annuler une levée DRAFT', TRUE),
+  ('captable.round.read', 'CAP_TABLE', 'Voir les levees', FALSE),
+  ('captable.round.create', 'CAP_TABLE', 'Creer une levee (atomique)', TRUE),
+  ('captable.round.cancel', 'CAP_TABLE', 'Annuler une levee DRAFT', TRUE),
 
   -- Dilution scenarios
-  ('dilution_scenarios.read', 'dilution_scenarios', 'Voir les scénarios partagés ou ses propres scénarios', FALSE),
-  ('dilution_scenarios.create', 'dilution_scenarios', 'Créer un scénario de dilution', FALSE),
-  ('dilution_scenarios.run_montecarlo', 'dilution_scenarios', 'Lancer une simulation Monte Carlo de sortie', FALSE),
-  ('dilution_scenarios.delete', 'dilution_scenarios', 'Supprimer un scénario', TRUE),
+  ('captable.scenario.read', 'CAP_TABLE', 'Voir les scenarios partages ou ses propres scenarios', FALSE),
+  ('captable.scenario.create', 'CAP_TABLE', 'Creer un scenario de dilution', FALSE),
+  ('captable.scenario.run_montecarlo', 'CAP_TABLE', 'Lancer une simulation Monte Carlo de sortie', FALSE),
+  ('captable.scenario.delete', 'CAP_TABLE', 'Supprimer un scenario', TRUE),
 
   -- Snapshots
-  ('cap_table_snapshots.create', 'cap_table_snapshots', 'Créer un snapshot manuel ou auto', FALSE)
+  ('captable.snapshot.create', 'CAP_TABLE', 'Creer un snapshot (manuel ou auto post-round)', FALSE),
+
+  -- Import
+  ('captable.import', 'CAP_TABLE', 'Importer un cap table historique CSV', TRUE)
 
 ON CONFLICT (code) DO NOTHING;
 
--- 2. OWNER : tout
+-- 2. OWNER : tout (13 nouvelles permissions Module 10)
 INSERT INTO role_permissions (role, permission_code) VALUES
-  ('OWNER', 'cap_table.read.all'),
-  ('OWNER', 'cap_table.read.own'),
-  ('OWNER', 'cap_table.import_csv'),
-  ('OWNER', 'share_classes.read'),
-  ('OWNER', 'share_classes.create'),
-  ('OWNER', 'share_classes.update'),
-  ('OWNER', 'share_classes.deactivate'),
-  ('OWNER', 'funding_rounds.read'),
-  ('OWNER', 'funding_rounds.create'),
-  ('OWNER', 'funding_rounds.cancel'),
-  ('OWNER', 'dilution_scenarios.read'),
-  ('OWNER', 'dilution_scenarios.create'),
-  ('OWNER', 'dilution_scenarios.run_montecarlo'),
-  ('OWNER', 'dilution_scenarios.delete'),
-  ('OWNER', 'cap_table_snapshots.create')
+  ('OWNER', 'captable.read.all'),
+  ('OWNER', 'captable.read.own'),
+  ('OWNER', 'captable.share_class.create'),
+  ('OWNER', 'captable.share_class.update'),
+  ('OWNER', 'captable.share_class.deactivate'),
+  ('OWNER', 'captable.round.read'),
+  ('OWNER', 'captable.round.create'),
+  ('OWNER', 'captable.round.cancel'),
+  ('OWNER', 'captable.scenario.read'),
+  ('OWNER', 'captable.scenario.create'),
+  ('OWNER', 'captable.scenario.run_montecarlo'),
+  ('OWNER', 'captable.scenario.delete'),
+  ('OWNER', 'captable.snapshot.create'),
+  ('OWNER', 'captable.import')
 ON CONFLICT (role, permission_code) DO NOTHING;
 
 -- 3. ADMIN_HR : reads + scenarios CRUD-create-run, no write critique
 INSERT INTO role_permissions (role, permission_code) VALUES
-  ('ADMIN_HR', 'cap_table.read.all'),
-  ('ADMIN_HR', 'share_classes.read'),
-  ('ADMIN_HR', 'funding_rounds.read'),
-  ('ADMIN_HR', 'dilution_scenarios.read'),
-  ('ADMIN_HR', 'dilution_scenarios.create'),
-  ('ADMIN_HR', 'dilution_scenarios.run_montecarlo')
+  ('ADMIN_HR', 'captable.read.all'),
+  ('ADMIN_HR', 'captable.share_class.create'),
+  ('ADMIN_HR', 'captable.round.read'),
+  ('ADMIN_HR', 'captable.scenario.read'),
+  ('ADMIN_HR', 'captable.scenario.create'),
+  ('ADMIN_HR', 'captable.scenario.run_montecarlo')
 ON CONFLICT (role, permission_code) DO NOTHING;
 
--- 4. APPROVER : read pour valider via Module 5 workflow
+-- 4. APPROVER : read.all + round.read (pour valider via Module 5 workflow)
 INSERT INTO role_permissions (role, permission_code) VALUES
-  ('APPROVER', 'cap_table.read.all'),
-  ('APPROVER', 'funding_rounds.read')
+  ('APPROVER', 'captable.read.all'),
+  ('APPROVER', 'captable.round.read')
 ON CONFLICT (role, permission_code) DO NOTHING;
 
 -- 5. AUDITOR : read total cohérent CAC
 INSERT INTO role_permissions (role, permission_code) VALUES
-  ('AUDITOR', 'cap_table.read.all'),
-  ('AUDITOR', 'share_classes.read'),
-  ('AUDITOR', 'funding_rounds.read')
+  ('AUDITOR', 'captable.read.all'),
+  ('AUDITOR', 'captable.round.read'),
+  ('AUDITOR', 'captable.scenario.read')
 ON CONFLICT (role, permission_code) DO NOTHING;
 
 -- 6. BENEFICIARY : ses propres positions seulement
 INSERT INTO role_permissions (role, permission_code) VALUES
-  ('BENEFICIARY', 'cap_table.read.own')
+  ('BENEFICIARY', 'captable.read.own')
 ON CONFLICT (role, permission_code) DO NOTHING;
 
 COMMENT ON TABLE permissions_catalog IS
   COALESCE(obj_description('public.permissions_catalog'::regclass), '') ||
-  ' Module 10 (00089) : 15 nouvelles permissions cap_table / share_classes / funding_rounds / dilution_scenarios / cap_table_snapshots.';
+  ' Module 10 (00089) : 14 nouvelles permissions captable.* (read/write/scenarios/snapshots/import). 4 perms legacy M1 (captable.read/.export/.simulate/.edit) gardees pour TS imports.';

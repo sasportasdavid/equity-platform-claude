@@ -90,7 +90,7 @@ BEGIN
     VALUES (
       v_award.org_id,
       auth.uid(),
-      'cap_table.position_emitted',
+      'captable.position_emitted',
       'exercise_requests',
       NEW.id,
       jsonb_build_object(

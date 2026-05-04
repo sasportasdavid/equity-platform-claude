@@ -9,7 +9,7 @@
 --
 -- ⚠️ Pas de GRANT EXECUTE sur apply_scenario (helper privé). Elle est
 -- appelée uniquement depuis compute_cap_table qui a déjà checké la
--- permission cap_table.read.all. Cf. piège #3 du chat user.
+-- permission captable.read.all. Cf. piège #3 du chat user.
 -- =============================================================================
 
 -- Helper privé (pas de SECURITY DEFINER, pas de GRANT)
@@ -72,7 +72,13 @@ BEGIN
   RETURN v_result;
 END $$;
 
--- ⚠️ Pas de GRANT EXECUTE sur apply_scenario (helper privé)
+-- ⚠️ REVOKE explicite : par défaut Postgres GRANT EXECUTE à PUBLIC (qui
+-- inclut authenticated). Pour empêcher l'appel direct, on REVOKE.
+-- Le helper reste appelable depuis compute_cap_table car celui-ci est
+-- SECURITY DEFINER (s'exécute avec les droits du owner = postgres).
+REVOKE EXECUTE ON FUNCTION apply_scenario(JSONB, JSONB) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION apply_scenario(JSONB, JSONB) FROM authenticated;
+REVOKE EXECUTE ON FUNCTION apply_scenario(JSONB, JSONB) FROM anon;
 
 -- ---------------------------------------------------------------------------
 -- compute_cap_table — RPC principal
@@ -97,7 +103,7 @@ DECLARE
   v_diluted_extras JSONB;
 BEGIN
   -- 1. Permission check
-  IF NOT user_has_permission('cap_table.read.all') THEN
+  IF NOT has_permission('captable.read.all') THEN
     RAISE EXCEPTION 'Insufficient permissions to read cap table' USING ERRCODE = '42501';
   END IF;
 
@@ -205,7 +211,7 @@ END $$;
 GRANT EXECUTE ON FUNCTION compute_cap_table(UUID, DATE, UUID, TEXT) TO authenticated;
 
 COMMENT ON FUNCTION compute_cap_table IS
-  'Module 10 B1 — Single source of truth cap table. SECURITY DEFINER, perm cap_table.read.all. 3 view modes : CONSOLIDATED (positions only), DILUTED (+ awards GRANTED virtuels), PRO_FORMA (DILUTED + scénario). Performance V1 OK jusqu''à 500 positions, V2 = matérialiser si > 500.';
+  'Module 10 B1 — Single source of truth cap table. SECURITY DEFINER, perm captable.read.all. 3 view modes : CONSOLIDATED (positions only), DILUTED (+ awards GRANTED virtuels), PRO_FORMA (DILUTED + scénario). Performance V1 OK jusqu''à 500 positions, V2 = matérialiser si > 500.';
 
 COMMENT ON FUNCTION apply_scenario IS
   'Module 10 B1 — Helper privé pour compute_cap_table. PAS de GRANT EXECUTE (appelé uniquement depuis compute_cap_table). 5 types : NEW_ROUND (add investor position), POOL_TOPUP (add pool reserve), BULK_EXERCISE (V2 transform virtuels), EXIT (V2 conversion strategy), COMBINED.';

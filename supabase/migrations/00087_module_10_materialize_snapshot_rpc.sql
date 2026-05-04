@@ -33,8 +33,8 @@ DECLARE
   v_cap_table_diluted JSONB;
 BEGIN
   -- 1. Permission check (cap_table_snapshots.create) — laxer que la spec
-  -- (qui demande cap_table.snapshot.create — corrigé en 00089 avec le bon code)
-  IF NOT user_has_permission('cap_table_snapshots.create') THEN
+  -- Permission alignée sur le namespace captable.* (cf 00082b + 00089)
+  IF NOT has_permission('captable.snapshot.create') THEN
     RAISE EXCEPTION 'Insufficient permissions to create snapshot' USING ERRCODE = '42501';
   END IF;
 
@@ -77,7 +77,7 @@ BEGIN
   -- audit explicite dans chaque RPC mutator)
   INSERT INTO audit_events (org_id, user_id, event_type, resource_type, resource_id, metadata)
   VALUES (
-    p_org_id, v_caller, 'cap_table.snapshot_materialized',
+    p_org_id, v_caller, 'captable.snapshot_materialized',
     'cap_table_snapshots', v_snapshot_id,
     jsonb_build_object(
       'snapshot_type', p_snapshot_type,

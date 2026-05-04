@@ -30,7 +30,7 @@ DECLARE
   v_caller UUID := auth.uid();
 BEGIN
   -- 1. Permission check
-  IF NOT user_has_permission('funding_rounds.create') THEN
+  IF NOT has_permission('captable.round.create') THEN
     RAISE EXCEPTION 'Insufficient permissions to create funding round' USING ERRCODE = '42501';
   END IF;
 
@@ -105,7 +105,7 @@ BEGIN
   -- 8. Audit event
   INSERT INTO audit_events (org_id, user_id, event_type, resource_type, resource_id, metadata)
   VALUES (
-    p_org_id, v_caller, 'cap_table.round_created', 'funding_rounds', v_round_id,
+    p_org_id, v_caller, 'captable.round_created', 'funding_rounds', v_round_id,
     jsonb_build_object(
       'name', p_name,
       'round_type', p_round_type,

@@ -79,7 +79,7 @@ CREATE POLICY positions_select_admin
   ON cap_table_positions FOR SELECT
   USING (
     org_id = current_org_id()
-    AND user_has_permission('cap_table.read.all')
+    AND has_permission('captable.read.all')
   );
 
 -- BENEFICIARY voit uniquement ses propres positions (via beneficiary_id)
@@ -88,7 +88,7 @@ CREATE POLICY positions_select_own_beneficiary
   USING (
     org_id = current_org_id()
     AND stakeholder_type = 'BENEFICIARY'
-    AND user_has_permission('cap_table.read.own')
+    AND has_permission('captable.read.own')
     AND stakeholder_id IN (
       SELECT id FROM beneficiaries WHERE user_id = auth.uid()
     )
@@ -99,7 +99,7 @@ CREATE POLICY positions_insert_admin
   ON cap_table_positions FOR INSERT
   WITH CHECK (
     org_id = current_org_id()
-    AND user_has_permission('cap_table.read.all')
+    AND has_permission('captable.read.all')
   );
 
 CREATE TRIGGER set_cap_table_positions_updated_at

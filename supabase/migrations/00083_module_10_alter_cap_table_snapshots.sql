@@ -105,14 +105,14 @@ CREATE POLICY snapshots_select_admin
   ON cap_table_snapshots FOR SELECT
   USING (
     org_id = current_org_id()
-    AND user_has_permission('cap_table.read.all')
+    AND has_permission('captable.read.all')
   );
 
 CREATE POLICY snapshots_insert_admin
   ON cap_table_snapshots FOR INSERT
   WITH CHECK (
     org_id = current_org_id()
-    AND user_has_permission('cap_table_snapshots.create')
+    AND has_permission('captable.snapshot.create')
   );
 
 -- Snapshots immutables : pas de UPDATE possible
@@ -125,7 +125,7 @@ CREATE POLICY snapshots_delete_admin
   ON cap_table_snapshots FOR DELETE
   USING (
     org_id = current_org_id()
-    AND user_has_permission('cap_table_snapshots.create')
+    AND has_permission('captable.snapshot.create')
     AND is_immutable = FALSE
   );
 

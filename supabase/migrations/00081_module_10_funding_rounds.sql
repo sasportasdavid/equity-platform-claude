@@ -51,7 +51,8 @@ CREATE TABLE funding_rounds (
   cancelled_reason TEXT,
 
   -- Workflow de docs (Module 6 V2)
-  pacte_actionnaires_doc_id UUID REFERENCES documents(id),
+  -- ⚠️ Erratum spec : table réelle = document_instances (Module 6) pas 'documents'
+  pacte_actionnaires_doc_id UUID REFERENCES document_instances(id),
 
   -- Métadonnées
   notes TEXT,
@@ -76,20 +77,20 @@ ALTER TABLE funding_rounds ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY funding_rounds_select_own_org
   ON funding_rounds FOR SELECT
-  USING (org_id = current_org_id());
+  USING (org_id = current_org_id() AND has_permission('captable.round.read'));
 
 CREATE POLICY funding_rounds_insert_admin
   ON funding_rounds FOR INSERT
   WITH CHECK (
     org_id = current_org_id()
-    AND user_has_permission('funding_rounds.create')
+    AND has_permission('captable.round.create')
   );
 
 CREATE POLICY funding_rounds_update_admin
   ON funding_rounds FOR UPDATE
   USING (
     org_id = current_org_id()
-    AND user_has_permission('funding_rounds.create')
+    AND has_permission('captable.round.create')
   );
 
 CREATE TRIGGER set_funding_rounds_updated_at
