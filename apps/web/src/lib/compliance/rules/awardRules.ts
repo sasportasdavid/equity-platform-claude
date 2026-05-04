@@ -43,7 +43,8 @@ export const AGA_30_PERCENT_CAP: ComplianceRule = {
   appliesTo: ['AGA'],
   enforcement: 'hard',
   check: (data, ctx) => {
-    // V1 : si on n'a pas la cap table, on skip (Module 10 finira la check)
+    // Module 10 B7 : ctx maintenant chargé via compute_cap_table.
+    // Skip si la cap table est vide (orgs early-stage avant 1ère levée).
     if (
       ctx.companyTotalShares == null ||
       ctx.companyTotalShares <= 0 ||
@@ -59,6 +60,37 @@ export const AGA_30_PERCENT_CAP: ComplianceRule = {
       code: 'AGA_30_PERCENT_CAP',
       message: `AGA : ${(pct * 100).toFixed(1)} % du capital après cette attribution (max légal 30 %).`,
       suggestedAction: 'Réduire les units ou attendre une augmentation de capital.',
+    };
+  },
+};
+
+/**
+ * Module 10 B7 — Soft warning quand on approche du cap AGA légal (27 %+ < 30 %).
+ *
+ * Séparée de AGA_30_PERCENT_CAP (hard) car le runner bucket par
+ * `rule.enforcement`, pas par `issue.severity`. Spec §5.1 (`AGA_APPROACHING_CAP`).
+ */
+export const AGA_APPROACHING_CAP: ComplianceRule = {
+  code: 'AGA_APPROACHING_CAP',
+  description: 'AGA : warning si > 27 % du capital alloué (approche cap légal 30 %)',
+  appliesTo: ['AGA'],
+  enforcement: 'soft',
+  check: (data, ctx) => {
+    if (
+      ctx.companyTotalShares == null ||
+      ctx.companyTotalShares <= 0 ||
+      ctx.agaAllocatedTotal == null
+    ) {
+      return null;
+    }
+    const newTotal = ctx.agaAllocatedTotal + data.unitsGranted;
+    const pct = newTotal / ctx.companyTotalShares;
+    if (pct <= 0.27 || pct > 0.3) return null; // > 30% géré par AGA_30_PERCENT_CAP
+    return {
+      severity: 'WARNING',
+      code: 'AGA_APPROACHING_CAP',
+      message: `Cap AGA bientôt atteint : ${(pct * 100).toFixed(1)} % (max légal 30 %).`,
+      suggestedAction: 'Anticiper une augmentation de capital avant la prochaine attribution AGA.',
     };
   },
 };
@@ -101,6 +133,7 @@ export const GRANT_DATE_RECENT: ComplianceRule = {
 export const AWARD_RULES: ComplianceRule[] = [
   BSPCE_BENEFICIARY_TYPE,
   AGA_30_PERCENT_CAP,
+  AGA_APPROACHING_CAP,
   POOL_AVAILABLE,
   GRANT_DATE_RECENT,
 ];

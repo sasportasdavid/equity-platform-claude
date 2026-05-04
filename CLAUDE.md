@@ -417,11 +417,16 @@ Référence design : `memory/design_system_v1_recon.md` (recon Étape 1
    à `toStatus=PROPOSED` uniquement. V2 configurable par org en
    Module 12 via une table `compliance_rules_overrides`.
 
-3. **AGA_30_PERCENT_CAP** : retourne null en V1 si
-   `companyTotalShares` indisponible (cap table pas en place). Full
-   check Module 10. La rule existe et est testée — il manque juste
-   le ctx loader côté `runChecks.ts` quand Module 10 livrera la cap
-   table.
+3. **~~AGA_30_PERCENT_CAP~~ ✅ RÉSOLUE Module 10 B7** (2026-05-04) :
+   le ctx loader est branché dans `runChecks.ts::runComplianceChecks` —
+   pour les plans `plan_type='AGA'`, on appelle `compute_cap_table`
+   pour récupérer `companyTotalShares` + agrège
+   `agaAllocatedTotal` via `awards.units_outstanding` filtrés par
+   `plans.plan_type='AGA'` + statuts pré-cancel. La rule reject
+   maintenant les attributions AGA qui pousseraient au-delà du cap
+   légal 30 %. Soft warning séparé `AGA_APPROACHING_CAP` ajouté
+   pour la zone 27–30 %. Tests Vitest verts (5 cases hard + 4 cases
+   soft).
 
 4. **Realtime sur awards** : pas de push Supabase Realtime sur
    `awards.status_changed`. Le user doit `router.refresh()` ou
@@ -597,6 +602,53 @@ Notable : #29 STATUSES_ALLOWING_GENERATE hard-codé,
 - #73 simulator no minDate/maxDate sur date input (V2 garde-fous)
 - #76 phone read-back impossible côté ProfileEditForm (V2 RPC déchiffre)
 - #78 no "renvoyer document" via portail (V2 email auto signed URL 24h)
+
+81-X. **Dettes Module 10 (PR #25)** — voir `memory/module_10_b{1..7}_complete.md`. Notable :
+
+- **#88 Module 10 B5 V1.5** : endpoint Python `/compute/dilution-monte-carlo`
+  absent côté `equity-gem-quant-tonnom.fly.dev` (HTTP 404 confirmé 2026-05-04).
+  Skip propre Branche B : page placeholder
+  `/dashboard/captable/exit-simulator` + permission
+  `captable.scenario.run_montecarlo` seedée + schema Zod
+  `runMonteCarloExitSchema` prêt. Réactivation V1.5 ≈ 5h dev frontend
+  une fois endpoint Python livré. Spec endpoint à transmettre au
+  mainteneur Fly : voir `memory/module_10_b5_skipped.md` §2.
+- **#89 Permission `captable.scenario.update` absente du seed 00089** :
+  `updateScenario`/`deleteScenario` mappent sur `captable.scenario.create`
+  - ownership check explicite (RLS owner-only en doublon). Acceptable
+    V1, V2 = ajouter perm dédiée si besoin de dissocier les rôles
+    CRUD scenarios.
+- **#90 Cron nightly snapshot DEFERRED V1.5** (Module 10 B6) : suite
+  arbitrage user, le fichier migration a été supprimé du repo
+  (Option β : éviter dette flottante). SQL complet conservé dans
+  `memory/module_10_b6_cron_skipped.md` §1 pour réactivation V1.5.
+  Mainteneur DB devra recréer la migration côté cloud quand
+  l'environnement le permettra. UI V1 mise à jour pour ne pas
+  mentir : "Snapshots quotidiens automatiques disponibles V1.5"
+  affiché aux endroits concernés. Snapshots manuels + auto
+  post-round fonctionnent normalement V1 (RPC `materialize_snapshot`
+  appliqué B1).
+- **#91 Pas de RPC `freeze_snapshot`** (Module 10 B6) : initialement
+  planifiée puis abandonnée — `freezeSnapshot` SA utilise admin
+  client (service_role bypass RLS `snapshots_no_update USING(FALSE)`)
+  avec ownership check manuel. Sécurité équivalente, déploiement V1
+  simplifié. V2 = re-écrire en RPC SECURITY DEFINER si besoin
+  d'audit DB level.
+- **#92 portal/positions sans % consolidé V1** (Module 10 B6) :
+  BENEFICIARY n'a pas la perm `captable.read.all` ni RLS dédiée pour
+  grand_total. V1 affiche units, cost basis total/moyen mais pas le %
+  du capital. **Design V2 (reco user)** : RPC
+  `get_my_position_with_org_total(p_beneficiary_id)` SECURITY DEFINER
+  qui retourne **uniquement** un ratio pré-calculé
+  `{ my_units: N, my_percent: 0.0123 }` — pas le grand_total brut.
+  Respecte la confidentialité (le BENEFICIARY ne voit pas le total
+  org) tout en donnant l'info utile. Disclaimer V1 affiché en bas
+  de page : "% consolidé disponible en V2".
+- **#93 Sidebar dashboard nested nav non supporté** : Module 10 B6
+  voulait `Cap Table > Snapshots` sub-item. Pattern actuel
+  `NAV_SECTIONS` flat. Boutons exposés dans header de la page cap
+  table à la place. V2 = refactor sidebar pour sub-items
+  conditionnels.
 
 **Découverte E2E B5** : le proxy `/onboarding/create-org` redirigeait
 les bénéficiaires purs (BENEFICIARY uniquement, pas de membership

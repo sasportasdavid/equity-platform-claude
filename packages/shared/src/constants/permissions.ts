@@ -39,11 +39,27 @@ export const PERMISSIONS = [
   'beneficiaries.bulk_import', // M4 — import CSV
   'beneficiaries.export', // M4 — export CSV (Module 13 préemptif)
 
-  // Cap table
+  // Cap table — M1 legacy (gardés pour rétrocompat constants TS)
   'captable.read',
   'captable.export',
   'captable.simulate',
   'captable.edit', // M2
+
+  // Cap table — Module 10 B1 (nouveau namespace structuré)
+  'captable.read.all',
+  'captable.read.own',
+  'captable.share_class.create',
+  'captable.share_class.update',
+  'captable.share_class.deactivate',
+  'captable.round.read',
+  'captable.round.create',
+  'captable.round.cancel',
+  'captable.scenario.read',
+  'captable.scenario.create',
+  'captable.scenario.run_montecarlo',
+  'captable.scenario.delete',
+  'captable.snapshot.create',
+  'captable.import',
 
   // Documents & signatures
   'documents.create_template',

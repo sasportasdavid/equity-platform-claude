@@ -196,3 +196,62 @@ export type DocumentSignatureCheckInput = {
 };
 
 export type DocumentSignatureCheckContext = Record<string, never>;
+
+// ---------------------------------------------------------------------------
+// Module 10 B7 — Cap Table compliance
+// ---------------------------------------------------------------------------
+
+/**
+ * Input commun aux 3 scopes cap table (création share class, création round,
+ * top-up scenario). Discriminé via le scope passé à `runCapTableComplianceChecks`.
+ */
+export type CapTableShareClassCheckInput = {
+  scope: 'SHARE_CLASS_CREATE';
+  code: string;
+  classType: 'COMMON' | 'PREFERRED' | 'ESOP' | 'WARRANT' | 'BSPCE' | 'OTHER';
+  poolTotalUnits?: number | null;
+};
+
+export type CapTableFundingRoundCheckInput = {
+  scope: 'FUNDING_ROUND_CREATE';
+  amountRaised: number;
+  pricePerShare: number;
+  investors: Array<{ amount: number; units: number }>;
+};
+
+export type CapTablePoolTopupCheckInput = {
+  scope: 'POOL_TOPUP_SCENARIO';
+  poolTotalUnits: number;
+};
+
+export type CapTableCheckInput =
+  | CapTableShareClassCheckInput
+  | CapTableFundingRoundCheckInput
+  | CapTablePoolTopupCheckInput;
+
+export type CapTableCheckContext = {
+  /**
+   * Map share_class_code → exists. Préchargée par le runner pour
+   * `SHARE_CLASS_CODE_UNIQUE`.
+   */
+  existingShareClassCodes: Set<string>;
+  /**
+   * Total units émises (CONSOLIDATED) côté org — pour
+   * `ESOP_PERCENT_BEST_PRACTICE`. NULL si la cap table est vide.
+   */
+  companyTotalSharesIncludingPool: number | null;
+};
+
+// ---------------------------------------------------------------------------
+// Module 10 B7 — Étendre AwardCheckContext (déjà déclaré ci-dessus mais
+// agaAllocatedTotal/companyTotalShares étaient null V1 — Module 10 les active)
+// ---------------------------------------------------------------------------
+
+/**
+ * Note typing : AwardCheckContext (Module 3b) a déjà `agaAllocatedTotal` et
+ * `companyTotalShares` optionnels nullables. Module 10 B7 active leur
+ * chargement réel via `compute_cap_table` dans `runComplianceChecks`.
+ *
+ * Pas de nouveau type à ajouter — la rule `AGA_30_PERCENT_CAP` lit ces 2
+ * champs dans le ctx. Voir `runChecks.ts` pour le wiring.
+ */

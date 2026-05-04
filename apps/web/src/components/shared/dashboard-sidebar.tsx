@@ -58,7 +58,7 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
       { href: '/dashboard/plans', label: 'Plans', icon: FileText },
       { href: '/dashboard/awards', label: 'Attributions', icon: Users },
       { href: '/dashboard/beneficiaries', label: 'Bénéficiaires', icon: Users },
-      { href: '/dashboard/captable', label: 'Cap Table', icon: PieChart, comingSoon: true },
+      { href: '/dashboard/captable', label: 'Cap Table', icon: PieChart },
     ],
   },
   {
