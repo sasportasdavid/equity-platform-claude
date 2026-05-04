@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 import {
   cancelFundingRound,
   createFundingRound,
+  createScenario,
   createShareClass,
   deactivateShareClass,
 } from '@/server/actions/cap-table';
@@ -186,6 +187,46 @@ async function preset3CancelLastDraft(roundId: string | undefined): Promise<Acti
 }
 
 /**
+ * Preset 5 — Scenario NEW_ROUND (Series B simulation).
+ */
+async function preset5SeriesBScenario(): Promise<ActionLog[]> {
+  const ts = new Date().toISOString();
+  const r1 = await createScenario({
+    name: `Series B simulation ${Date.now()}`,
+    description: 'Hypothèse 10M€ post-money à 30M€ pre-money',
+    isShared: false,
+    parameters: {
+      scenarioType: 'NEW_ROUND',
+      shareClassCode: 'PREF_B',
+      preMoney: 30_000_000,
+      amountRaised: 10_000_000,
+      pricePerShare: 200,
+      antiDilutionApply: false,
+      investorName: 'Lead VC B (test)',
+    },
+  });
+  return [{ preset: 'Preset 5 — scenario NEW_ROUND Series B', result: r1, ts }];
+}
+
+/**
+ * Preset 6 — Scenario POOL_TOPUP 5%.
+ */
+async function preset6PoolTopupScenario(): Promise<ActionLog[]> {
+  const ts = new Date().toISOString();
+  const r1 = await createScenario({
+    name: `Pool top-up 5% ${Date.now()}`,
+    description: 'Augmentation pool ESOP de 5000 units pour atteindre 15% post-topup',
+    isShared: true,
+    parameters: {
+      scenarioType: 'POOL_TOPUP',
+      additionalUnits: 5000,
+      targetPoolPercentPost: 15,
+    },
+  });
+  return [{ preset: 'Preset 6 — scenario POOL_TOPUP', result: r1, ts }];
+}
+
+/**
  * Preset 4 — Soft-delete d'une share class.
  * Tente de désactiver la dernière share class créée.
  */
@@ -301,6 +342,30 @@ export function Sandbox({
           >
             Preset 4 — Désactiver dernière share class
             {!lastActiveShareClassId ? ' (aucune)' : ''}
+          </Button>
+          <Button
+            onClick={() =>
+              startTransition(async () => {
+                const r = await preset5SeriesBScenario();
+                appendLogs(r);
+              })
+            }
+            disabled={pending}
+            variant="outline"
+          >
+            Preset 5 — Scenario NEW_ROUND Series B (B4)
+          </Button>
+          <Button
+            onClick={() =>
+              startTransition(async () => {
+                const r = await preset6PoolTopupScenario();
+                appendLogs(r);
+              })
+            }
+            disabled={pending}
+            variant="outline"
+          >
+            Preset 6 — Scenario POOL_TOPUP 5% (B4)
           </Button>
         </CardContent>
       </Card>

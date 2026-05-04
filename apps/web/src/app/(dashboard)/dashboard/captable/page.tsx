@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { ImportIcon, Plus } from 'lucide-react';
 import { VIEW_MODES, type ViewMode } from '@equity/shared';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { CapTableMatrix } from '@/components/captable/cap-table-matrix';
+import { CapTableTabs } from '@/components/captable/cap-table-tabs';
 import { ValuationToggle } from '@/components/captable/valuation-toggle';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ScalesIllustration } from '@/components/shared/illustrations';
@@ -83,14 +84,16 @@ export default async function CapTablePage(props: { searchParams: Promise<{ view
         <PageShell.TitleRule />
         <PageShell.Subtitle>{subtitle}</PageShell.Subtitle>
         <PageShell.Actions>
-          <Button variant="outline" disabled title="Disponible en phase suivante">
+          <Button variant="outline" disabled title="Disponible en B6">
             <ImportIcon className="mr-1 size-4" />
             Importer historique
           </Button>
-          <Button disabled title="Disponible en phase suivante">
-            <Plus className="mr-1 size-4" />
-            Nouveau scénario
-          </Button>
+          <Link href="/dashboard/captable/scenarios/new">
+            <Button>
+              <Plus className="mr-1 size-4" />
+              Nouveau scénario
+            </Button>
+          </Link>
         </PageShell.Actions>
       </PageShell.Header>
 
@@ -100,7 +103,7 @@ export default async function CapTablePage(props: { searchParams: Promise<{ view
         </div>
 
         {hasPositions ? (
-          <CapTableMatrix
+          <CapTableTabs
             positions={positions}
             totalsByClass={totals_by_class}
             grandTotal={grand_total_units}

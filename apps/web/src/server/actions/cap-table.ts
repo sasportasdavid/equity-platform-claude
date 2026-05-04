@@ -32,11 +32,13 @@ import { z } from 'zod';
 import {
   cancelFundingRoundSchema,
   createFundingRoundSchema,
+  createScenarioSchema,
   createShareClassSchema,
   updateShareClassSchema,
   uuidSchema,
   type CancelFundingRoundInput,
   type CreateFundingRoundInput,
+  type CreateScenarioInput,
   type CreateShareClassInput,
   type UpdateShareClassInput,
 } from '@equity/shared';
@@ -425,4 +427,280 @@ export async function cancelFundingRound(
   revalidatePath('/dashboard/captable/rounds');
 
   return { ok: true };
+}
+
+// ============================================================================
+// SCENARIOS — Module 10 B4 (déterministes, pas Monte Carlo)
+// ============================================================================
+
+const RESULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+/**
+ * Crée un scénario de dilution. Le résultat est calculé à la volée via
+ * `compute_cap_table(p_scenario_id=...)` puis cached 24h dans
+ * `result_cache`. La table `dilution_scenarios.parameters` est typée
+ * via discriminated union Zod (NEW_ROUND / POOL_TOPUP / BULK_EXERCISE / EXIT).
+ *
+ * Note : aucune mutation des positions réelles. Le scénario est un objet
+ * de calcul pur. `apply_scenario` (helper privé DB côté 00085) fait la
+ * mutation in-memory uniquement quand `compute_cap_table` est appelé
+ * avec `p_scenario_id`.
+ */
+export async function createScenario(
+  input: CreateScenarioInput,
+): Promise<ActionOk<{ id: string }> | ActionError> {
+  const parsed = createScenarioSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+  const data = parsed.data;
+
+  const user = await requirePermission('captable.scenario.create');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const supabase = await createSupabaseServerClient();
+
+  const { data: row, error } = await supabase
+    .from('dilution_scenarios')
+    .insert({
+      org_id: user.activeOrgId,
+      name: data.name,
+      description: data.description ?? null,
+      scenario_type: data.parameters.scenarioType,
+      parameters: data.parameters as never,
+      base_snapshot_id: data.baseSnapshotId ?? null,
+      base_asof_date: data.baseAsofDate ?? null,
+      is_shared: data.isShared,
+      created_by: user.id,
+    })
+    .select('id')
+    .single();
+
+  if (error || !row) {
+    return { ok: false, error: error?.message ?? 'Erreur création scénario' };
+  }
+
+  await logAuditEvent({
+    eventType: 'captable.scenario_created',
+    resourceType: 'dilution_scenarios',
+    resourceId: row.id,
+    metadata: {
+      name: data.name,
+      scenario_type: data.parameters.scenarioType,
+      is_shared: data.isShared,
+    },
+    userId: user.id,
+    userEmail: user.email,
+    orgId: user.activeOrgId,
+  });
+
+  revalidatePath('/dashboard/captable/scenarios');
+  revalidatePath('/dashboard/captable');
+
+  return { ok: true, id: row.id };
+}
+
+/**
+ * Update partial d'un scénario (nom / description / is_shared / parameters).
+ * Owner check via RLS (`created_by = auth.uid()`). Invalide `result_cache`
+ * (set à NULL) pour que le prochain `runScenario` recompute.
+ *
+ * Si parameters change, `scenario_type` est mis à jour aussi (cohérence).
+ */
+export async function updateScenario(
+  id: string,
+  input: Partial<Pick<CreateScenarioInput, 'name' | 'description' | 'isShared' | 'parameters'>>,
+): Promise<ActionVoid | ActionError> {
+  const idCheck = uuidSchema.safeParse(id);
+  if (!idCheck.success) return { ok: false, error: 'id invalide' };
+
+  // Validation partielle — on accepte que les champs fournis
+  if (
+    input.name === undefined &&
+    input.description === undefined &&
+    input.isShared === undefined &&
+    input.parameters === undefined
+  ) {
+    return { ok: false, error: 'Aucun champ à modifier' };
+  }
+
+  const user = await requirePermission('captable.scenario.create');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const supabase = await createSupabaseServerClient();
+
+  // Vérif existence + ownership (RLS update_own l'enforce mais double-check)
+  const { data: existing, error: loadErr } = await supabase
+    .from('dilution_scenarios')
+    .select('id, created_by, scenario_type, name')
+    .eq('id', idCheck.data)
+    .eq('org_id', user.activeOrgId)
+    .maybeSingle();
+
+  if (loadErr || !existing) {
+    return { ok: false, error: 'Scénario introuvable ou hors org' };
+  }
+  if (existing.created_by !== user.id) {
+    return {
+      ok: false,
+      error: 'Seul le créateur du scénario peut le modifier',
+    };
+  }
+
+  const update: TablesUpdate<'dilution_scenarios'> = {
+    // Invalidation cache
+    result_cache: null,
+    result_computed_at: null,
+  };
+  if (input.name !== undefined) update.name = input.name;
+  if (input.description !== undefined) update.description = input.description;
+  if (input.isShared !== undefined) update.is_shared = input.isShared;
+  if (input.parameters !== undefined) {
+    // Validation Zod sur le sous-schéma parameters
+    const subParse = createScenarioSchema.shape.parameters.safeParse(input.parameters);
+    if (!subParse.success) return validationError(subParse.error);
+    update.parameters = subParse.data as never;
+    update.scenario_type = subParse.data.scenarioType;
+  }
+
+  const { error: updErr } = await supabase
+    .from('dilution_scenarios')
+    .update(update)
+    .eq('id', idCheck.data)
+    .eq('org_id', user.activeOrgId);
+
+  if (updErr) return { ok: false, error: updErr.message };
+
+  await logAuditEvent({
+    eventType: 'captable.scenario_updated',
+    resourceType: 'dilution_scenarios',
+    resourceId: idCheck.data,
+    metadata: {
+      previous_name: existing.name,
+      previous_scenario_type: existing.scenario_type,
+      changed_fields: Object.keys(update).filter(
+        (k) => k !== 'result_cache' && k !== 'result_computed_at',
+      ),
+    },
+    userId: user.id,
+    userEmail: user.email,
+    orgId: user.activeOrgId,
+  });
+
+  revalidatePath(`/dashboard/captable/scenarios/${idCheck.data}`);
+
+  return { ok: true };
+}
+
+/**
+ * Supprime un scénario. Owner check via RLS (`delete_own` policy 00084).
+ */
+export async function deleteScenario(id: string): Promise<ActionVoid | ActionError> {
+  const idCheck = uuidSchema.safeParse(id);
+  if (!idCheck.success) return { ok: false, error: 'id invalide' };
+
+  const user = await requirePermission('captable.scenario.create');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const supabase = await createSupabaseServerClient();
+
+  const { data: existing, error: loadErr } = await supabase
+    .from('dilution_scenarios')
+    .select('id, created_by, name, scenario_type')
+    .eq('id', idCheck.data)
+    .eq('org_id', user.activeOrgId)
+    .maybeSingle();
+
+  if (loadErr || !existing) {
+    return { ok: false, error: 'Scénario introuvable ou hors org' };
+  }
+  if (existing.created_by !== user.id) {
+    return { ok: false, error: 'Seul le créateur peut supprimer ce scénario' };
+  }
+
+  const { error: delErr } = await supabase
+    .from('dilution_scenarios')
+    .delete()
+    .eq('id', idCheck.data)
+    .eq('org_id', user.activeOrgId);
+
+  if (delErr) return { ok: false, error: delErr.message };
+
+  await logAuditEvent({
+    eventType: 'captable.scenario_deleted',
+    resourceType: 'dilution_scenarios',
+    resourceId: idCheck.data,
+    metadata: {
+      name: existing.name,
+      scenario_type: existing.scenario_type,
+    },
+    userId: user.id,
+    userEmail: user.email,
+    orgId: user.activeOrgId,
+  });
+
+  revalidatePath('/dashboard/captable/scenarios');
+
+  return { ok: true };
+}
+
+/**
+ * Exécute un scénario en appelant `compute_cap_table(p_scenario_id=id)`.
+ * Cache le résultat 24h dans `result_cache`. Si le cache est encore frais,
+ * on retourne directement la valeur cached sans re-call la RPC.
+ *
+ * Pattern : pas une lecture pure car écrit `result_cache` + `result_computed_at`.
+ * Donc Server Action `'use server'` (pas dans `server/queries/`).
+ */
+export async function runScenario(
+  id: string,
+): Promise<ActionOk<{ result: unknown; cached: boolean }> | ActionError> {
+  const idCheck = uuidSchema.safeParse(id);
+  if (!idCheck.success) return { ok: false, error: 'id invalide' };
+
+  const user = await requirePermission('captable.read.all');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const supabase = await createSupabaseServerClient();
+
+  const { data: existing, error: loadErr } = await supabase
+    .from('dilution_scenarios')
+    .select('id, result_cache, result_computed_at')
+    .eq('id', idCheck.data)
+    .eq('org_id', user.activeOrgId)
+    .maybeSingle();
+
+  if (loadErr || !existing) {
+    return { ok: false, error: 'Scénario introuvable ou hors org' };
+  }
+
+  // Cache 24h — si frais, retourne directement
+  if (existing.result_cache && existing.result_computed_at) {
+    const ageMs = Date.now() - new Date(existing.result_computed_at).getTime();
+    if (ageMs < RESULT_CACHE_TTL_MS) {
+      return { ok: true, result: existing.result_cache, cached: true };
+    }
+  }
+
+  // Cache absent ou stale → re-run via RPC
+  const { data: rpcResult, error: rpcErr } = await supabase.rpc('compute_cap_table', {
+    p_org_id: user.activeOrgId,
+    p_asof_date: new Date().toISOString().slice(0, 10),
+    p_scenario_id: idCheck.data,
+    p_view_mode: 'PRO_FORMA',
+  });
+
+  if (rpcErr || !rpcResult) {
+    return { ok: false, error: `compute_cap_table échoué: ${rpcErr?.message ?? 'unknown'}` };
+  }
+
+  // Persist cache (best-effort — si UPDATE fail, on retourne quand même le résultat)
+  await supabase
+    .from('dilution_scenarios')
+    .update({
+      result_cache: rpcResult as never,
+      result_computed_at: new Date().toISOString(),
+    })
+    .eq('id', idCheck.data)
+    .eq('org_id', user.activeOrgId);
+
+  return { ok: true, result: rpcResult, cached: false };
 }

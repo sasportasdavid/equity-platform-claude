@@ -30,6 +30,11 @@ const { TEST_ORG_ID, TEST_USER_ID, mockState, makeBuilder, rpcMock, requirePermi
       roundLookup: { data: unknown; error: unknown };
       roundUpdate: { error: unknown };
       rpcResult: { data: unknown; error: unknown };
+      // dilution_scenarios (B4)
+      insertScenario: { data: unknown; error: unknown };
+      scenarioLookup: { data: unknown; error: unknown };
+      scenarioUpdate: { error: unknown };
+      scenarioDelete: { error: unknown };
     };
 
     const mockState: MockState = {
@@ -54,6 +59,20 @@ const { TEST_ORG_ID, TEST_USER_ID, mockState, makeBuilder, rpcMock, requirePermi
       },
       roundUpdate: { error: null },
       rpcResult: { data: 'rnd-uuid-1', error: null },
+      insertScenario: { data: { id: 'sc-uuid-2' }, error: null },
+      scenarioLookup: {
+        data: {
+          id: 'sc-uuid-2',
+          created_by: TEST_USER_ID,
+          scenario_type: 'NEW_ROUND',
+          name: 'Test scenario',
+          result_cache: null,
+          result_computed_at: null,
+        },
+        error: null,
+      },
+      scenarioUpdate: { error: null },
+      scenarioDelete: { error: null },
     };
 
     const requirePermissionMock = vi.fn();
@@ -68,12 +87,22 @@ const { TEST_ORG_ID, TEST_USER_ID, mockState, makeBuilder, rpcMock, requirePermi
       b.is = noop;
       b.update = (_payload: unknown) => {
         void _payload;
+        const updateKey =
+          table === 'share_classes'
+            ? 'shareClassUpdate'
+            : table === 'dilution_scenarios'
+              ? 'scenarioUpdate'
+              : 'roundUpdate';
         return {
           eq: () => ({
-            eq: () =>
-              Promise.resolve(
-                mockState[table === 'share_classes' ? 'shareClassUpdate' : 'roundUpdate'],
-              ),
+            eq: () => Promise.resolve(mockState[updateKey]),
+          }),
+        };
+      };
+      b.delete = () => {
+        return {
+          eq: () => ({
+            eq: () => Promise.resolve(mockState.scenarioDelete),
           }),
         };
       };
@@ -81,7 +110,12 @@ const { TEST_ORG_ID, TEST_USER_ID, mockState, makeBuilder, rpcMock, requirePermi
         void _payload;
         return {
           select: () => ({
-            single: () => Promise.resolve(mockState.insertShareClass),
+            single: () =>
+              Promise.resolve(
+                table === 'dilution_scenarios'
+                  ? mockState.insertScenario
+                  : mockState.insertShareClass,
+              ),
           }),
         };
       };
@@ -89,6 +123,7 @@ const { TEST_ORG_ID, TEST_USER_ID, mockState, makeBuilder, rpcMock, requirePermi
         if (table === 'share_classes') return Promise.resolve(mockState.shareClassLookup);
         if (table === 'funding_rounds') return Promise.resolve(mockState.roundLookup);
         if (table === 'approval_workflows') return Promise.resolve(mockState.workflowLookup);
+        if (table === 'dilution_scenarios') return Promise.resolve(mockState.scenarioLookup);
         return Promise.resolve({ data: null, error: null });
       };
       // SELECT + count chained
@@ -131,8 +166,12 @@ vi.mock('@/lib/supabase/server', () => ({
 import {
   cancelFundingRound,
   createFundingRound,
+  createScenario,
   createShareClass,
   deactivateShareClass,
+  deleteScenario,
+  runScenario,
+  updateScenario,
   updateShareClass,
 } from '../cap-table';
 
@@ -171,6 +210,20 @@ beforeEach(() => {
   };
   mockState.roundUpdate = { error: null };
   mockState.rpcResult = { data: 'rnd-uuid-1', error: null };
+  mockState.insertScenario = { data: { id: 'sc-uuid-2' }, error: null };
+  mockState.scenarioLookup = {
+    data: {
+      id: 'sc-uuid-2',
+      created_by: TEST_USER_ID,
+      scenario_type: 'NEW_ROUND',
+      name: 'Test scenario',
+      result_cache: null,
+      result_computed_at: null,
+    },
+    error: null,
+  };
+  mockState.scenarioUpdate = { error: null };
+  mockState.scenarioDelete = { error: null };
 });
 
 // ---------------------------------------------------------------------------
@@ -403,6 +456,262 @@ describe('cancelFundingRound', () => {
 
   it('Zod fail : reason trop courte', async () => {
     const result = await cancelFundingRound({ ...validInput, reason: 'no' });
+    expect(result.ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. createScenario (B4)
+// ---------------------------------------------------------------------------
+
+describe('createScenario (B4)', () => {
+  const validNewRoundInput = {
+    name: 'Series B simulation',
+    description: 'Hypothèse 10M€ post-money',
+    isShared: false,
+    parameters: {
+      scenarioType: 'NEW_ROUND' as const,
+      shareClassCode: 'PREF_B',
+      preMoney: 30_000_000,
+      amountRaised: 10_000_000,
+      pricePerShare: 200,
+      antiDilutionApply: false,
+      investorName: 'Lead VC B',
+    },
+  };
+
+  it('happy NEW_ROUND : INSERT + return id', async () => {
+    const result = await createScenario(validNewRoundInput);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.id).toBe('sc-uuid-2');
+  });
+
+  it('happy POOL_TOPUP', async () => {
+    const result = await createScenario({
+      name: 'Pool top-up 5%',
+      isShared: true,
+      parameters: {
+        scenarioType: 'POOL_TOPUP',
+        additionalUnits: 5000,
+        targetPoolPercentPost: 15,
+      },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('happy EXIT', async () => {
+    const result = await createScenario({
+      name: 'Exit 100M€',
+      isShared: false,
+      parameters: {
+        scenarioType: 'EXIT',
+        exitValuation: 100_000_000,
+        exitDate: '2028-06-01',
+        conversionStrategy: 'AUTO_BEST',
+      },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('Zod fail : scenarioType invalide', async () => {
+    const result = await createScenario({
+      name: 'Invalid',
+      // @ts-expect-error — test runtime
+      parameters: { scenarioType: 'UNKNOWN_TYPE' },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('Zod fail : name trop court', async () => {
+    const result = await createScenario({
+      ...validNewRoundInput,
+      name: 'a',
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('DB error : INSERT fail', async () => {
+    mockState.insertScenario = { data: null, error: { message: 'rls violation' } };
+    const result = await createScenario(validNewRoundInput);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/rls violation/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. updateScenario (B4)
+// ---------------------------------------------------------------------------
+
+describe('updateScenario (B4)', () => {
+  const validId = '00000000-0000-4000-8000-000000000030';
+
+  it('happy : update name only + invalidate cache', async () => {
+    const result = await updateScenario(validId, { name: 'Renamed' });
+    expect(result.ok).toBe(true);
+  });
+
+  it('happy : update parameters change scenario_type aussi', async () => {
+    const result = await updateScenario(validId, {
+      parameters: {
+        scenarioType: 'POOL_TOPUP',
+        additionalUnits: 1000,
+      },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('refus : autre user que le créateur', async () => {
+    mockState.scenarioLookup = {
+      data: {
+        id: validId,
+        created_by: 'another-user-uuid',
+        scenario_type: 'NEW_ROUND',
+        name: 'Test',
+      },
+      error: null,
+    };
+    const result = await updateScenario(validId, { name: 'Hijack' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/créateur/i);
+  });
+
+  it('refus : aucun champ à modifier', async () => {
+    const result = await updateScenario(validId, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/Aucun champ/i);
+  });
+
+  it('refus : 404', async () => {
+    mockState.scenarioLookup = { data: null, error: null };
+    const result = await updateScenario(validId, { name: 'X' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/introuvable/i);
+  });
+
+  it('Zod fail : id invalide', async () => {
+    const result = await updateScenario('not-a-uuid', { name: 'X' });
+    expect(result.ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. deleteScenario (B4)
+// ---------------------------------------------------------------------------
+
+describe('deleteScenario (B4)', () => {
+  const validId = '00000000-0000-4000-8000-000000000031';
+
+  it('happy : owner peut delete', async () => {
+    const result = await deleteScenario(validId);
+    expect(result.ok).toBe(true);
+  });
+
+  it('refus : non-owner', async () => {
+    mockState.scenarioLookup = {
+      data: {
+        id: validId,
+        created_by: 'another-user-uuid',
+        scenario_type: 'EXIT',
+        name: 'Big Exit',
+      },
+      error: null,
+    };
+    const result = await deleteScenario(validId);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/créateur/i);
+  });
+
+  it('refus : 404', async () => {
+    mockState.scenarioLookup = { data: null, error: null };
+    const result = await deleteScenario(validId);
+    expect(result.ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. runScenario (B4) — cache 24h
+// ---------------------------------------------------------------------------
+
+describe('runScenario (B4)', () => {
+  const validId = '00000000-0000-4000-8000-000000000032';
+
+  it('cache miss : appelle RPC + persiste cache', async () => {
+    mockState.scenarioLookup = {
+      data: {
+        id: validId,
+        result_cache: null,
+        result_computed_at: null,
+      },
+      error: null,
+    };
+    mockState.rpcResult = {
+      data: { positions: [], grand_total_units: 0 },
+      error: null,
+    };
+    const result = await runScenario(validId);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.cached).toBe(false);
+      expect(result.result).toBeDefined();
+    }
+  });
+
+  it('cache hit : retourne cached sans RPC', async () => {
+    mockState.scenarioLookup = {
+      data: {
+        id: validId,
+        result_cache: { cached: true, positions: [] },
+        result_computed_at: new Date().toISOString(), // cache frais
+      },
+      error: null,
+    };
+    const result = await runScenario(validId);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.cached).toBe(true);
+    }
+  });
+
+  it('cache stale (>24h) : re-call RPC', async () => {
+    mockState.scenarioLookup = {
+      data: {
+        id: validId,
+        result_cache: { stale: true },
+        result_computed_at: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+      },
+      error: null,
+    };
+    mockState.rpcResult = {
+      data: { positions: ['fresh'], grand_total_units: 1 },
+      error: null,
+    };
+    const result = await runScenario(validId);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.cached).toBe(false);
+    }
+  });
+
+  it('refus : 404', async () => {
+    mockState.scenarioLookup = { data: null, error: null };
+    const result = await runScenario(validId);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/introuvable/i);
+  });
+
+  it('error path : RPC fail', async () => {
+    mockState.scenarioLookup = {
+      data: { id: validId, result_cache: null, result_computed_at: null },
+      error: null,
+    };
+    mockState.rpcResult = { data: null, error: { message: 'compute failed' } };
+    const result = await runScenario(validId);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/compute_cap_table échoué/);
+  });
+
+  it('Zod fail : id invalide', async () => {
+    const result = await runScenario('not-a-uuid');
     expect(result.ok).toBe(false);
   });
 });
