@@ -144,6 +144,116 @@ principale (Tab Tableau / Camembert / Waterfall / Évolution).
 auto-memory. À noter : Module 10 devrait produire un `module_10_complete.md`
 final (pas seulement des sub-blocks).
 
+## 7.bis Vérifications post-arbitrage (avant B1)
+
+### Roles existants (confirmation Q4)
+
+```sql
+SELECT DISTINCT role FROM role_permissions ORDER BY role;
+```
+
+Résultat : `ADMIN_HR`, `APPROVER`, `AUDITOR`, `BENEFICIARY`, `OWNER`. Pas
+de `ADMIN_FINANCE` — confirmé. Q4 final adopté :
+
+| Permission                          | OWNER | ADMIN_HR | APPROVER | AUDITOR | BENEFICIARY |
+| ----------------------------------- | ----- | -------- | -------- | ------- | ----------- |
+| `cap_table.read.all`                | ✅    | ✅       | ✅       | ✅      | ❌          |
+| `cap_table.read.own`                | ✅    | ✅       | ✅       | ✅      | ✅          |
+| `share_classes.read`                | ✅    | ✅       | ✅       | ✅      | ❌          |
+| `share_classes.create`              | ✅    | ❌       | ❌       | ❌      | ❌          |
+| `share_classes.update`              | ✅    | ❌       | ❌       | ❌      | ❌          |
+| `share_classes.deactivate`          | ✅    | ❌       | ❌       | ❌      | ❌          |
+| `funding_rounds.read`               | ✅    | ✅       | ✅       | ✅      | ❌          |
+| `funding_rounds.create`             | ✅    | ❌       | ❌       | ❌      | ❌          |
+| `funding_rounds.cancel`             | ✅    | ❌       | ❌       | ❌      | ❌          |
+| `dilution_scenarios.read`           | ✅    | ✅       | ❌       | ❌      | ❌          |
+| `dilution_scenarios.create`         | ✅    | ✅       | ❌       | ❌      | ❌          |
+| `dilution_scenarios.run_montecarlo` | ✅    | ✅       | ❌       | ❌      | ❌          |
+| `dilution_scenarios.delete`         | ✅    | ❌       | ❌       | ❌      | ❌          |
+| `cap_table_snapshots.create`        | ✅    | ❌       | ❌       | ❌      | ❌          |
+| `cap_table.import_csv`              | ✅    | ❌       | ❌       | ❌      | ❌          |
+
+### Schéma `permissions_catalog` + `role_permissions`
+
+`permissions_catalog` : `code TEXT NOT NULL`, `category TEXT NOT NULL`,
+`description TEXT`, `is_dangerous BOOLEAN NOT NULL`.
+
+`role_permissions` : `role TEXT NOT NULL`, `permission_code TEXT NOT NULL`.
+
+→ INSERT ... ON CONFLICT DO NOTHING en migration 00089.
+
+### `cap_table_snapshots` — schéma complet (Q1)
+
+11 colonnes existantes, defaults inclus :
+
+| Col                          | Type        | NOT NULL | Default             |
+| ---------------------------- | ----------- | -------- | ------------------- |
+| `id`                         | UUID        | YES      | `gen_random_uuid()` |
+| `org_id`                     | UUID        | YES      | —                   |
+| `company_id`                 | UUID        | YES      | —                   |
+| `snapshot_date`              | DATE        | YES      | —                   |
+| `snapshot_type`              | TEXT        | YES      | —                   |
+| `trigger_event`              | TEXT        | NO       | —                   |
+| `data`                       | JSONB       | YES      | —                   |
+| `total_shares_outstanding`   | BIGINT      | NO       | —                   |
+| `total_shares_fully_diluted` | BIGINT      | NO       | —                   |
+| `created_at`                 | TIMESTAMPTZ | YES      | `now()`             |
+| `created_by`                 | UUID        | NO       | —                   |
+
+Colonnes à ADD en 00083 :
+
+- `name TEXT` (label snapshot pour UI list)
+- `is_immutable BOOLEAN NOT NULL DEFAULT FALSE`
+- `funding_round_id UUID REFERENCES funding_rounds(id)` (auto-snapshot post-round)
+- `notes TEXT`
+- `updated_at TIMESTAMPTZ NOT NULL DEFAULT now()` (cohérence trigger)
+
+⚠️ Les colonnes `total_shares_outstanding` / `total_shares_fully_diluted`
+sont en `BIGINT` (pas NUMERIC). La spec §2.4 attendait probablement
+NUMERIC(20,4) pour les fractions de shares. **Décision** : garder BIGINT
+pour ces 2 colonnes (les snapshots agrègent en entiers ; les fractions
+existent dans `cap_table_positions.units` NUMERIC(20,4) si besoin).
+
+### ⚠️ `audit_table_changes()` n'existe PAS — switch pattern audit
+
+La spec §2.x mentionne `CREATE TRIGGER ... EXECUTE FUNCTION audit_table_changes()`
+sur chaque table. **La fonction n'existe pas en DB**. Vérification :
+
+```sql
+SELECT proname FROM pg_proc WHERE proname = 'audit_table_changes';
+-- 0 rows
+```
+
+Le pattern réel des Modules 4-9 est :
+
+- **Pas de trigger AFTER ... audit_table_changes()**
+- À la place : `logAuditEvent({...})` côté Server Action après chaque mutation
+
+Vérifié : seul 1 trigger audit existe (`trg_approval_decision_audit` sur
+`approval_decisions`, pattern custom Module 5).
+
+→ **Décision recon** : skip les `CREATE TRIGGER ... audit` dans toutes les
+migrations B1. L'audit sera loggé via Server Actions en B2 avec la fonction
+`logAuditEvent` du repo (`apps/web/src/lib/audit.ts`). Cohérent avec M4-M9.
+
+→ Documenter dans le commit B1 cet **erratum spec** : "Triggers audit
+substitués par logAuditEvent côté Server Actions".
+
+### Helpers DB disponibles
+
+- ✅ `current_org_id()` : retourne `auth.jwt()->>'active_org_id'::UUID`
+- ✅ `user_has_permission(p_perm TEXT)` : check via membership/role mapping
+- ✅ `set_updated_at()` : trigger function pour updated_at (utiliser celle-ci, pas `update_updated_at_column` qui existe aussi)
+- ❌ `audit_table_changes()` : **inexistant**, ne pas utiliser
+
+Pattern trigger updated_at à utiliser :
+
+```sql
+CREATE TRIGGER set_<table>_updated_at
+  BEFORE UPDATE ON <table>
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+```
+
 ## 8. 5 questions / arbitrages user avant B2
 
 ### Q1 — `cap_table_snapshots` existante : ALTER ou CREATE ?
