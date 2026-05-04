@@ -25,6 +25,9 @@ function makeBuilder(table: string) {
   const noop = () => builder;
   builder.select = noop;
   builder.eq = noop;
+  builder.is = noop;
+  builder.not = noop;
+  builder.in = noop;
   builder.maybeSingle = () => {
     if (table === 'plans') return Promise.resolve(mockState.planRow);
     if (table === 'beneficiaries') return Promise.resolve(mockState.beneficiaryRow);
@@ -353,6 +356,105 @@ describe('runComplianceChecks — Module 12.5 B1 effective rules wiring', () => 
     const { runComplianceChecks } = await import('../runChecks');
     const res = await runComplianceChecks('AWARD_PROPOSAL', { ...validInput, unitsGranted: 200 });
     expect(res.errors.find((e) => e.code === 'POOL_AVAILABLE')).toBeUndefined();
+
+    loadEff.mockReset();
+    loadEff.mockResolvedValue(null);
+  });
+});
+
+// ===========================================================================
+// Module 12.5 B2 — runBeneficiaryComplianceChecks
+// ===========================================================================
+
+const validBeneficiaryInput = {
+  id: null,
+  email: 'jean.dupont@example.com',
+  firstName: 'Jean',
+  lastName: 'Dupont',
+  beneficiaryType: 'EMPLOYEE',
+  taxResidence: 'FR',
+  isTaxResidentFrance: true,
+  hireDate: null as string | null,
+};
+
+describe('runBeneficiaryComplianceChecks — Module 12.5 B2 effective rules wiring', () => {
+  it('HIRE_DATE_REASONABLE désactivée DB → 1850 passe (admin off-switch)', async () => {
+    const effMod = await import('../effectiveRules');
+    const loadEff = vi.mocked(effMod.loadEffectiveRule);
+    loadEff.mockImplementation(async (code) => {
+      if (code === 'HIRE_DATE_REASONABLE') {
+        return makeEffectiveRule('HIRE_DATE_REASONABLE', {
+          scope: 'beneficiary',
+          is_active: false,
+          effective_severity: 'warning',
+        });
+      }
+      return null;
+    });
+
+    const { runBeneficiaryComplianceChecks } = await import('../runChecks');
+    const res = await runBeneficiaryComplianceChecks(
+      { ...validBeneficiaryInput, hireDate: '1850-01-01' },
+      'org-uuid',
+    );
+    expect(res.errors.find((e) => e.code === 'HIRE_DATE_INVALID')).toBeUndefined();
+
+    loadEff.mockReset();
+    loadEff.mockResolvedValue(null);
+  });
+
+  it('HIRE_DATE_REASONABLE param minYear=1950 → 1949 ERROR HIRE_DATE_INVALID', async () => {
+    const effMod = await import('../effectiveRules');
+    const loadEff = vi.mocked(effMod.loadEffectiveRule);
+    loadEff.mockImplementation(async (code) => {
+      if (code === 'HIRE_DATE_REASONABLE') {
+        return makeEffectiveRule('HIRE_DATE_REASONABLE', {
+          scope: 'beneficiary',
+          is_active: true,
+          effective_severity: 'warning',
+          effective_params: { minYear: 1950, maxFutureMonths: 3 },
+        });
+      }
+      return null;
+    });
+
+    const { runBeneficiaryComplianceChecks } = await import('../runChecks');
+    const res = await runBeneficiaryComplianceChecks(
+      { ...validBeneficiaryInput, hireDate: '1949-12-31' },
+      'org-uuid',
+    );
+    // Note : la rule HIRE_DATE_REASONABLE est `enforcement: 'soft'`, donc le
+    // sub-issue ERROR (HIRE_DATE_INVALID, severity hardcoded #114) atterrit
+    // dans `warnings[]` (le runner bucket par enforcement, pas par severity).
+    const issue = res.warnings.find((w) => w.code === 'HIRE_DATE_INVALID');
+    expect(issue).toBeDefined();
+    expect(issue?.severity).toBe('ERROR');
+
+    loadEff.mockReset();
+    loadEff.mockResolvedValue(null);
+  });
+
+  it('TAX_RESIDENCE_FRANCE_CONSISTENCY désactivée → UK + isFR=true passe', async () => {
+    const effMod = await import('../effectiveRules');
+    const loadEff = vi.mocked(effMod.loadEffectiveRule);
+    loadEff.mockImplementation(async (code) => {
+      if (code === 'TAX_RESIDENCE_FRANCE_CONSISTENCY') {
+        return makeEffectiveRule('TAX_RESIDENCE_FRANCE_CONSISTENCY', {
+          scope: 'beneficiary',
+          is_active: false,
+          effective_severity: 'warning',
+        });
+      }
+      return null;
+    });
+
+    const { runBeneficiaryComplianceChecks } = await import('../runChecks');
+    const res = await runBeneficiaryComplianceChecks(
+      { ...validBeneficiaryInput, taxResidence: 'UK', isTaxResidentFrance: true },
+      'org-uuid',
+    );
+    expect(res.errors.find((e) => e.code === 'TAX_RESIDENCE_FRANCE_CONSISTENCY')).toBeUndefined();
+    expect(res.warnings.find((w) => w.code === 'TAX_RESIDENCE_FRANCE_CONSISTENCY')).toBeUndefined();
 
     loadEff.mockReset();
     loadEff.mockResolvedValue(null);

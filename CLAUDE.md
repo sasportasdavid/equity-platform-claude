@@ -774,16 +774,23 @@ proxy.
 110-116. **Dettes Module 12 (PR #28)** — voir
 `memory/module_12_complete.md`. Notable :
 
-- **#110 Wiring partiel rules → effective params** : Module 12.5 B1
-  livré 2026-05-04 (branche `feat/module-12-5-wiring-21-rules`,
-  pré-PR) — 5 award rules wired (BSPCE_BENEFICIARY_TYPE, AGA_30_PERCENT_CAP,
-  AGA_APPROACHING_CAP, POOL_AVAILABLE, GRANT_DATE_RECENT) avec helper
-  `_helpers.ts` partagé + extension `runComplianceChecks`. **16 rules
-  restantes** (beneficiary 6, cap_table 4, document 3, approval 3) encore
-  hardcoded V1 → planifié B2-B5 du même chantier (~1.5h chacun, pattern
-  établi). Effet actuel : la page UI Module 12 impacte runtime pour
-  `valuation` (Module 12 B2) + `award` (Module 12.5 B1). Les 4 autres
-  scopes affichent les configs mais ne les lisent pas encore.
+- **#110 Wiring partiel rules → effective params** : Module 12.5 B1+B2
+  livrés 2026-05-04 (branche `feat/module-12-5-wiring-21-rules`, pré-PR).
+  - **B1** : 5 award rules wired (BSPCE_BENEFICIARY_TYPE, AGA_30_PERCENT_CAP,
+    AGA_APPROACHING_CAP, POOL_AVAILABLE, GRANT_DATE_RECENT) avec helper
+    `_helpers.ts` partagé + extension `runComplianceChecks`.
+  - **B2** : 6 beneficiary rules wired (EMAIL_UNIQUE_IN_ORG,
+    TAX_RESIDENCE_FRANCE_CONSISTENCY, HIRE_DATE_REASONABLE, MANAGER_NOT_SELF,
+    IBAN_FORMAT, BSPCE_BENEFICIARY_TYPE_REVERSE) + extension
+    `runBeneficiaryComplianceChecks`. HIRE_DATE_REASONABLE évolue V1.X
+    (`maxFutureMonths` default 3 — précédemment warning sur n'importe
+    quel futur). Anomalie #114 préservée (sub-rule HIRE_DATE_INVALID
+    reste ERROR hardcoded).
+  - **10 rules restantes** (cap_table 4, document 3, approval 3) → B3-B4.
+  - Effet actuel : la page UI Module 12 impacte runtime pour `valuation`
+    (Module 12 B2) + `award` (B1) + `beneficiary` (B2). Les 3 autres scopes
+    (cap_table, document, approval) affichent les configs mais ne les
+    lisent pas encore.
 - **#111 Severity drift code/DB** : 4 rules ont severity ajustée en DB
   (TAX_RESIDENCE, WORKFLOW_REQUIRED_FOR_AGA, FMV_RECENT_ENOUGH,
   BSPCE_BENEFICIARY_TYPE_REVERSE). Le checker code n'utilise pas

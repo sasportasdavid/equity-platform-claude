@@ -251,12 +251,26 @@ export async function runComplianceChecks(
 // ---------------------------------------------------------------------------
 
 /**
- * Helper compliance bénéficiaires — Module 4 B2.
+ * Helper compliance bénéficiaires — Module 4 B2 + Module 12.5 B2.
  *
- * Charge le ctx serveur (collision email intra-org) puis exécute les 5 rules
- * BENEFICIARY_RULES en parallèle. Appelé depuis createBeneficiary +
- * updateBeneficiary (Server Actions). Pas dans bulkCreateBeneficiaries (V1).
+ * Charge le ctx serveur (collision email intra-org + BSPCE active count
+ * + 6 effective rules config) puis exécute les rules actives en parallèle.
+ * Appelé depuis createBeneficiary + updateBeneficiary (Server Actions).
+ * Pas dans bulkCreateBeneficiaries (V1).
+ *
+ * Module 12.5 B2 — Pré-charge les 6 beneficiary rules effective config
+ * en parallèle (pattern Module 12 B2 + Module 12.5 B1). Si DB indispo,
+ * fallback legacy (constantes hard-codées dans les rules).
  */
+const BENEFICIARY_RULE_CODES: RuleCode[] = [
+  'EMAIL_UNIQUE_IN_ORG',
+  'TAX_RESIDENCE_FRANCE_CONSISTENCY',
+  'HIRE_DATE_REASONABLE',
+  'MANAGER_NOT_SELF',
+  'IBAN_FORMAT',
+  'BSPCE_BENEFICIARY_TYPE_REVERSE',
+];
+
 export async function runBeneficiaryComplianceChecks(
   input: BeneficiaryCheckInput,
   orgId: string,
@@ -265,12 +279,13 @@ export async function runBeneficiaryComplianceChecks(
 
   // Charge la collision email intra-org (pour EMAIL_UNIQUE_IN_ORG) +
   // optionnellement le count BSPCE actifs (Module 4 B6 — uniquement si on
-  // update vers un type risqué CONSULTANT/EXTERNAL).
+  // update vers un type risqué CONSULTANT/EXTERNAL) + 6 effective rules
+  // config (Module 12.5 B2). Tout en parallèle.
   const needsBspceCheck =
     input.id != null &&
     (input.beneficiaryType === 'CONSULTANT' || input.beneficiaryType === 'EXTERNAL');
 
-  const [existingRes, bspceRes] = await Promise.all([
+  const [existingRes, bspceRes, ...effectiveRules] = await Promise.all([
     supabase
       .from('beneficiaries')
       .select('id')
@@ -287,16 +302,39 @@ export async function runBeneficiaryComplianceChecks(
           .not('status', 'in', '(CANCELLED,FORFEITED,EXPIRED,FULLY_EXERCISED)')
           .is('deleted_at', null)
       : Promise.resolve({ count: null as number | null }),
+    ...BENEFICIARY_RULE_CODES.map((code) => loadEffectiveRule(code)),
   ]);
+
+  // Module 12.5 B2 — Construit les maps params + severity pour le ctx.
+  // `is_active=false` côté DB → on exclut la rule du registry.
+  const effectiveParamsByRule: Record<string, Record<string, unknown>> = {};
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  const activeCodes = new Set<string>(BENEFICIARY_RULE_CODES);
+
+  for (let i = 0; i < BENEFICIARY_RULE_CODES.length; i++) {
+    const code = BENEFICIARY_RULE_CODES[i]!;
+    const eff = effectiveRules[i];
+    if (!eff) continue; // DB indispo / rule absente → fallback legacy
+    if (!eff.is_active) {
+      activeCodes.delete(code);
+      continue;
+    }
+    effectiveParamsByRule[code] = eff.effective_params;
+    effectiveSeverityByRule[code] = eff.effective_severity;
+  }
 
   const ctx: BeneficiaryCheckContext = {
     orgId,
     beneficiary: input.id ? { id: input.id, email: input.email } : null,
     emailCollisionId: existingRes.data?.id ?? null,
     bspceActiveAwardsCount: needsBspceCheck ? (bspceRes.count ?? 0) : null,
+    effectiveParamsByRule,
+    effectiveSeverityByRule,
   };
 
-  return runRules(BENEFICIARY_RULES, input, ctx);
+  // Filtre les rules actives DB Module 12.5 B2
+  const activeRules = BENEFICIARY_RULES.filter((rule) => activeCodes.has(rule.code));
+  return runRules(activeRules, input, ctx);
 }
 
 // ---------------------------------------------------------------------------

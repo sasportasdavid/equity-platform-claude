@@ -120,6 +120,22 @@ export type BeneficiaryCheckContext = {
    * `null` = check non lancé (ex: création, ou nouveau type compatible BSPCE).
    */
   bspceActiveAwardsCount?: number | null;
+  /**
+   * Module 12.5 B2 — Map ruleCode → params merged depuis DB. Lus via
+   * `readNumberParam(ctx, ruleCode, paramName, default)` côté checkers
+   * (helper partagé `rules/_helpers.ts`). Pré-chargé par
+   * `runBeneficiaryComplianceChecks` pour les 6 beneficiary rules.
+   */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /**
+   * Module 12.5 B2 — Map ruleCode → severity merged DB.
+   *
+   * ⚠️ Cas spécial HIRE_DATE_REASONABLE (dette V2 #114) : la rule émet
+   * 2 sub-codes avec severities distinctes (HIRE_DATE_INVALID hardcoded
+   * `error` si year < minYear, HIRE_DATE_FUTURE configurable depuis DB
+   * via cette map). Le split en 2 rules sera fait V2.
+   */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 export type ComplianceCheckResult = {
