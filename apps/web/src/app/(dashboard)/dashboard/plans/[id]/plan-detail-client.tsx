@@ -350,7 +350,10 @@ function Ifrs2Tab({ detail }: { detail: PlanDetail }) {
             <div className="h-[280px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={cumulData} margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  {/* Bug fix 2026-05-05 : `hsl(var(--border))` invalide car
+                      tokens DS V1 stockent les couleurs en HEX direct (pas
+                      triplet HSL). Cf valuation-detail-client.tsx pour détails. */}
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(120, 113, 108, 0.4)" />
                   <XAxis
                     dataKey="date"
                     tick={{ fontSize: 11 }}
