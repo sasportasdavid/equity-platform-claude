@@ -18,9 +18,10 @@
  * `useMonteCarloReplay` réutilisable). En B3 : implémentation inline simple.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useImperativeHandle, useRef } from 'react';
 import type { PathSampleMetadata } from '@equity/shared';
-import { PATH_COLORS, colorForPath, computeBounds, easeOutCubic } from './helpers';
+import { PATH_COLORS, colorForPath, computeBounds } from './helpers';
+import { useMonteCarloReplay } from './useMonteCarloReplay';
 
 export type PathsCanvasProps = {
   /** Tableaux 2D des trajectoires : paths[i][step] = price */
@@ -35,10 +36,23 @@ export type PathsCanvasProps = {
   numSteps: number;
   /** Horizon en années (label en bas-droite) */
   simT: number;
-  /** Active l'animation cinématique progressive au mount */
+  /** Active l'animation cinématique progressive au mount (default false). */
   enableReplay?: boolean;
   /** Devise pour les labels (default EUR) */
   currency?: string;
+  /**
+   * Callback à chaque frame de l'animation. Permet au parent de synchroniser
+   * d'autres animations (ex: count-up KPI) sur la même progression eased.
+   */
+  onProgress?: (progress: number) => void;
+  /** Callback quand l'animation atteint 1 (one-shot). */
+  onReplayComplete?: () => void;
+  /**
+   * Ref handle pour permettre au parent de relancer l'animation depuis 0
+   * (ex: bouton "Relancer la simulation" → restart côté client sans
+   * nouveau call moteur).
+   */
+  controlsRef?: React.RefObject<{ restart: () => void } | null>;
 };
 
 const REPLAY_DURATION_MS = 5000;
@@ -61,8 +75,24 @@ export function PathsCanvas({
   simT,
   enableReplay = false,
   currency = 'EUR',
+  onProgress,
+  onReplayComplete,
+  controlsRef,
 }: PathsCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Animation centrale : drive par le hook useMonteCarloReplay (default 5s
+  // ease-out cubic) ou progress=1 si enableReplay=false.
+  const { progress, restart } = useMonteCarloReplay({
+    durationMs: REPLAY_DURATION_MS,
+    easing: 'easeOutCubic',
+    enabled: enableReplay,
+    onProgress,
+    onComplete: onReplayComplete,
+  });
+
+  // Expose restart() au parent via le ref handle
+  useImperativeHandle(controlsRef ?? { current: null }, () => ({ restart }), [restart]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -143,29 +173,11 @@ export function PathsCanvas({
       ctx.fillText(`T = ${simT}y`, cssWidth - 4, cssHeight - 4);
     };
 
-    if (!enableReplay) {
-      draw(paths.length);
-      return;
-    }
-
-    // Animation cinématique 5 sec ease-out cubic
-    let frameId: number;
-    const startTime = performance.now();
-
-    const animate = (now: number) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / REPLAY_DURATION_MS, 1);
-      const eased = easeOutCubic(progress);
-      const visiblePathCount = Math.max(1, Math.floor(paths.length * eased));
-      draw(visiblePathCount);
-      if (progress < 1) {
-        frameId = requestAnimationFrame(animate);
-      }
-    };
-
-    frameId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frameId);
-  }, [paths, metadata, S0, barrier, numSteps, simT, enableReplay, currency]);
+    // Animation drivée par `progress` du hook useMonteCarloReplay.
+    // Quand enableReplay=false, progress reste à 1 → render full statique.
+    const visiblePathCount = Math.max(1, Math.floor(paths.length * progress));
+    draw(visiblePathCount);
+  }, [paths, metadata, S0, barrier, numSteps, simT, currency, progress]);
 
   return (
     <div className="border-paper-300 bg-paper-50 rounded-md border p-3" data-testid="paths-canvas">

@@ -77,6 +77,57 @@ export function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
 
+/**
+ * Identité (no easing) — démarre à constant rate, finit à constant rate.
+ *  - t=0 → 0
+ *  - t=0.5 → 0.5
+ *  - t=1 → 1
+ *
+ * Utilisé pour les progressions linéaires (count-up régulier) ou pour les
+ * animations où on veut le contrôle direct sur le tempo.
+ */
+export function easeLinear(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t;
+}
+
+/**
+ * Quadratic ease-in-out — accélère puis décélère, courbe symétrique.
+ *  - t=0 → 0
+ *  - t=0.25 → 0.125
+ *  - t=0.5 → 0.5
+ *  - t=0.75 → 0.875
+ *  - t=1 → 1
+ *
+ * Plus doux que `easeOutCubic` au démarrage, utile pour des transitions
+ * type fade-in sans le "kick" initial.
+ */
+export function easeInOutQuad(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+export type EasingName = 'linear' | 'easeOutCubic' | 'easeInOutQuad';
+
+/**
+ * Résout un nom d'easing vers la fonction correspondante. Permet aux callers
+ * de passer une string sérialisable (props composant, fixtures de test) au
+ * lieu d'une référence de fonction.
+ */
+export function resolveEasing(name: EasingName): (t: number) => number {
+  switch (name) {
+    case 'linear':
+      return easeLinear;
+    case 'easeInOutQuad':
+      return easeInOutQuad;
+    case 'easeOutCubic':
+    default:
+      return easeOutCubic;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Hit rate (MonteCarloViewer KPI)
 // ---------------------------------------------------------------------------

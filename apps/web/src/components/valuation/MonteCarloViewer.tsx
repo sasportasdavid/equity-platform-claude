@@ -1,21 +1,30 @@
 'use client';
 
 /**
- * Module 11 B3 — `MonteCarloViewer.tsx`.
+ * Module 11 B3 + B4 — `MonteCarloViewer.tsx`.
  *
  * Composant orchestrateur du viewer Monte Carlo. Reçoit la response complète
  * d'un valuation_run SUCCESS + les inputs originaux, organise l'affichage
  * editorial premium (cf MODULE_11 §4.2).
  *
+ * B4 polish :
+ *   - Lifted state `replayProgress` partagé entre PathsCanvas et le KPI
+ *     "Juste valeur" pour un count-up synchronisé avec le replay des paths.
+ *   - Bouton "Relancer la simulation" → appelle `restart()` exposé par
+ *     PathsCanvas via un ref handle (pas de nouveau call moteur). Le
+ *     callback `onRelaunch` parent reste optionnel pour V1.5+ qui voudra
+ *     déclencher un vrai recompute.
+ *
  * Layout :
- *   - Header : titre éditorial + bouton "Relancer la simulation" (si callback)
+ *   - Header : titre éditorial + bouton "Relancer la simulation"
  *   - ParametersCard (chips) — full width
- *   - PathsCanvas (h-96) — full width
- *   - 4 KPICards — grid 1/2/4 cols responsive
+ *   - PathsCanvas (h-96) — full width avec replay cinématique
+ *   - 4 KPICards — FV avec count-up animé, 3 autres statiques
  *   - ConvergenceChart + PayoffHistogram — grid 1/2 cols
  *   - AuditPanel (collapsed) — full width
  */
 
+import { useRef, useState } from 'react';
 import { RotateCw } from 'lucide-react';
 import type { VisualizationPayload } from '@equity/shared';
 import { ParametersCard, type ParametersCardProps } from './ParametersCard';
@@ -23,6 +32,7 @@ import { PathsCanvas } from './PathsCanvas';
 import { ConvergenceChart, type ConvergencePoint } from './ConvergenceChart';
 import { PayoffHistogram } from './PayoffHistogram';
 import { AuditPanel } from './AuditPanel';
+import { AnimatedNumber } from './AnimatedNumber';
 import { computeHitRate } from './helpers';
 
 export type MonteCarloViewerProps = {
@@ -114,6 +124,18 @@ export function MonteCarloViewer({
 }: MonteCarloViewerProps) {
   const viz = run.visualization;
 
+  // B4 — État de progression partagé entre PathsCanvas et KPI count-up
+  const [replayProgress, setReplayProgress] = useState<number>(enableReplay ? 0 : 1);
+  const pathsControlsRef = useRef<{ restart: () => void } | null>(null);
+
+  function handleRelaunchClick() {
+    // Reset count-up + restart paths animation côté client.
+    setReplayProgress(0);
+    pathsControlsRef.current?.restart();
+    // Si le caller veut aussi déclencher un nouveau call moteur (V1.5+) :
+    onRelaunch?.();
+  }
+
   // ConvergenceChart attend un format strict — coerce le record générique
   const convergencePoints: ConvergencePoint[] = (viz.convergence_curve ?? [])
     .map((row) => ({
@@ -151,23 +173,21 @@ export function MonteCarloViewer({
           <h2 className="text-h2 text-ink-900">{title}</h2>
           <p className="text-ink-500 mt-1 text-sm">{autoSubtitle}</p>
         </div>
-        {onRelaunch ? (
-          <button
-            type="button"
-            onClick={onRelaunch}
-            className="border-paper-300 bg-paper-50 text-ink-700 hover:bg-paper-200 inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors"
-            data-testid="monte-carlo-relaunch"
-          >
-            <RotateCw className="size-3.5" strokeWidth={1.5} />
-            Relancer la simulation
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={handleRelaunchClick}
+          className="border-paper-300 bg-paper-50 text-ink-700 hover:bg-paper-200 inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors"
+          data-testid="monte-carlo-relaunch"
+        >
+          <RotateCw className="size-3.5" strokeWidth={1.5} />
+          Relancer la simulation
+        </button>
       </header>
 
       {/* Parameters chips */}
       <ParametersCard {...inputs} />
 
-      {/* Paths canvas */}
+      {/* Paths canvas — drive l'animation de progress partagée avec le KPI FV */}
       <PathsCanvas
         paths={viz.paths_sample}
         metadata={viz.paths_metadata}
@@ -177,17 +197,23 @@ export function MonteCarloViewer({
         simT={viz.sim_T}
         enableReplay={enableReplay}
         currency={inputs.currency}
+        onProgress={setReplayProgress}
+        controlsRef={pathsControlsRef}
       />
 
       {/* KPI cards — 1/2/4 responsive */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MonteCarloKpi
-          highlight
-          label="Juste valeur"
-          value={eurFormatter.format(run.fair_value_per_unit)}
-          subtitle="par option · IFRS 2"
-          testId="kpi-fv"
-        />
+        <div className="border-brass-300 bg-brass-50 rounded-md border p-3" data-testid="kpi-fv">
+          <div className="text-ink-500 text-overline">Juste valeur</div>
+          <div className="text-brass-900 mt-1 font-mono text-xl">
+            <AnimatedNumber
+              targetValue={run.fair_value_per_unit}
+              progress={replayProgress}
+              format={(v) => eurFormatter.format(v)}
+            />
+          </div>
+          <div className="text-ink-500 mt-0.5 text-xs">par option · IFRS 2</div>
+        </div>
         <MonteCarloKpi
           label="Erreur standard"
           value={
