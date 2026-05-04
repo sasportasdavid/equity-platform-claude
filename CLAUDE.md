@@ -424,9 +424,26 @@ identiques + service_role injecté automatiquement.
     UI, 2 hooks custom, 2 compliance rules. 5 erratums spec à patcher post-merge,
     10 dettes V2 ouvertes (#94-#103), 2 dettes V1 résolues (#1 + #11).
 
+- [x] Module 12 — Compliance Engine V2 (configurable par org)
+      (PR #28 prête à squash-merger 2026-05-04, branche `feat/module-12-compliance-engine-v2`)
+  - [x] B1 — Migration 00094 (2 tables + vue + RPC + perm) + types Zod
+  - [x] B2 — `effectiveRules.ts` helper + refactor `runValuationComplianceChecks`
+  - [x] B3a — Inventaire exhaustif 23 ComplianceRule registered (correction
+        vs B2 qui annonçait 29 — sub-codes alternatifs)
+  - [x] B3b — Migration 00094b realign DB ↔ code (DELETE 20 + INSERT 21 → 23) + 4 SAs (updateOverride, listForUI, getAuditLog, resetAll)
+  - [x] B4 — Page UI `/dashboard/settings/compliance` + 5 composants Client +
+        helpers + sidebar nav
+  - [x] B5 — What-if simulator : SA `simulateComplianceChange` + panneau dans
+        EditDialog. 4 rules deeply implémentées (VALUATION_STALE_BLOCKING,
+        GRANT_DATE_RECENT, HIRE_DATE_REASONABLE, ESOP_PERCENT_BEST_PRACTICE).
+        5 deferred V1.5 (AGA/FMV_RECENT/ROUND/FMV_DEVIATION).
+  - **Statistiques** : 1030 tests workspace (vs 925 pré-M12, +105), 2 migrations
+    cloud, 5 SAs, 1 page prod, 5 composants UI, 1 perm, 4 audit event types,
+    23 rules configurables, 4 simulables what-if. 7 dettes V2 ouvertes
+    (#110-#116).
+
 ### À venir
 
-- [ ] Module 12 — Compliance Engine V2 (configurable par org)
 - [ ] Module 13 — Audit Trail & Reporting
 
 ### Design System V1 — Editorial Finance (PR #12 ready-for-review)
@@ -753,6 +770,42 @@ proxy.
 - **#103 Tests E2E manuels** : 6 scénarios documentés dans
   `memory/module_11_e2e_scenarios.md`. Playwright pas en place — pas
   de gate CI (cf dette transverse #7).
+
+110-116. **Dettes Module 12 (PR #28)** — voir
+`memory/module_12_complete.md`. Notable :
+
+- **#110 Wiring partiel rules → effective params** : 21 rules code
+  restent en mode hardcoded V1 (constants au lieu de
+  `effectiveParamsByRule`). Seules les 2 rules valuation
+  (B2 + Module 11 B6) sont fully wired. Le wiring complet pour
+  award/beneficiary/cap_table/document/approval est différé V1.5
+  (~6h dev par scope). Effet V1 : la page UI Module 12 affiche les
+  configs mais elles n'impactent que les 2 rules valuation au runtime.
+- **#111 Severity drift code/DB** : 4 rules ont severity ajustée en DB
+  (TAX_RESIDENCE, WORKFLOW_REQUIRED_FOR_AGA, FMV_RECENT_ENOUGH,
+  BSPCE_BENEFICIARY_TYPE_REVERSE). Le checker code n'utilise pas
+  encore `effectiveSeverityByRule` — la severity DB est ignorée pour
+  ces 21 rules. À cabler V1.5.
+- **#112 HIRE_DATE_REASONABLE comportement mixte** : seedée
+  `severity_default='warning'` mais émet ERROR si année < 1900. UI
+  affiche badge "Comportement mixte" en attendant le split V2 en 2
+  rules distinctes.
+- **#113 Tests UI sans jsdom** : pas de tests `@testing-library/react`
+  pour les Cards/Dialogs. Couverture pure helpers (28 tests B4) +
+  SA mocks (26 tests B3b+B5). V1.5 = setup `@vitejs/plugin-react`.
+- **#114 Audit log gate sur write perm** :
+  `getComplianceRuleAuditLog` requiert
+  `compliance_rules.config.write` (OWNER). Si V1.5 demande visibilité
+  audit pour ADMIN_HR, splitter en perm dédiée
+  `compliance_rules.audit.read`.
+- **#115 Simulator V1.5 : 5 rules deferred** :
+  AGA_30_PERCENT_CAP, AGA_APPROACHING_CAP, FMV_RECENT_ENOUGH,
+  ROUND_AMOUNT_CONSISTENCY, FMV_DEVIATION_WARNING retournent
+  `simulationSupported=false` avec reason. Helpers V1.5 estimés à
+  ~4-6h dev (pattern existant dans `complianceRules.ts`).
+- **#116 Simulator perf** : V1 SELECT \* sur les tables (pas de
+  pagination, pas d'échantillonnage). Pour orgs > 5k entités, peut
+  être lent. V2 = sample stratifié + count agrégé via SQL aggregation.
 
 ## Sécurité
 
