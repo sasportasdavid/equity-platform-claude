@@ -9,6 +9,7 @@ import {
 } from './rules/approvalRules';
 import { CAP_TABLE_RULES } from './rules/capTableRules';
 import { DOCUMENT_GENERATION_RULES, DOCUMENT_SIGNATURE_RULES } from './rules/documentRules';
+import { VALUATION_RULES } from './rules/valuationRules';
 import type {
   ApprovalAwardCheckContext,
   ApprovalAwardCheckInput,
@@ -29,6 +30,8 @@ import type {
   DocumentGenerationCheckInput,
   DocumentSignatureCheckContext,
   DocumentSignatureCheckInput,
+  ValuationCheckContext,
+  ValuationCheckInput,
 } from './types';
 
 /**
@@ -471,4 +474,75 @@ export async function runCapTableComplianceChecks(
   const applicableRules = CAP_TABLE_RULES.filter((rule) => rule.appliesTo.includes(input.scope));
 
   return runRules(applicableRules, input, ctx);
+}
+
+// ---------------------------------------------------------------------------
+// Module 11 B6 — Compliance valuations
+// ---------------------------------------------------------------------------
+
+/**
+ * Module 11 B6 — Lance les rules valuation pour un plan donné.
+ *
+ * Pré-charge le ctx via la vue `latest_valuation_per_plan` (1 query) +
+ * les valuation_results joints (pour la fair_value_per_unit). Le run
+ * « précédent » est récupéré via 1 SELECT secondaire ordonné par
+ * completed_at desc, limit 2.
+ *
+ * Appelé depuis `transitionAward` (toStatus='PROPOSED') pour bloquer un
+ * award sur un plan sans valorisation récente. Les warnings (FMV deviation)
+ * sont remontés à l'UI mais n'empêchent pas la transition.
+ *
+ * Spec : docs/MODULE_11_IFRS2_VALUATION_VIZ.md §6.
+ */
+export async function runValuationComplianceChecks(
+  input: ValuationCheckInput,
+): Promise<ComplianceCheckResult> {
+  const supabase = await createSupabaseServerClient();
+
+  // Charge les 2 derniers runs DONE pour ce plan + leurs fair_value_per_unit.
+  // L'ordre est par completed_at DESC (les NULL trient en bas naturellement
+  // car on filtre sur status='DONE' qui implique completed_at non-null).
+  const { data: runs } = await supabase
+    .from('valuation_runs')
+    .select('id, completed_at, valuation_results ( fair_value_per_instrument )')
+    .eq('plan_id', input.planId)
+    .eq('status', 'DONE')
+    .order('completed_at', { ascending: false })
+    .limit(2);
+
+  type RunRow = {
+    id: string;
+    completed_at: string | null;
+    valuation_results: { fair_value_per_instrument: number | null }[] | null;
+  };
+  const rows = (runs ?? []) as RunRow[];
+  const fvFromRow = (row: RunRow): number | null => {
+    const arr = row.valuation_results;
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    const v = arr[0]?.fair_value_per_instrument;
+    return v == null ? null : Number(v);
+  };
+
+  const latestRow = rows[0];
+  const previousRow = rows[1];
+  const ctx: ValuationCheckContext = {
+    latestRun:
+      latestRow && latestRow.completed_at
+        ? {
+            runId: latestRow.id,
+            completedAt: latestRow.completed_at,
+            fairValuePerUnit: fvFromRow(latestRow),
+          }
+        : null,
+    previousRun:
+      previousRow && previousRow.completed_at
+        ? {
+            runId: previousRow.id,
+            completedAt: previousRow.completed_at,
+            fairValuePerUnit: fvFromRow(previousRow),
+          }
+        : null,
+  };
+
+  return runRules(VALUATION_RULES, input, ctx);
 }

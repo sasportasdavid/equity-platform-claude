@@ -82,6 +82,8 @@ type LoadedContext = {
   companyTicker: string | null;
   python: PythonValuationContext;
   marketDataSnapshot: Record<string, unknown>;
+  /** Module 11 B5 — flag lu sur valuation_runs.includes_visualization. */
+  includeVisualization: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -128,14 +130,21 @@ Deno.serve(async (req: Request) => {
     const liveFetchMetadata = liveFetchResult.data;
 
     // 2. Build payload (utilise context.python avec valeurs LIVE patchées si applicable)
-    const payload = buildPythonPayload(context.python);
+    const payload = buildPythonPayload(context.python, {
+      includeVisualization: context.includeVisualization,
+    });
 
-    // 3. Mark RUNNING + persist payload_sent (V2 — audit IFRS 2.46)
+    // Module 11 B5 — input_hash déterministe pour dédup + replay reproductible.
+    // Hash SHA-256 hex du JSON canonicalisé du payload (post-LIVE patches).
+    const inputHash = await computeInputHash(payload);
+
+    // 3. Mark RUNNING + persist payload_sent + input_hash (Module 11 B5)
     await supabase
       .from('valuation_runs')
       .update({
         status: 'RUNNING',
         started_at: new Date().toISOString(),
+        input_hash: inputHash,
         payload_sent: {
           ...payload,
           // V2.1 — trace les conditions re-fetched live pour audit
@@ -195,6 +204,16 @@ Deno.serve(async (req: Request) => {
     });
 
     // 6. Mark DONE + persist response_received (V2 — audit IFRS 2.46)
+    // Module 11 B5 — includes_visualization = TRUE si on a demandé le bloc
+    // ET que la response Python contient bien `visualization` (paths_sample
+    // au minimum). Sinon le viewer ne pourra rien rendre — autant flagger
+    // FALSE pour router vers l'affichage simple FV.
+    const responseObj = result as PythonResponse & { visualization?: { paths_sample?: unknown } };
+    const visualizationPresent =
+      payload.include_visualization === true &&
+      responseObj.visualization != null &&
+      Array.isArray((responseObj.visualization as { paths_sample?: unknown }).paths_sample);
+
     await supabase
       .from('valuation_runs')
       .update({
@@ -202,6 +221,7 @@ Deno.serve(async (req: Request) => {
         completed_at: new Date().toISOString(),
         pricer_used: payload.config.use_monte_carlo ? 'MONTE_CARLO_MULTI_TRANCHE' : 'BLACK_SCHOLES',
         engine_version: result.engine_version ?? 'V8',
+        includes_visualization: visualizationPresent,
         response_received: result, // ← NEW V2 — snapshot brut moteur
       })
       .eq('id', runId);
@@ -252,6 +272,46 @@ function jsonError(status: number, message: string): Response {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+/**
+ * Module 11 B5 — Hash SHA-256 hex du payload normalisé.
+ *
+ * Permet :
+ *   - Dédup runs identiques (même payload → même hash)
+ *   - Replay reproductible : si un user re-clic "Relancer" sans changer
+ *     les inputs, on peut détecter qu'il s'agit du même calcul (audit
+ *     IFRS 2.46 — "même hypothèse → même fair value attendue").
+ *
+ * Canonicalisation : `JSON.stringify(payload, Object.keys(payload).sort())`
+ * suffit V1 — les payloads sont des objets POJO stables produits par
+ * `buildPythonPayload`. Si une régression introduit un ordre instable
+ * (ex: Map → Object), le hash variera mais ce n'est pas critique
+ * (juste moins efficace pour la dédup).
+ *
+ * Web Crypto SubtleCrypto : disponible en Deno EF runtime.
+ */
+async function computeInputHash(payload: unknown): Promise<string> {
+  const canonical = canonicalJsonStringify(payload);
+  const bytes = new TextEncoder().encode(canonical);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/** Sort object keys recursively for stable JSON stringification. */
+function canonicalJsonStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(canonicalJsonStringify).join(',') + ']';
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
+  return (
+    '{' +
+    entries.map(([k, v]) => JSON.stringify(k) + ':' + canonicalJsonStringify(v)).join(',') +
+    '}'
+  );
 }
 
 function emptyLiveFetchMetadata(): LiveFetchMetadata {
@@ -472,7 +532,7 @@ async function loadValuationContext(
 ): Promise<LoadedContext | null> {
   const { data: run } = await supabase
     .from('valuation_runs')
-    .select('id, plan_id, org_id, simulation_config_id')
+    .select('id, plan_id, org_id, simulation_config_id, includes_visualization')
     .eq('id', runId)
     .maybeSingle();
   if (!run?.plan_id || !run.org_id) return null;
@@ -551,6 +611,8 @@ async function loadValuationContext(
     orgId: run.org_id,
     planId: run.plan_id,
     companyTicker: (companyRes.data as { ticker: string | null } | null)?.ticker ?? null,
+    includeVisualization:
+      (run as { includes_visualization?: boolean | null }).includes_visualization === true,
     python: {
       orgId: run.org_id,
       plan: planRow,

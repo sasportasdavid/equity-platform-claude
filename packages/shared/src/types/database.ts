@@ -540,6 +540,9 @@ export type Database = {
           modification_type: string
           org_id: string
           reason: string | null
+          valuation_computed_at: string | null
+          valuation_post_modification: number | null
+          valuation_pre_modification: number | null
         }
         Insert: {
           after_snapshot: Json
@@ -555,6 +558,9 @@ export type Database = {
           modification_type: string
           org_id: string
           reason?: string | null
+          valuation_computed_at?: string | null
+          valuation_post_modification?: number | null
+          valuation_pre_modification?: number | null
         }
         Update: {
           after_snapshot?: Json
@@ -570,6 +576,9 @@ export type Database = {
           modification_type?: string
           org_id?: string
           reason?: string | null
+          valuation_computed_at?: string | null
+          valuation_post_modification?: number | null
+          valuation_pre_modification?: number | null
         }
         Relationships: [
           {
@@ -2252,6 +2261,13 @@ export type Database = {
             foreignKeyName: "ifrs2_expense_schedules_valuation_run_id_fkey"
             columns: ["valuation_run_id"]
             isOneToOne: false
+            referencedRelation: "latest_valuation_per_plan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ifrs2_expense_schedules_valuation_run_id_fkey"
+            columns: ["valuation_run_id"]
+            isOneToOne: false
             referencedRelation: "valuation_runs"
             referencedColumns: ["id"]
           },
@@ -3621,6 +3637,13 @@ export type Database = {
             foreignKeyName: "valuation_award_results_valuation_run_id_fkey"
             columns: ["valuation_run_id"]
             isOneToOne: false
+            referencedRelation: "latest_valuation_per_plan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "valuation_award_results_valuation_run_id_fkey"
+            columns: ["valuation_run_id"]
+            isOneToOne: false
             referencedRelation: "valuation_runs"
             referencedColumns: ["id"]
           },
@@ -3687,6 +3710,13 @@ export type Database = {
             foreignKeyName: "valuation_results_valuation_run_id_fkey"
             columns: ["valuation_run_id"]
             isOneToOne: false
+            referencedRelation: "latest_valuation_per_plan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "valuation_results_valuation_run_id_fkey"
+            columns: ["valuation_run_id"]
+            isOneToOne: false
             referencedRelation: "valuation_runs"
             referencedColumns: ["id"]
           },
@@ -3706,6 +3736,8 @@ export type Database = {
           engine_version: string | null
           error_message: string | null
           id: string
+          includes_visualization: boolean
+          input_hash: string | null
           org_id: string | null
           parameters: Json | null
           payload_sent: Json | null
@@ -3713,6 +3745,7 @@ export type Database = {
           pricer_used: string | null
           response_received: Json | null
           results_json: Json | null
+          run_type: string
           simulation_config_id: string | null
           started_at: string | null
           status: string | null
@@ -3724,6 +3757,8 @@ export type Database = {
           engine_version?: string | null
           error_message?: string | null
           id?: string
+          includes_visualization?: boolean
+          input_hash?: string | null
           org_id?: string | null
           parameters?: Json | null
           payload_sent?: Json | null
@@ -3731,6 +3766,7 @@ export type Database = {
           pricer_used?: string | null
           response_received?: Json | null
           results_json?: Json | null
+          run_type?: string
           simulation_config_id?: string | null
           started_at?: string | null
           status?: string | null
@@ -3742,6 +3778,8 @@ export type Database = {
           engine_version?: string | null
           error_message?: string | null
           id?: string
+          includes_visualization?: boolean
+          input_hash?: string | null
           org_id?: string | null
           parameters?: Json | null
           payload_sent?: Json | null
@@ -3749,6 +3787,7 @@ export type Database = {
           pricer_used?: string | null
           response_received?: Json | null
           results_json?: Json | null
+          run_type?: string
           simulation_config_id?: string | null
           started_at?: string | null
           status?: string | null
@@ -4005,6 +4044,33 @@ export type Database = {
       }
     }
     Views: {
+      latest_valuation_per_plan: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          engine_version: string | null
+          id: string | null
+          includes_visualization: boolean | null
+          input_hash: string | null
+          org_id: string | null
+          parameters: Json | null
+          plan_id: string | null
+          pricer_used: string | null
+          results_json: Json | null
+          run_type: string | null
+          status: string | null
+          triggered_by: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "valuation_runs_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       valuation_runs_audit: {
         Row: {
           ci95_high: number | null

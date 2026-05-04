@@ -15,3 +15,4 @@ export * from './state-machines';
 export * from './notifications/resend-event-classifier';
 export type { Database, Json, Tables, TablesInsert, TablesUpdate } from './types/database';
 export * from './types/portal';
+export * from './types/valuation';
