@@ -290,7 +290,15 @@ function SamplePathsCard({ distributionStats }: { distributionStats: unknown }) 
         <div className="h-[320px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              {/*
+                Bug fix 2026-05-05 : `hsl(var(--primary) / 0.3)` était CSS invalide
+                car `--primary = var(--brass-500) = #b8865b` (HEX direct, pas triplet
+                HSL). Résultat : `stroke=""` rendu par Recharts → 50 lignes invisibles
+                avec axes seuls. Fix : couleurs RGBA directes du token brass-500
+                (#b8865b → rgb(184, 134, 91)) avec opacité gérée explicitement.
+                Voir `apps/web/src/app/globals.css:161` pour la valeur HEX source.
+              */}
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(120, 113, 108, 0.4)" />
               <XAxis
                 dataKey="t"
                 tick={{ fontSize: 11 }}
@@ -306,7 +314,7 @@ function SamplePathsCard({ distributionStats }: { distributionStats: unknown }) 
                   key={i}
                   type="monotone"
                   dataKey={`p${i}`}
-                  stroke="hsl(var(--primary) / 0.3)"
+                  stroke="rgba(184, 134, 91, 0.3)"
                   strokeWidth={1}
                   dot={false}
                   isAnimationActive={false}
