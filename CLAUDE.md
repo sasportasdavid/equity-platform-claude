@@ -417,11 +417,16 @@ Référence design : `memory/design_system_v1_recon.md` (recon Étape 1
    à `toStatus=PROPOSED` uniquement. V2 configurable par org en
    Module 12 via une table `compliance_rules_overrides`.
 
-3. **AGA_30_PERCENT_CAP** : retourne null en V1 si
-   `companyTotalShares` indisponible (cap table pas en place). Full
-   check Module 10. La rule existe et est testée — il manque juste
-   le ctx loader côté `runChecks.ts` quand Module 10 livrera la cap
-   table.
+3. **~~AGA_30_PERCENT_CAP~~ ✅ RÉSOLUE Module 10 B7** (2026-05-04) :
+   le ctx loader est branché dans `runChecks.ts::runComplianceChecks` —
+   pour les plans `plan_type='AGA'`, on appelle `compute_cap_table`
+   pour récupérer `companyTotalShares` + agrège
+   `agaAllocatedTotal` via `awards.units_outstanding` filtrés par
+   `plans.plan_type='AGA'` + statuts pré-cancel. La rule reject
+   maintenant les attributions AGA qui pousseraient au-delà du cap
+   légal 30 %. Soft warning séparé `AGA_APPROACHING_CAP` ajouté
+   pour la zone 27–30 %. Tests Vitest verts (5 cases hard + 4 cases
+   soft).
 
 4. **Realtime sur awards** : pas de push Supabase Realtime sur
    `awards.status_changed`. Le user doit `router.refresh()` ou

@@ -7,6 +7,7 @@ import {
   APPROVAL_DECISION_RULES,
   APPROVAL_WORKFLOW_RULES,
 } from './rules/approvalRules';
+import { CAP_TABLE_RULES } from './rules/capTableRules';
 import { DOCUMENT_GENERATION_RULES, DOCUMENT_SIGNATURE_RULES } from './rules/documentRules';
 import type {
   ApprovalAwardCheckContext,
@@ -19,6 +20,8 @@ import type {
   AwardCheckInput,
   BeneficiaryCheckContext,
   BeneficiaryCheckInput,
+  CapTableCheckContext,
+  CapTableCheckInput,
   ComplianceCheckResult,
   ComplianceIssue,
   ComplianceRule,
@@ -96,7 +99,7 @@ export async function runComplianceChecks(
   const [planRes, beneficiaryRes] = await Promise.all([
     supabase
       .from('plans')
-      .select('id, plan_type, pool_size, pool_allocated, company_id')
+      .select('id, plan_type, pool_size, pool_allocated, company_id, org_id')
       .eq('id', input.planId)
       .maybeSingle(),
     supabase
@@ -133,16 +136,54 @@ export async function runComplianceChecks(
     };
   }
 
+  // Module 10 B7 : charge la cap table pour activer AGA_30_PERCENT_CAP
+  // (résolution dette #3). On appelle compute_cap_table uniquement pour les
+  // plans AGA — coût d'1 query DB en plus, négligeable face au reste.
+  let agaAllocatedTotal: number | null = null;
+  let companyTotalShares: number | null = null;
+  if (planRes.data.plan_type === 'AGA') {
+    const orgId = planRes.data.org_id;
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: capTable } = await supabase.rpc('compute_cap_table', {
+      p_org_id: orgId,
+      p_asof_date: today,
+      p_scenario_id: undefined,
+      p_view_mode: 'CONSOLIDATED',
+    });
+    if (capTable && typeof capTable === 'object' && !Array.isArray(capTable)) {
+      const ct = capTable as {
+        grand_total_units?: number;
+        totals_by_class?: Record<string, number>;
+      };
+      companyTotalShares = ct.grand_total_units ?? null;
+    }
+    // AGA allocated = sum(awards.units_outstanding) sur les plans AGA actifs
+    // (statuts pré-cancel). On évite les awards CANCELLED/FORFEITED/EXPIRED.
+    const { data: agaAwards } = await supabase
+      .from('awards')
+      .select('units_outstanding, plans!inner(plan_type)')
+      .eq('org_id', orgId)
+      .eq('plans.plan_type', 'AGA')
+      .in('status', [
+        'PROPOSED',
+        'PENDING_APPROVAL',
+        'APPROVED',
+        'GRANTED',
+        'VESTING',
+        'PARTIALLY_EXERCISED',
+      ])
+      .is('deleted_at', null);
+    agaAllocatedTotal = (agaAwards ?? []).reduce((s, a) => s + Number(a.units_outstanding ?? 0), 0);
+  }
+
   const ctx: AwardCheckContext = {
     plan: planRes.data,
     beneficiary: beneficiaryRes.data,
     poolStatus: {
       remaining: planRes.data.pool_size - planRes.data.pool_allocated,
     },
-    // V1 : on ne charge pas la cap table — AGA_30_PERCENT_CAP retournera null
-    // (cf. note dans la rule). Module 10 ajoutera ces 2 champs ici.
-    agaAllocatedTotal: null,
-    companyTotalShares: null,
+    agaAllocatedTotal,
+    companyTotalShares,
   };
 
   // Filtre les rules applicables (plan_type ou *)
@@ -368,4 +409,66 @@ export async function runDocumentSignatureComplianceChecks(
   input: DocumentSignatureCheckInput,
 ): Promise<ComplianceCheckResult> {
   return runRules(DOCUMENT_SIGNATURE_RULES, input, {} as DocumentSignatureCheckContext);
+}
+
+// ---------------------------------------------------------------------------
+// Module 10 B7 — Compliance cap table
+// ---------------------------------------------------------------------------
+
+/**
+ * Lance les rules cap table applicables au scope donné. Discriminé via
+ * `input.scope` (SHARE_CLASS_CREATE | FUNDING_ROUND_CREATE | POOL_TOPUP_SCENARIO).
+ *
+ * Ctx pré-chargé :
+ *   - `existingShareClassCodes` : pour SHARE_CLASS_CODE_UNIQUE
+ *   - `companyTotalSharesIncludingPool` : pour ESOP_PERCENT_BEST_PRACTICE
+ *
+ * Appelé depuis :
+ *   - `createShareClass` (scope SHARE_CLASS_CREATE) → Module 10 B2
+ *   - `createFundingRound` (scope FUNDING_ROUND_CREATE) → Module 10 B2
+ *   - V2 : POOL_TOPUP scenario apply (Module 12)
+ */
+export async function runCapTableComplianceChecks(
+  input: CapTableCheckInput,
+  orgId: string,
+): Promise<ComplianceCheckResult> {
+  const supabase = await createSupabaseServerClient();
+
+  // Pré-charge codes existants (uniquement pour SHARE_CLASS_CREATE)
+  const existingShareClassCodes = new Set<string>();
+  if (input.scope === 'SHARE_CLASS_CREATE') {
+    const { data: classes } = await supabase
+      .from('share_classes')
+      .select('code')
+      .eq('org_id', orgId);
+    for (const c of classes ?? []) {
+      if (c.code) existingShareClassCodes.add(c.code.toUpperCase());
+    }
+  }
+
+  // Pré-charge cap table (uniquement pour les rules ESOP best practice)
+  let companyTotalSharesIncludingPool: number | null = null;
+  if (input.scope === 'SHARE_CLASS_CREATE' || input.scope === 'POOL_TOPUP_SCENARIO') {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: capTable } = await supabase.rpc('compute_cap_table', {
+      p_org_id: orgId,
+      p_asof_date: today,
+      p_scenario_id: undefined,
+      p_view_mode: 'DILUTED',
+    });
+    if (capTable && typeof capTable === 'object' && !Array.isArray(capTable)) {
+      const ct = capTable as { grand_total_units?: number };
+      companyTotalSharesIncludingPool = ct.grand_total_units ?? null;
+    }
+  }
+
+  const ctx: CapTableCheckContext = {
+    existingShareClassCodes,
+    companyTotalSharesIncludingPool,
+  };
+
+  // Filtre les rules applicables au scope
+  const applicableRules = CAP_TABLE_RULES.filter((rule) => rule.appliesTo.includes(input.scope));
+
+  return runRules(applicableRules, input, ctx);
 }

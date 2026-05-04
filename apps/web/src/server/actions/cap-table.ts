@@ -52,6 +52,7 @@ import {
 import type { TablesUpdate } from '@equity/shared';
 import { logAuditEvent } from '@/lib/audit';
 import { requirePermission } from '@/lib/auth/rbac';
+import { runCapTableComplianceChecks } from '@/lib/compliance/runChecks';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -92,6 +93,24 @@ export async function createShareClass(
 
   const user = await requirePermission('captable.share_class.create');
   if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  // B7 — Compliance pre-check (SHARE_CLASS_CODE_UNIQUE + ESOP_PERCENT_BEST_PRACTICE
+  // + POOL_OVER_ALLOCATION). Si hard error → block.
+  const compliance = await runCapTableComplianceChecks(
+    {
+      scope: 'SHARE_CLASS_CREATE',
+      code: data.code,
+      classType: data.classType,
+      poolTotalUnits: data.poolTotalUnits ?? null,
+    },
+    user.activeOrgId,
+  );
+  if (compliance.hasHardBlocks) {
+    return {
+      ok: false,
+      error: compliance.errors[0]?.message ?? 'Compliance check failed',
+    };
+  }
 
   const supabase = await createSupabaseServerClient();
 
@@ -313,6 +332,23 @@ export async function createFundingRound(
 
   const user = await requirePermission('captable.round.create');
   if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  // B7 — Compliance pre-check (ROUND_AMOUNT_CONSISTENCY).
+  const compliance = await runCapTableComplianceChecks(
+    {
+      scope: 'FUNDING_ROUND_CREATE',
+      amountRaised: data.amountRaised,
+      pricePerShare: data.pricePerShare,
+      investors: data.investors.map((i) => ({ amount: i.amount, units: i.units })),
+    },
+    user.activeOrgId,
+  );
+  if (compliance.hasHardBlocks) {
+    return {
+      ok: false,
+      error: compliance.errors[0]?.message ?? 'Compliance check failed',
+    };
+  }
 
   const supabase = await createSupabaseServerClient();
 
