@@ -15,7 +15,7 @@ import {
   type BulkAwardImportInput,
 } from '@equity/shared';
 import { logAuditEvent } from '@/lib/audit';
-import { runComplianceChecks } from '@/lib/compliance/runChecks';
+import { runComplianceChecks, runValuationComplianceChecks } from '@/lib/compliance/runChecks';
 import { hasPermission, requirePermission } from '@/lib/auth/rbac';
 import {
   canTransition,
@@ -333,30 +333,45 @@ export async function transitionAward(input: unknown): Promise<ActionVoid | Acti
   const user = await requirePermission(requiredPerm as never);
   if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
 
-  // Compliance V1 — Module 3b B7. On ne check que sur la transition vers
-  // PROPOSED (= soumission au workflow d'approbation). Les autres
+  // Compliance V1 — Module 3b B7 + Module 11 B6. On check sur la transition
+  // vers PROPOSED (= soumission au workflow d'approbation). Les autres
   // transitions (GRANTED, FORFEITED, CANCELLED…) sont gouvernées par la
   // state machine ou des RPCs dédiés.
+  //
+  // Module 11 B6 : on ajoute les rules valuation (STALE_BLOCKING + FMV_DEVIATION).
+  // Aggregation : les errors des 2 jeux de rules sont mergées avant le hard
+  // block. Les warnings sont concaténés et stockés ensemble.
   if (toStatus === 'PROPOSED') {
-    const compliance = await runComplianceChecks('AWARD_PROPOSAL', {
-      planId: award.plan_id,
-      beneficiaryId: award.beneficiary_id,
-      unitsGranted: Number(award.units_granted),
-      grantDate: award.grant_date as unknown as string,
-    });
-    if (compliance.hasHardBlocks) {
+    const [compliance, valuationCompliance] = await Promise.all([
+      runComplianceChecks('AWARD_PROPOSAL', {
+        planId: award.plan_id,
+        beneficiaryId: award.beneficiary_id,
+        unitsGranted: Number(award.units_granted),
+        grantDate: award.grant_date as unknown as string,
+      }),
+      runValuationComplianceChecks({
+        scope: 'AWARD_TRANSITION',
+        planId: award.plan_id,
+        toStatus: 'PROPOSED',
+      }),
+    ]);
+
+    const allErrors = [...compliance.errors, ...valuationCompliance.errors];
+    const allWarnings = [...compliance.warnings, ...valuationCompliance.warnings];
+
+    if (allErrors.length > 0) {
       return {
         ok: false,
-        error: `Compliance check failed : ${compliance.errors.length} erreur(s) bloquante(s)`,
-        complianceIssues: compliance.errors,
+        error: `Compliance check failed : ${allErrors.length} erreur(s) bloquante(s)`,
+        complianceIssues: allErrors,
       };
     }
     // Soft warnings : on les stocke dans compliance_warnings de l'award
     // pour affichage UI, mais on continue la transition.
-    if (compliance.warnings.length > 0) {
+    if (allWarnings.length > 0) {
       await supabase
         .from('awards')
-        .update({ compliance_warnings: compliance.warnings as never })
+        .update({ compliance_warnings: allWarnings as never })
         .eq('id', awardId);
     }
   }

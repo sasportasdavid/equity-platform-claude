@@ -409,10 +409,23 @@ identiques + service_role injecté automatiquement.
     5 compliance rules. 15 erratums spec consolidés, 6 dettes V2
     ouvertes (#88-#93), 1 dette résolue (#3).
 
+- [x] Module 11 — IFRS 2 Valuation + Monte Carlo Visualization
+      (PR #26 prête à squash-merger 2026-05-04, branche `feat/module-11-valuation-viz`)
+  - [x] B0 — Recon moteur Python + payload validation script
+  - [x] B1 — quant client + Zod types valuation
+  - [x] B2.1 — Refactor split normalizers (rate vs sigma) — **dette #1 RÉSOLUE**
+  - [x] B2.2 — `computeIncrementalFairValue` SA + migration 00091 — **dette #11 RÉSOLUE**
+  - [x] B3 — 7 composants viewer Monte Carlo + sandbox `/dev/monte-carlo-replay`
+  - [x] B4 — Hook `useMonteCarloReplay` + count-up `AnimatedNumber`
+  - [x] B5 — Migration 00092 + EF v3 + 3 SAs + 3 pages prod + sidebar nav
+  - [x] B6 — Quick fix α (default numPaths 100k→20k) + migration 00093 cron mensuel + 2 compliance rules (`VALUATION_STALE_BLOCKING`, `FMV_DEVIATION_WARNING`) + hook `transitionAward`
+  - **Statistiques** : 925 tests workspace (vs 748 pré-M11, +177), 3 migrations
+    cloud, 1 EF redeployée, 4 SAs nouvelles, 3 pages prod + 1 sandbox, 8 composants
+    UI, 2 hooks custom, 2 compliance rules. 5 erratums spec à patcher post-merge,
+    10 dettes V2 ouvertes (#94-#103), 2 dettes V1 résolues (#1 + #11).
+
 ### À venir
 
-- [ ] Module 11 — IFRS 2 finalisation (refonte dette #1 normalizers
-      contextuels rate vs sigma + dette #11 incremental_fair_value + page UI valuation_runs + visualisation Monte Carlo)
 - [ ] Module 12 — Compliance Engine V2 (configurable par org)
 - [ ] Module 13 — Audit Trail & Reporting
 
@@ -444,10 +457,15 @@ Référence design : `memory/design_system_v1_recon.md` (recon Étape 1
 
 ## Dette technique connue
 
-1. **Migration de cohérence DB** : `rate_flat` / `dividend_yield`
-   stockés en % bruts au lieu de fractions. Fix défensif actuel
-   dans `normalizeRateUnit()` côté payload Python. À refondre
-   en migration propre quand on touchera au Module 11.
+1. **~~Migration de cohérence DB~~ ✅ RÉSOLUE Module 11 B2.1** (2026-05-04) :
+   les normalizers ont été splittés en 2 fonctions contextuelles dans
+   `supabase/functions/_shared/buildPythonPayload.ts` :
+   `normalizeRateOrDividend` (rate_flat / dividend_yield, % brut → fraction si > 1)
+   et `normalizeSigma` (annualized_sigma déjà en fraction, validation bornes
+   métier [0.01, 5.0]). L'ancienne fonction `normalizeRateUnit()` est
+   `@deprecated` (alias vers `normalizeRateOrDividend`). 19 tests Vitest
+   verrouillent les 2 contextes. Pas de migration DB nécessaire — convention
+   stockage inchangée, validation à la frontière côté EF.
 
 2. **`runComplianceChecks` V1 livrée Module 3b B7** : 4 rules pure
    functions (BSPCE_BENEFICIARY_TYPE, AGA_30_PERCENT_CAP,
@@ -508,11 +526,14 @@ on PR` ni `test on master push`. À mettre en place avant
     du wizard plan. Les rendre configurables (par template plan)
     au Module 4 ou Module 12.
 
-11. **`incremental_fair_value`** sur `award_modifications` :
-    colonne existe mais le calcul est différé au moteur Python
-    (Module 11). Affichage UI = "—" en attendant. Pas de page UI
-    pour suivre les `valuation_runs` déclenchés par les
-    modifications IFRS 2 (Module 11).
+11. **~~`incremental_fair_value`~~ ✅ RÉSOLUE Module 11 B2.2 + B5** (2026-05-04) :
+    Server Action `computeIncrementalFairValue(input)` orchestre la lecture
+    des 2 valuation_runs DONE (pre + post modification) et UPDATE les colonnes
+    audit `valuation_pre_modification`, `valuation_post_modification`,
+    `incremental_fair_value`, `valuation_computed_at` sur `award_modifications`
+    (migration 00091). 12 tests Vitest. La page UI pour suivre les
+    valuation_runs est livrée Module 11 B5 :
+    `/dashboard/plans/[id]/valuations` + `/dashboard/valuations/runs/[runId]`.
 
 12. **Trigger `enforce_beneficiary_self_update()` (Module 4 B1)** :
     bloque les UPDATEs via SQL Editor Supabase Dashboard même pour
@@ -701,6 +722,37 @@ contient pas les claims `active_org_id` quand testé en E2E (Supabase
 quirk non investigué). Le fix proxy contourne le problème — pas
 bloquant V1, mais à creuser si d'autres claims sont essentiels au
 proxy.
+
+94-103. **Dettes Module 11 (PR #26)** — voir
+`memory/module_11_complete.md`. Notable :
+
+- **#94 EF compute-valuation timeout** : >50k paths + viz dépassent le
+  timeout EF Supabase (~150s). Quick fix α B6 = default numPaths réduit
+  à 20 000. Mitigation V1.5 = pattern `EdgeRuntime.waitUntil()` (cf
+  Module 6 yousign-webhook v6) ou Supabase Pro tier.
+- **#95 + #96 Erratums spec** : MODULE_11 §3.5 EF naming
+  `quant-multi-tranche` → `compute-valuation` et §3.3 path
+  `apps/web/src/lib/quant/` → `supabase/functions/_shared/`. À patcher
+  post-merge.
+- **#97 Cron INSERT-only** : `valuation-monthly-refresh` insère des
+  QUEUED mais ne consomme pas. V1.5 = trigger automatique via
+  pg_net.http_post.
+- **#98 Pages sans Realtime** : il faut reload pour voir un run
+  RUNNING → DONE. V1.5 = hook `useValuationRunStatus` étendu.
+- **#99 MonteCarloViewer fallback inputs** : si `payload_sent` est null
+  (run pré-B5), les chips affichent S₀=0. V1.5 = fallback sur
+  `hypothesis_sets`.
+- **#100 ValuationCheckInput scope unique** : V1 = AWARD_TRANSITION
+  seulement. V2 (Module 12) = scopes différenciés (MODIFICATION,
+  EXERCISE).
+- **#101 Default numPaths trop petit pour plans complexes** : 20k peut
+  être insuffisant pour la convergence MC sur multi-tranches + market
+  conditions. V1.5 = auto-calibrer selon `simulation_config`.
+- **#102 compliance_warnings JSONB libre** : pas de schema strict côté
+  DB. V1.5 = Zod parse + table dédiée.
+- **#103 Tests E2E manuels** : 6 scénarios documentés dans
+  `memory/module_11_e2e_scenarios.md`. Playwright pas en place — pas
+  de gate CI (cf dette transverse #7).
 
 ## Sécurité
 

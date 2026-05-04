@@ -243,6 +243,46 @@ export type CapTableCheckContext = {
 };
 
 // ---------------------------------------------------------------------------
+// Module 11 B6 — Compliance valuations
+// ---------------------------------------------------------------------------
+
+/**
+ * Module 11 B6 — Input commun aux rules valuation.
+ *
+ * Le scope discrimine les checks selon où on se trouve dans le lifecycle
+ * d'un award. V1 = uniquement `AWARD_TRANSITION` (transitionAward), V2+
+ * pourra ajouter `MODIFICATION_PROPOSAL`, `EXERCISE_REQUEST`, etc.
+ */
+export type ValuationCheckInput = {
+  scope: 'AWARD_TRANSITION';
+  planId: string;
+  /** Status cible de la transition (utilisé pour gating fin V2). */
+  toStatus?: string;
+};
+
+/**
+ * Module 11 B6 — Ctx valuation. Pré-chargé dans `runChecks.ts` via 1-2
+ * queries parallèles sur `latest_valuation_per_plan` + `valuation_runs`.
+ */
+export type ValuationCheckContext = {
+  /** Dernière valorisation DONE pour ce plan, NULL si jamais valorisé. */
+  latestRun: {
+    runId: string;
+    completedAt: string;
+    fairValuePerUnit: number | null;
+  } | null;
+  /**
+   * Avant-dernière valorisation DONE (pour FMV_DEVIATION_WARNING). NULL si
+   * un seul run DONE existe (ou aucun).
+   */
+  previousRun: {
+    runId: string;
+    completedAt: string;
+    fairValuePerUnit: number | null;
+  } | null;
+};
+
+// ---------------------------------------------------------------------------
 // Module 10 B7 — Étendre AwardCheckContext (déjà déclaré ci-dessus mais
 // agaAllocatedTotal/companyTotalShares étaient null V1 — Module 10 les active)
 // ---------------------------------------------------------------------------

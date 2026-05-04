@@ -33,11 +33,14 @@ vi.mock('@/lib/audit', () => ({
   logAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock runComplianceChecks (B7) — par défaut "no issues" pour ne pas
-// casser les tests existants. Les tests dédiés compliance sont dans
-// src/lib/compliance/__tests__/runChecks.test.ts.
+// Mock runComplianceChecks (B7) + runValuationComplianceChecks (Module 11 B6)
+// — par défaut "no issues" pour ne pas casser les tests existants. Les tests
+// dédiés compliance sont dans src/lib/compliance/__tests__/.
 vi.mock('@/lib/compliance/runChecks', () => ({
   runComplianceChecks: vi
+    .fn()
+    .mockResolvedValue({ errors: [], warnings: [], hasHardBlocks: false }),
+  runValuationComplianceChecks: vi
     .fn()
     .mockResolvedValue({ errors: [], warnings: [], hasHardBlocks: false }),
 }));
@@ -430,5 +433,130 @@ describe('Server Actions awards', () => {
     });
 
     expect(res.ok).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // Module 11 B6 — Hook valuation compliance dans transitionAward
+  // -------------------------------------------------------------------------
+  it('transitionAward DRAFT→PROPOSED : VALUATION_STALE_BLOCKING → ok=false avec issue', async () => {
+    mockState.awardSelect = {
+      data: {
+        id: 'a-uuid',
+        status: 'DRAFT',
+        plan_id: 'p-uuid',
+        beneficiary_id: 'b-uuid',
+        units_granted: 100,
+        units_vested: 0,
+        vesting_start_date: null,
+        grant_date: '2026-04-28',
+      },
+      error: null,
+    };
+
+    const runChecksMod = await import('@/lib/compliance/runChecks');
+    vi.mocked(runChecksMod.runValuationComplianceChecks).mockResolvedValueOnce({
+      errors: [
+        {
+          severity: 'ERROR',
+          code: 'VALUATION_STALE_BLOCKING',
+          message: 'Aucune valorisation IFRS 2 disponible pour ce plan.',
+        },
+      ],
+      warnings: [],
+      hasHardBlocks: true,
+    });
+
+    const { transitionAward } = await import('../awards');
+    const res = await transitionAward({
+      awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+      toStatus: 'PROPOSED',
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/Compliance check failed/i);
+      expect(res.complianceIssues?.[0]?.code).toBe('VALUATION_STALE_BLOCKING');
+    }
+  });
+
+  it('transitionAward DRAFT→PROPOSED : FMV_DEVIATION_WARNING (soft) → ok=true (continue)', async () => {
+    mockState.awardSelect = {
+      data: {
+        id: 'a-uuid',
+        status: 'DRAFT',
+        plan_id: 'p-uuid',
+        beneficiary_id: 'b-uuid',
+        units_granted: 100,
+        units_vested: 0,
+        vesting_start_date: null,
+        grant_date: '2026-04-28',
+      },
+      error: null,
+    };
+
+    const runChecksMod = await import('@/lib/compliance/runChecks');
+    vi.mocked(runChecksMod.runValuationComplianceChecks).mockResolvedValueOnce({
+      errors: [],
+      warnings: [
+        {
+          severity: 'WARNING',
+          code: 'FMV_DEVIATION_WARNING',
+          message: 'Déviation FMV 25.0 %',
+        },
+      ],
+      hasHardBlocks: false,
+    });
+
+    const { transitionAward } = await import('../awards');
+    const res = await transitionAward({
+      awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+      toStatus: 'PROPOSED',
+    });
+
+    expect(res.ok).toBe(true);
+  });
+
+  it('transitionAward DRAFT→PROPOSED : merge errors AWARD + VALUATION rules', async () => {
+    mockState.awardSelect = {
+      data: {
+        id: 'a-uuid',
+        status: 'DRAFT',
+        plan_id: 'p-uuid',
+        beneficiary_id: 'b-uuid',
+        units_granted: 100,
+        units_vested: 0,
+        vesting_start_date: null,
+        grant_date: '2026-04-28',
+      },
+      error: null,
+    };
+
+    const runChecksMod = await import('@/lib/compliance/runChecks');
+    vi.mocked(runChecksMod.runComplianceChecks).mockResolvedValueOnce({
+      errors: [{ severity: 'ERROR', code: 'BSPCE_BENEFICIARY_TYPE', message: 'Award rule failed' }],
+      warnings: [],
+      hasHardBlocks: true,
+    });
+    vi.mocked(runChecksMod.runValuationComplianceChecks).mockResolvedValueOnce({
+      errors: [
+        { severity: 'ERROR', code: 'VALUATION_STALE_BLOCKING', message: 'Valuation rule failed' },
+      ],
+      warnings: [],
+      hasHardBlocks: true,
+    });
+
+    const { transitionAward } = await import('../awards');
+    const res = await transitionAward({
+      awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+      toStatus: 'PROPOSED',
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.complianceIssues).toHaveLength(2);
+      const codes = res.complianceIssues?.map((i) => i.code) ?? [];
+      expect(codes).toContain('BSPCE_BENEFICIARY_TYPE');
+      expect(codes).toContain('VALUATION_STALE_BLOCKING');
+    }
   });
 });

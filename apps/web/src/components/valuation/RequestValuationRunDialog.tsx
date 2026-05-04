@@ -41,7 +41,9 @@ export type RequestValuationRunDialogProps = {
 export function RequestValuationRunDialog({ planId }: RequestValuationRunDialogProps) {
   const [open, setOpen] = useState(false);
   const [includeViz, setIncludeViz] = useState(true);
-  const [numPaths, setNumPaths] = useState(100000);
+  // Module 11 B6 quick fix α — default réduit à 20k (cf dette #94).
+  // 100k + viz dépasse le timeout EF Supabase (~150s).
+  const [numPaths, setNumPaths] = useState(20000);
   const [numTimeSteps, setNumTimeSteps] = useState(36);
   const [seedStr, setSeedStr] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -128,6 +130,10 @@ export function RequestValuationRunDialog({ planId }: RequestValuationRunDialogP
                 disabled={isPending}
                 data-testid="input-num-paths"
               />
+              <p className="text-muted-foreground text-xs">
+                20 000 paths recommandé. Au-delà de 50 000 avec visualisation, le moteur peut
+                dépasser le timeout.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="num-steps">Pas de temps</Label>

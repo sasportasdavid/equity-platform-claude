@@ -120,7 +120,10 @@ export type PyMonteCarloResponse = z.infer<typeof pyMonteCarloResponseSchema>;
  *
  * - `includeVisualization` par défaut `true` en V1 (B5+ activera selon
  *   la présence de conditions de marché — pour l'instant flag direct user).
- * - `numPaths` borné à [1_000, 100_000] (cap dur perf moteur).
+ * - `numPaths` borné à [1_000, 100_000] (cap dur perf moteur). Default 20_000
+ *   (Module 11 B6 quick fix α — réduit de 100k pour rester sous le timeout
+ *   EF Supabase ~150s avec `include_visualization=true`. Cf dette #94.
+ *   L'utilisateur expert peut toujours pousser à 100k si réseau le permet).
  * - `numTimeSteps` borné à [12, 365] (mensuel à journalier).
  * - `seed` optionnel : si non fourni, le moteur en génère un (audit reproducible
  *   via `valuation_runs.seed_used`).
@@ -128,7 +131,7 @@ export type PyMonteCarloResponse = z.infer<typeof pyMonteCarloResponseSchema>;
 export const requestValuationRunSchema = z.object({
   planId: z.string().uuid(),
   includeVisualization: z.boolean().default(true),
-  numPaths: z.number().int().min(1000).max(100000).default(100000),
+  numPaths: z.number().int().min(1000).max(100000).default(20000),
   numTimeSteps: z.number().int().min(12).max(365).default(36),
   seed: z.number().int().optional(),
 });
