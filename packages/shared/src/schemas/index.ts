@@ -11,3 +11,4 @@ export * from './portal';
 export * from './tax-simulation';
 export * from './exercise';
 export * from './market-data';
+export * from './cap-table';
