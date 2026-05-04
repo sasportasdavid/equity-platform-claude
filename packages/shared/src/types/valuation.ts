@@ -158,3 +158,21 @@ export const computeIncrementalFairValueSchema = z.object({
   valuationRunIdPost: z.string().uuid(),
 });
 export type ComputeIncrementalFairValueInput = z.input<typeof computeIncrementalFairValueSchema>;
+
+/**
+ * Module 11 B5 — Input pour `listValuationRuns`.
+ *
+ * Filtres optionnels (multi-critères) + pagination par offset (V1 simple,
+ * keyset cursor pour V2 si besoin de gros volumes).
+ */
+export const listValuationRunsSchema = z.object({
+  planId: z.string().uuid().optional(),
+  status: z.enum(['QUEUED', 'RUNNING', 'DONE', 'ERROR']).optional(),
+  runType: z
+    .enum(['MANUAL', 'CRON_MONTHLY', 'CRON_STALE_REFRESH', 'TRIGGERED_BY_MODIFICATION', 'REPLAY'])
+    .optional(),
+  includesVisualization: z.boolean().optional(),
+  limit: z.number().int().min(1).max(200).default(50),
+  offset: z.number().int().min(0).default(0),
+});
+export type ListValuationRunsInput = z.input<typeof listValuationRunsSchema>;

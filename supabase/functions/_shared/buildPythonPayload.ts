@@ -179,6 +179,17 @@ export type PythonPayload = {
   compute_greeks: boolean;
   include_debug_paths: boolean;
   debug_light_paths: number;
+  /**
+   * Module 11 B5 — Si true, le moteur Python retourne le bloc `visualization`
+   * complet (paths_sample, paths_metadata, convergence_curve, payoff_histogram,
+   * num_steps, sim_T, total_paths, sample_size). Coût ~négligeable côté moteur
+   * (les paths sont déjà en mémoire pendant le MC), mais ~50-200 KB de payload
+   * réseau supplémentaire — donc opt-in pour les runs UI cinématiques.
+   *
+   * NB : ce flag est top-level (pas dans `config`), aligné `ValuationRequest`
+   * côté FastAPI v2.5.0.
+   */
+  include_visualization: boolean;
 };
 
 // =============================================================================
@@ -202,7 +213,10 @@ export type PythonPayload = {
  *
  * @throws si paramètres critiques manquants (S0, sigma, T, etc.)
  */
-export function buildPythonPayload(ctx: PythonValuationContext): PythonPayload {
+export function buildPythonPayload(
+  ctx: PythonValuationContext,
+  options: { includeVisualization?: boolean } = {},
+): PythonPayload {
   // 1. Validation inputs critiques
   const s0 = ctx.hypothesisSet.s0;
   if (s0 == null || s0 <= 0) {
@@ -274,6 +288,11 @@ export function buildPythonPayload(ctx: PythonValuationContext): PythonPayload {
     // à la source = pas de coût réseau si MC pour millions de paths).
     include_debug_paths: true,
     debug_light_paths: 50,
+    // Module 11 B5 — top-level (pas dans config). Default false pour préserver
+    // le coût réseau des runs purement IFRS 2 (sans replay UI). La SA
+    // `requestValuationRun` set ce flag à true uniquement quand l'UI demande
+    // explicitement un viewer Monte Carlo.
+    include_visualization: options.includeVisualization === true,
   };
 }
 

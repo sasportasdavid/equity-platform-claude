@@ -64,7 +64,7 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
   {
     title: 'Analyse',
     items: [
-      { href: '/dashboard/valuations', label: 'Valorisations', icon: Calculator, comingSoon: true },
+      { href: '/dashboard/valuations', label: 'Valorisations', icon: Calculator },
       { href: '/dashboard/approvals', label: 'Approbations', icon: ShieldCheck },
       { href: '/dashboard/exercises', label: 'Exercices', icon: TrendingUp },
     ],
