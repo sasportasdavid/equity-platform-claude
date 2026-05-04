@@ -540,6 +540,9 @@ export type Database = {
           modification_type: string
           org_id: string
           reason: string | null
+          valuation_computed_at: string | null
+          valuation_post_modification: number | null
+          valuation_pre_modification: number | null
         }
         Insert: {
           after_snapshot: Json
@@ -555,6 +558,9 @@ export type Database = {
           modification_type: string
           org_id: string
           reason?: string | null
+          valuation_computed_at?: string | null
+          valuation_post_modification?: number | null
+          valuation_pre_modification?: number | null
         }
         Update: {
           after_snapshot?: Json
@@ -570,6 +576,9 @@ export type Database = {
           modification_type?: string
           org_id?: string
           reason?: string | null
+          valuation_computed_at?: string | null
+          valuation_post_modification?: number | null
+          valuation_pre_modification?: number | null
         }
         Relationships: [
           {

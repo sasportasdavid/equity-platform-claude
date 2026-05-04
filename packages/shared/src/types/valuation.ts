@@ -142,3 +142,19 @@ export const replayValuationRunSchema = z.object({
   runId: z.string().uuid(),
 });
 export type ReplayValuationRunInput = z.input<typeof replayValuationRunSchema>;
+
+/**
+ * Module 11 B2 — Input pour `computeIncrementalFairValue` (résolution dette #11).
+ *
+ * Calcule le delta de fair value entre un état pre-modification et post-modification
+ * d'un award (IFRS 2.27-28). En V1, le caller fournit les 2 `valuation_run_id`
+ * déjà calculés (DONE) — la SA orchestre la lecture des résultats + UPDATE des
+ * colonnes audit sur `award_modifications`. En V1.5/B5+, une variante de cette
+ * SA pourra builder les payloads et appeler le moteur Python directement.
+ */
+export const computeIncrementalFairValueSchema = z.object({
+  modificationId: z.string().uuid(),
+  valuationRunIdPre: z.string().uuid(),
+  valuationRunIdPost: z.string().uuid(),
+});
+export type ComputeIncrementalFairValueInput = z.input<typeof computeIncrementalFairValueSchema>;
