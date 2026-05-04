@@ -265,7 +265,7 @@ export const createScenarioSchema = z.object({
   ]),
 });
 
-export type CreateScenarioInput = z.infer<typeof createScenarioSchema>;
+export type CreateScenarioInput = z.input<typeof createScenarioSchema>;
 
 // ---------------------------------------------------------------------------
 // Monte Carlo (B5) — schémas en avance
@@ -279,7 +279,7 @@ export const runMonteCarloExitSchema = z.object({
   numPaths: z.number().int().min(1000).max(100000).default(10000),
 });
 
-export type RunMonteCarloExitInput = z.infer<typeof runMonteCarloExitSchema>;
+export type RunMonteCarloExitInput = z.input<typeof runMonteCarloExitSchema>;
 
 // ---------------------------------------------------------------------------
 // Cap Table read query (B3) — schéma en avance
@@ -291,4 +291,4 @@ export const getCapTableInputSchema = z.object({
   viewMode: z.enum(VIEW_MODES).default('CONSOLIDATED'),
 });
 
-export type GetCapTableInput = z.infer<typeof getCapTableInputSchema>;
+export type GetCapTableInput = z.input<typeof getCapTableInputSchema>;
