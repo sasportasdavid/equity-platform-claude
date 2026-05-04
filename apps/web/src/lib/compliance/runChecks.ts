@@ -342,11 +342,18 @@ export async function runBeneficiaryComplianceChecks(
 // ---------------------------------------------------------------------------
 
 /**
- * WORKFLOW_REQUIRED_FOR_AGA — appelé depuis transitionAward(*, 'PROPOSED')
- * pour générer un soft warning si AGA + pas de workflow attaché.
+ * WORKFLOW_REQUIRED_FOR_AGA — Module 5 B2 (initial) + Module 12.5 B4
+ * (résolution dette #14, branchement dans `transitionAward`).
+ *
+ * Appelé depuis :
+ *   - `transitionAward(_, 'PROPOSED')` côté `awards.ts` (Module 12.5 B4) —
+ *     hard block si plan AGA sans workflow attaché ni default org.
+ *   - Helper `checkAwardApprovalCompliance` (legacy Module 5 B2) — supprimé
+ *     en B4 (0 callers).
  *
  * Le ctx est chargé ici : plan + flag workflowAttached (workflow attach_to_plan
- * OU default org pour AWARD_GRANT).
+ * OU default org pour AWARD_GRANT) + Module 12.5 B4 effective rule severity
+ * (override admin via UI Module 12).
  */
 export async function runApprovalAwardComplianceChecks(
   input: ApprovalAwardCheckInput,
@@ -354,7 +361,7 @@ export async function runApprovalAwardComplianceChecks(
 ): Promise<ComplianceCheckResult> {
   const supabase = await createSupabaseServerClient();
 
-  const [planRes, attachedRes, defaultRes] = await Promise.all([
+  const [planRes, attachedRes, defaultRes, effectiveRule] = await Promise.all([
     supabase.from('plans').select('id, plan_type').eq('id', input.planId).maybeSingle(),
     supabase
       .from('approval_workflows')
@@ -370,11 +377,23 @@ export async function runApprovalAwardComplianceChecks(
       .eq('is_default', true)
       .eq('is_active', true)
       .is('deleted_at', null),
+    loadEffectiveRule('WORKFLOW_REQUIRED_FOR_AGA'),
   ]);
+
+  // Module 12.5 B4 — Si la rule est désactivée DB, on skip silencieusement.
+  if (effectiveRule && !effectiveRule.is_active) {
+    return { errors: [], warnings: [], hasHardBlocks: false };
+  }
+
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  if (effectiveRule) {
+    effectiveSeverityByRule['WORKFLOW_REQUIRED_FOR_AGA'] = effectiveRule.effective_severity;
+  }
 
   const ctx: ApprovalAwardCheckContext = {
     plan: planRes.data ?? null,
     workflowAttached: (attachedRes.count ?? 0) > 0 || (defaultRes.count ?? 0) > 0,
+    effectiveSeverityByRule,
   };
 
   return runRules(APPROVAL_AWARD_RULES, input, ctx);
@@ -383,21 +402,32 @@ export async function runApprovalAwardComplianceChecks(
 /**
  * NO_SELF_APPROVAL — appelé depuis approveDecision/rejectDecision avant le RPC
  * pour bloquer le self-approval.
+ *
+ * Module 12.5 B4 — pré-charge l'effective rule pour respecter la severity DB
+ * + supporter is_active=false (admin off-switch).
  */
 export async function runApprovalDecisionComplianceChecks(
   input: ApprovalDecisionCheckInput,
 ): Promise<ComplianceCheckResult> {
   const supabase = await createSupabaseServerClient();
 
-  // Récupérer la decision → request → award (created_by)
-  const { data: row } = await supabase
-    .from('approval_decisions')
-    .select('request_id, approval_requests!inner(award_id)')
-    .eq('id', input.decisionId)
-    .maybeSingle();
+  // Récupérer la decision → request → award (created_by) + effective rule en parallèle
+  const [decisionRes, effectiveRule] = await Promise.all([
+    supabase
+      .from('approval_decisions')
+      .select('request_id, approval_requests!inner(award_id)')
+      .eq('id', input.decisionId)
+      .maybeSingle(),
+    loadEffectiveRule('NO_SELF_APPROVAL'),
+  ]);
 
-  // approval_requests join → award_id
-  const requestRow = row as { approval_requests?: { award_id?: string | null } } | null;
+  if (effectiveRule && !effectiveRule.is_active) {
+    return { errors: [], warnings: [], hasHardBlocks: false };
+  }
+
+  const requestRow = decisionRes.data as {
+    approval_requests?: { award_id?: string | null };
+  } | null;
   const awardId = requestRow?.approval_requests?.award_id ?? null;
 
   let relatedAward: ApprovalDecisionCheckContext['relatedAward'] = null;
@@ -410,19 +440,27 @@ export async function runApprovalDecisionComplianceChecks(
     if (aw) relatedAward = { id: aw.id, created_by: aw.created_by };
   }
 
-  const ctx: ApprovalDecisionCheckContext = { relatedAward };
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  if (effectiveRule) {
+    effectiveSeverityByRule['NO_SELF_APPROVAL'] = effectiveRule.effective_severity;
+  }
+
+  const ctx: ApprovalDecisionCheckContext = { relatedAward, effectiveSeverityByRule };
   return runRules(APPROVAL_DECISION_RULES, input, ctx);
 }
 
 /**
  * WORKFLOW_HAS_VALID_STEPS — appelé depuis createWorkflow/updateWorkflow.
- * Pré-charge userExistsMap (USER steps) + roleUserCountMap (ROLE/ANY/ALL steps).
+ * Pré-charge userExistsMap (USER steps) + roleUserCountMap (ROLE/ANY/ALL steps)
+ * + Module 12.5 B4 effective rule severity / is_active.
  */
 export async function runApprovalWorkflowComplianceChecks(
   input: ApprovalWorkflowCheckInput,
   orgId: string,
 ): Promise<ComplianceCheckResult> {
   const supabase = await createSupabaseServerClient();
+
+  const effectiveRulePromise = loadEffectiveRule('WORKFLOW_HAS_VALID_STEPS');
 
   const userIdsToCheck = Array.from(
     new Set(
@@ -468,7 +506,21 @@ export async function runApprovalWorkflowComplianceChecks(
     }
   }
 
-  const ctx: ApprovalWorkflowCheckContext = { userExistsMap, roleUserCountMap };
+  // Module 12.5 B4 — résoudre l'effective rule (chargée en parallèle au début)
+  const effectiveRule = await effectiveRulePromise;
+  if (effectiveRule && !effectiveRule.is_active) {
+    return { errors: [], warnings: [], hasHardBlocks: false };
+  }
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  if (effectiveRule) {
+    effectiveSeverityByRule['WORKFLOW_HAS_VALID_STEPS'] = effectiveRule.effective_severity;
+  }
+
+  const ctx: ApprovalWorkflowCheckContext = {
+    userExistsMap,
+    roleUserCountMap,
+    effectiveSeverityByRule,
+  };
   return runRules(APPROVAL_WORKFLOW_RULES, input, ctx);
 }
 

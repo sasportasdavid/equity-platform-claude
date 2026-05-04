@@ -11,9 +11,8 @@ import {
   updateWorkflowSchema,
 } from '@equity/shared';
 import { logAuditEvent } from '@/lib/audit';
-import { hasPermission, requirePermission } from '@/lib/auth/rbac';
+import { requirePermission } from '@/lib/auth/rbac';
 import {
-  runApprovalAwardComplianceChecks,
   runApprovalDecisionComplianceChecks,
   runApprovalWorkflowComplianceChecks,
 } from '@/lib/compliance/runChecks';
@@ -911,28 +910,8 @@ export async function getApprovalRequestDetail(
   };
 }
 
-// ===========================================================================
-// 14. runAwardApprovalCompliance — helper exposé pour le hook transitionAward
-// ===========================================================================
-
-/**
- * Wrapper public pour `runApprovalAwardComplianceChecks`. Permet à
- * `transitionAward` (Module 3b) de tirer la rule WORKFLOW_REQUIRED_FOR_AGA
- * sans importer directement le runner (qui est `server-only`).
- *
- * NB : ce n'est pas une "Server Action" au sens UI (pas appelée depuis client),
- * mais elle vit ici car le module est `'use server'`. Pas idéal mais évite
- * un fichier helper séparé pour 1 fonction.
- */
-export async function checkAwardApprovalCompliance(
-  awardId: string,
-  planId: string,
-): Promise<{ warnings: ComplianceIssue[] }> {
-  const user = await requirePermission('approvals.read');
-  if (!user.activeOrgId) return { warnings: [] };
-  // hasPermission est utilisé ici uniquement pour faire taire l'unused-import lint
-  void hasPermission;
-
-  const result = await runApprovalAwardComplianceChecks({ awardId, planId }, user.activeOrgId);
-  return { warnings: result.warnings };
-}
+// Module 12.5 B4 — Helper `checkAwardApprovalCompliance` supprimé.
+// 0 callers depuis Module 5 B2 (rule dormante = dette V1 #14). En B4, la rule
+// WORKFLOW_REQUIRED_FOR_AGA est branchée directement dans `transitionAward`
+// via import direct de `runApprovalAwardComplianceChecks`. Pattern aligné avec
+// les 2 autres compliance calls (runComplianceChecks + runValuationComplianceChecks).

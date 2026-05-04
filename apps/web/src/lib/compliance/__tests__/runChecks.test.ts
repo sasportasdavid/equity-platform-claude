@@ -434,6 +434,33 @@ describe('runBeneficiaryComplianceChecks — Module 12.5 B2 effective rules wiri
     loadEff.mockResolvedValue(null);
   });
 
+  // Module 12.5 B4 — runApprovalAwardComplianceChecks désactivation
+  it('WORKFLOW_REQUIRED_FOR_AGA désactivée DB → AGA sans workflow passe (dette #14 + override admin)', async () => {
+    const effMod = await import('../effectiveRules');
+    const loadEff = vi.mocked(effMod.loadEffectiveRule);
+    loadEff.mockImplementation(async (code) => {
+      if (code === 'WORKFLOW_REQUIRED_FOR_AGA') {
+        return makeEffectiveRule('WORKFLOW_REQUIRED_FOR_AGA', {
+          scope: 'approval',
+          is_active: false,
+          effective_severity: 'error',
+        });
+      }
+      return null;
+    });
+
+    const { runApprovalAwardComplianceChecks } = await import('../runChecks');
+    const res = await runApprovalAwardComplianceChecks(
+      { awardId: 'aw-uuid', planId: 'pl-uuid' },
+      'org-uuid',
+    );
+    expect(res.errors).toEqual([]);
+    expect(res.warnings).toEqual([]);
+
+    loadEff.mockReset();
+    loadEff.mockResolvedValue(null);
+  });
+
   it('TAX_RESIDENCE_FRANCE_CONSISTENCY désactivée → UK + isFR=true passe', async () => {
     const effMod = await import('../effectiveRules');
     const loadEff = vi.mocked(effMod.loadEffectiveRule);

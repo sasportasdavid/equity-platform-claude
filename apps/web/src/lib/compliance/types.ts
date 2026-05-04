@@ -160,6 +160,14 @@ export type ApprovalAwardCheckInput = {
 export type ApprovalAwardCheckContext = {
   plan: { id: string; plan_type: string } | null;
   workflowAttached: boolean;
+  /**
+   * Module 12.5 B4 — Map ruleCode → params merged depuis DB. Aucune des 3
+   * approval rules n'est paramétrique V1, mais le champ est exposé pour
+   * cohérence avec les autres scopes.
+   */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /** Module 12.5 B4 — Map ruleCode → severity merged DB (override admin). */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 /**
@@ -173,6 +181,10 @@ export type ApprovalDecisionCheckInput = {
 export type ApprovalDecisionCheckContext = {
   /** Award lié à la décision (si subject_type='AWARD'). */
   relatedAward: { id: string; created_by: string | null } | null;
+  /** Module 12.5 B4 — Map ruleCode → params merged DB (no params V1). */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /** Module 12.5 B4 — Map ruleCode → severity merged DB. */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 /**
@@ -201,6 +213,10 @@ export type ApprovalWorkflowCheckContext = {
    * Pré-chargée par le runner.
    */
   roleUserCountMap: Map<string, number>;
+  /** Module 12.5 B4 — Map ruleCode → params merged DB (no params V1). */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /** Module 12.5 B4 — Map ruleCode → severity merged DB. */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 // ---------------------------------------------------------------------------

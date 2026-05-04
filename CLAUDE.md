@@ -442,6 +442,23 @@ identiques + service_role injecté automatiquement.
     23 rules configurables, 4 simulables what-if. 7 dettes V2 ouvertes
     (#110-#116).
 
+- [x] Module 12.5 — Wiring complet 21 rules à effectiveRules
+      (branche `feat/module-12-5-wiring-21-rules`, pré-PR squash-merge 2026-05-04)
+  - [x] B1 — 5 award rules wired + helper `_helpers.ts` partagé (`25e290c`)
+  - [x] B2 — 6 beneficiary rules wired + HIRE_DATE_REASONABLE évolution V1.X
+        (`maxFutureMonths` default 3) (`7efa647`)
+  - [x] B3 — 4 cap_table + 3 document rules wired + migration 00094c
+        (`toleranceEur` → `tolerancePct`) + FMV_RECENT_ENOUGH évolution V1.X
+        (12 mois → 90j, severity error) + ESOP cross-validation defensive
+        (`dd5e2a9`)
+  - [x] B4 — 3 approval rules wired + WORKFLOW_REQUIRED_FOR_AGA promote
+        `'soft' → 'hard'` + branchée dans `transitionAward` (résolution
+        dette V1 #14) + helper inutile supprimé
+  - **Statistiques** : 1083 tests workspace (vs 1030 pré-M12.5, +53),
+    1 migration cloud (00094c), 0 SA nouveau, 21/21 rules wired (100 %).
+    3 dettes V2 résolues (#14, #110, #111). 3 évolutions sémantiques V1.X
+    documentées. Pattern établi pour Module 13+.
+
 ### À venir
 
 - [ ] Module 13 — Audit Trail & Reporting
@@ -569,11 +586,14 @@ SET deleted_at = ...` rejeté en cleanup post-mortem.
     (Module 5 B1) : empêche le cleanup direct via DELETE workflow
     → cascade. Workaround : delete decisions d'abord. À fixer V2.
 
-14. **`runApprovalAwardComplianceChecks` pas branché dans
-    `transitionAward`** (Module 5 B2) : la rule
-    `WORKFLOW_REQUIRED_FOR_AGA` (soft warning AGA sans workflow)
-    reste dormante. Helper `checkAwardApprovalCompliance` exposé
-    mais pas appelé. À wire Module 12 (Compliance V2 configurable).
+14. **~~`runApprovalAwardComplianceChecks` pas branché dans `transitionAward`~~
+    ✅ RÉSOLUE Module 12.5 B4** (2026-05-04) — la rule
+    `WORKFLOW_REQUIRED_FOR_AGA` est désormais branchée dans `transitionAward(_,
+'PROPOSED')` en parallèle des 2 autres compliance calls. Promote
+    `enforcement: 'soft' → 'hard'` (loi française stricte). Helper
+    `checkAwardApprovalCompliance` supprimé (0 callers, code mort). L'admin
+    OWNER peut downgrade severity ou désactiver la rule via UI Module 12
+    settings.
 
 15. **(closed PR #10)** Notifications email Module 5 → décision archi
     Module 7 B5 : ne PAS modifier le RPC Module 5 (qui insère IN_APP
@@ -774,29 +794,22 @@ proxy.
 110-116. **Dettes Module 12 (PR #28)** — voir
 `memory/module_12_complete.md`. Notable :
 
-- **#110 Wiring partiel rules → effective params** : Module 12.5 B1+B2+B3
-  livrés 2026-05-04 (branche `feat/module-12-5-wiring-21-rules`, pré-PR).
-  18/21 rules wired (86 %).
-  - **B1** : 5 award rules wired (helper `_helpers.ts` partagé +
-    extension `runComplianceChecks`).
-  - **B2** : 6 beneficiary rules wired. HIRE_DATE_REASONABLE évolue V1.X
-    (`maxFutureMonths` default 3). Anomalie #114 préservée (sub-rule
-    HIRE_DATE_INVALID reste ERROR hardcoded).
-  - **B3** : 4 cap_table + 3 document rules wired + **migration 00094c**
-    (`toleranceEur` → `tolerancePct` 1 % default, scale linéaire avec
-    taille round). FMV_RECENT_ENOUGH évolue V1.X (`12 mois` → `90 jours`,
-    severity DB `'error'` au lieu de `'soft'` warning legacy — plus strict).
-    ESOP_PERCENT_BEST_PRACTICE cross-validation defensive
-    (`minPct >= maxPct` → fallback defaults + warn).
-  - **3 rules restantes** (approval) → B4 + closure.
-  - Effet actuel : la page UI Module 12 impacte runtime pour `valuation`
-    (Module 12 B2) + `award` (B1) + `beneficiary` (B2) + `cap_table` +
-    `document` (B3). Seul `approval` reste à wire.
-- **#111 Severity drift code/DB** : 4 rules ont severity ajustée en DB
-  (TAX_RESIDENCE, WORKFLOW_REQUIRED_FOR_AGA, FMV_RECENT_ENOUGH,
-  BSPCE_BENEFICIARY_TYPE_REVERSE). Le checker code n'utilise pas
-  encore `effectiveSeverityByRule` — la severity DB est ignorée pour
-  ces 21 rules. À cabler V1.5.
+- **~~#110 Wiring partiel rules → effective params~~ ✅ RÉSOLUE Module 12.5**
+  (2026-05-04, branche `feat/module-12-5-wiring-21-rules`). Chantier 4 phases
+  B1-B4 livré (21/21 rules wired, 100 %). Helper partagé `_helpers.ts`
+  (`readNumberParam` + `readSeverity`), 8 contexts étendus, 8 runners qui
+  pré-chargent `loadEffectiveRule` en parallèle, 1 migration cloud
+  (00094c — `toleranceEur` → `tolerancePct`). 3 évolutions sémantiques V1.X
+  documentées (HIRE_DATE_REASONABLE `maxFutureMonths`, FMV_RECENT_ENOUGH
+  `staleDays` 90j vs 12 mois legacy, WORKFLOW_REQUIRED_FOR_AGA promote
+  `'soft' → 'hard'`). 1083 tests workspace (+53 vs Module 12 closure).
+  Pattern établi pour Module 13+.
+- **~~#111 Severity drift code/DB~~ ✅ RÉSOLUE Module 12.5** (2026-05-04) —
+  les 4 rules listées (TAX_RESIDENCE, WORKFLOW_REQUIRED_FOR_AGA,
+  FMV_RECENT_ENOUGH, BSPCE_BENEFICIARY_TYPE_REVERSE) lisent désormais
+  `effectiveSeverityByRule` côté checker. La severity DB prime sur la
+  legacy. WORKFLOW_REQUIRED_FOR_AGA en plus promote `enforcement: 'soft' →
+'hard'` pour aligner le bucket runner.
 - **#112 HIRE_DATE_REASONABLE comportement mixte** : seedée
   `severity_default='warning'` mais émet ERROR si année < 1900. UI
   affiche badge "Comportement mixte" en attendant le split V2 en 2
