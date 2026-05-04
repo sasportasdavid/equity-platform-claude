@@ -82,7 +82,7 @@ describe('HIRE_DATE_REASONABLE', () => {
     expect(issue).toBeNull();
   });
 
-  it('futur → WARNING (pas ERROR)', async () => {
+  it('futur (1 an, > maxFutureMonths default 3) → WARNING', async () => {
     const futur = new Date();
     futur.setFullYear(futur.getFullYear() + 1);
     const iso = futur.toISOString().slice(0, 10);
@@ -91,7 +91,7 @@ describe('HIRE_DATE_REASONABLE', () => {
     expect(issue?.code).toBe('HIRE_DATE_FUTURE');
   });
 
-  it('1850 → ERROR', async () => {
+  it('1850 → ERROR (sub-rule HIRE_DATE_INVALID hardcoded)', async () => {
     const issue = await HIRE_DATE_REASONABLE.check(
       { ...baseInput, hireDate: '1850-01-01' },
       makeCtx(),
@@ -203,5 +203,138 @@ describe('BSPCE_BENEFICIARY_TYPE_REVERSE', () => {
       makeCtx({ bspceActiveAwardsCount: 2 }),
     );
     expect(issue).toBeNull();
+  });
+});
+
+// ===========================================================================
+// Module 12.5 B2 — Lecture des seuils + severity depuis ctx
+// ===========================================================================
+
+describe('HIRE_DATE_REASONABLE — params dynamiques (Module 12.5 B2)', () => {
+  it('utilise minYear=1950 du ctx → 1949 émet ERROR HIRE_DATE_INVALID', async () => {
+    const issue = await HIRE_DATE_REASONABLE.check(
+      { ...baseInput, hireDate: '1949-12-31' },
+      makeCtx({
+        effectiveParamsByRule: { HIRE_DATE_REASONABLE: { minYear: 1950 } },
+      }),
+    );
+    expect(issue?.severity).toBe('ERROR');
+    expect(issue?.code).toBe('HIRE_DATE_INVALID');
+    expect(issue?.message).toMatch(/avant 1950/);
+  });
+
+  it('utilise maxFutureMonths=3 (default) → +2 mois passe (sous la marge)', async () => {
+    const future = new Date();
+    future.setMonth(future.getMonth() + 2);
+    future.setDate(future.getDate() - 3); // safety pour éviter dépasser pile à 3 mois
+    const issue = await HIRE_DATE_REASONABLE.check(
+      { ...baseInput, hireDate: future.toISOString().slice(0, 10) },
+      makeCtx(),
+    );
+    expect(issue).toBeNull();
+  });
+
+  it('utilise maxFutureMonths=12 (org permissive) → +8 mois passe', async () => {
+    const future = new Date();
+    future.setMonth(future.getMonth() + 8);
+    const issue = await HIRE_DATE_REASONABLE.check(
+      { ...baseInput, hireDate: future.toISOString().slice(0, 10) },
+      makeCtx({
+        effectiveParamsByRule: { HIRE_DATE_REASONABLE: { maxFutureMonths: 12 } },
+      }),
+    );
+    expect(issue).toBeNull();
+  });
+
+  it('utilise maxFutureMonths=3 → +6 mois émet WARNING HIRE_DATE_FUTURE', async () => {
+    const future = new Date();
+    future.setMonth(future.getMonth() + 6);
+    const issue = await HIRE_DATE_REASONABLE.check(
+      { ...baseInput, hireDate: future.toISOString().slice(0, 10) },
+      makeCtx(),
+    );
+    expect(issue?.severity).toBe('WARNING');
+    expect(issue?.code).toBe('HIRE_DATE_FUTURE');
+    expect(issue?.message).toMatch(/> 3 mois/);
+  });
+
+  it('respecte severity DB error pour HIRE_DATE_FUTURE (admin upgrade)', async () => {
+    const future = new Date();
+    future.setFullYear(future.getFullYear() + 1);
+    const issue = await HIRE_DATE_REASONABLE.check(
+      { ...baseInput, hireDate: future.toISOString().slice(0, 10) },
+      makeCtx({
+        effectiveSeverityByRule: { HIRE_DATE_REASONABLE: 'error' },
+      }),
+    );
+    expect(issue?.severity).toBe('ERROR');
+    expect(issue?.code).toBe('HIRE_DATE_FUTURE');
+  });
+
+  it('HIRE_DATE_INVALID reste ERROR même si severity DB warning (sub-rule hardcoded #114)', async () => {
+    const issue = await HIRE_DATE_REASONABLE.check(
+      { ...baseInput, hireDate: '1850-01-01' },
+      makeCtx({
+        effectiveSeverityByRule: { HIRE_DATE_REASONABLE: 'warning' },
+      }),
+    );
+    expect(issue?.severity).toBe('ERROR');
+    expect(issue?.code).toBe('HIRE_DATE_INVALID');
+  });
+});
+
+describe('Beneficiary rules — severity dynamique (Module 12.5 B2)', () => {
+  it('EMAIL_UNIQUE_IN_ORG respecte severity DB warning (admin downgrade)', async () => {
+    const issue = await EMAIL_UNIQUE_IN_ORG.check(
+      baseInput,
+      makeCtx({
+        emailCollisionId: 'other-id',
+        effectiveSeverityByRule: { EMAIL_UNIQUE_IN_ORG: 'warning' },
+      }),
+    );
+    expect(issue?.severity).toBe('WARNING');
+    expect(issue?.code).toBe('EMAIL_UNIQUE_IN_ORG');
+  });
+
+  it('TAX_RESIDENCE_FRANCE_CONSISTENCY respecte severity DB warning (drift seedé)', async () => {
+    const issue = await TAX_RESIDENCE_FRANCE_CONSISTENCY.check(
+      { ...baseInput, taxResidence: 'UK', isTaxResidentFrance: true },
+      makeCtx({
+        effectiveSeverityByRule: { TAX_RESIDENCE_FRANCE_CONSISTENCY: 'warning' },
+      }),
+    );
+    expect(issue?.severity).toBe('WARNING');
+  });
+
+  it('MANAGER_NOT_SELF respecte severity DB warning', async () => {
+    const issue = await MANAGER_NOT_SELF.check(
+      { ...baseInput, id: 'me', managerId: 'me' },
+      makeCtx({
+        effectiveSeverityByRule: { MANAGER_NOT_SELF: 'warning' },
+      }),
+    );
+    expect(issue?.severity).toBe('WARNING');
+  });
+
+  it('IBAN_FORMAT respecte severity DB error (admin upgrade)', async () => {
+    const issue = await IBAN_FORMAT.check(
+      { ...baseInput, iban: 'abc' },
+      makeCtx({
+        effectiveSeverityByRule: { IBAN_FORMAT: 'error' },
+      }),
+    );
+    expect(issue?.severity).toBe('ERROR');
+    expect(issue?.code).toBe('IBAN_INVALID_FORMAT');
+  });
+
+  it('BSPCE_BENEFICIARY_TYPE_REVERSE respecte severity DB warning (drift seedé)', async () => {
+    const issue = await BSPCE_BENEFICIARY_TYPE_REVERSE.check(
+      { ...baseInput, id: 'me', beneficiaryType: 'CONSULTANT' },
+      makeCtx({
+        bspceActiveAwardsCount: 2,
+        effectiveSeverityByRule: { BSPCE_BENEFICIARY_TYPE_REVERSE: 'warning' },
+      }),
+    );
+    expect(issue?.severity).toBe('WARNING');
   });
 });

@@ -51,6 +51,21 @@ export type AwardCheckContext = {
    * si Module 10 pas livré.
    */
   companyTotalShares?: number | null;
+  /**
+   * Module 12.5 B1 — Map ruleCode → params merged depuis DB (via
+   * `loadEffectiveRule`). Les checkers lisent les seuils via
+   * `readNumberParam(ctx, ruleCode, paramName, default)` avec fallback sur
+   * la constante hard-codée. Le wiring depuis `runComplianceChecks` est
+   * fait pour les 5 award rules : BSPCE_BENEFICIARY_TYPE, AGA_30_PERCENT_CAP,
+   * AGA_APPROACHING_CAP, POOL_AVAILABLE, GRANT_DATE_RECENT.
+   */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /**
+   * Module 12.5 B1 — Map ruleCode → severity merged DB. V1 = défaut
+   * `severity_default`, sauf override explicite côté table
+   * `compliance_rule_overrides.severity_override`.
+   */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 /**
@@ -105,6 +120,22 @@ export type BeneficiaryCheckContext = {
    * `null` = check non lancé (ex: création, ou nouveau type compatible BSPCE).
    */
   bspceActiveAwardsCount?: number | null;
+  /**
+   * Module 12.5 B2 — Map ruleCode → params merged depuis DB. Lus via
+   * `readNumberParam(ctx, ruleCode, paramName, default)` côté checkers
+   * (helper partagé `rules/_helpers.ts`). Pré-chargé par
+   * `runBeneficiaryComplianceChecks` pour les 6 beneficiary rules.
+   */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /**
+   * Module 12.5 B2 — Map ruleCode → severity merged DB.
+   *
+   * ⚠️ Cas spécial HIRE_DATE_REASONABLE (dette V2 #114) : la rule émet
+   * 2 sub-codes avec severities distinctes (HIRE_DATE_INVALID hardcoded
+   * `error` si year < minYear, HIRE_DATE_FUTURE configurable depuis DB
+   * via cette map). Le split en 2 rules sera fait V2.
+   */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 export type ComplianceCheckResult = {
@@ -129,6 +160,14 @@ export type ApprovalAwardCheckInput = {
 export type ApprovalAwardCheckContext = {
   plan: { id: string; plan_type: string } | null;
   workflowAttached: boolean;
+  /**
+   * Module 12.5 B4 — Map ruleCode → params merged depuis DB. Aucune des 3
+   * approval rules n'est paramétrique V1, mais le champ est exposé pour
+   * cohérence avec les autres scopes.
+   */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /** Module 12.5 B4 — Map ruleCode → severity merged DB (override admin). */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 /**
@@ -142,6 +181,10 @@ export type ApprovalDecisionCheckInput = {
 export type ApprovalDecisionCheckContext = {
   /** Award lié à la décision (si subject_type='AWARD'). */
   relatedAward: { id: string; created_by: string | null } | null;
+  /** Module 12.5 B4 — Map ruleCode → params merged DB (no params V1). */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /** Module 12.5 B4 — Map ruleCode → severity merged DB. */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 /**
@@ -170,6 +213,10 @@ export type ApprovalWorkflowCheckContext = {
    * Pré-chargée par le runner.
    */
   roleUserCountMap: Map<string, number>;
+  /** Module 12.5 B4 — Map ruleCode → params merged DB (no params V1). */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /** Module 12.5 B4 — Map ruleCode → severity merged DB. */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 // ---------------------------------------------------------------------------
@@ -184,6 +231,13 @@ export type DocumentGenerationCheckInput = {
 export type DocumentGenerationCheckContext = {
   /** Date ISO de la dernière mise à jour de la FMV du plan. NULL si jamais setté. */
   fmvSetAt: string | null;
+  /**
+   * Module 12.5 B3 — Map ruleCode → params merged depuis DB. Lu via
+   * `readNumberParam` pour FMV_RECENT_ENOUGH (`staleDays`).
+   */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /** Module 12.5 B3 — severity merged DB pour FMV_RECENT_ENOUGH. */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 export type DocumentSignatureCheckInput = {
@@ -195,7 +249,16 @@ export type DocumentSignatureCheckInput = {
   }>;
 };
 
-export type DocumentSignatureCheckContext = Record<string, never>;
+/**
+ * Module 12.5 B3 — Le ctx signature ne portait initialement aucune donnée.
+ * On ajoute uniquement `effectiveSeverityByRule` (les 2 rules
+ * SIGNERS_COMPLETE_INFO + DOCUMENT_NOT_VOIDED n'ont pas de params).
+ * `effectiveParamsByRule` reste optionnel (placeholder, jamais lu V1).
+ */
+export type DocumentSignatureCheckContext = {
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
+};
 
 // ---------------------------------------------------------------------------
 // Module 10 B7 — Cap Table compliance
@@ -240,6 +303,16 @@ export type CapTableCheckContext = {
    * `ESOP_PERCENT_BEST_PRACTICE`. NULL si la cap table est vide.
    */
   companyTotalSharesIncludingPool: number | null;
+  /**
+   * Module 12.5 B3 — Map ruleCode → params merged depuis DB
+   * (`loadEffectiveRule`). Pré-chargé par `runCapTableComplianceChecks`
+   * pour les 4 cap_table rules. Lus via `readNumberParam` côté checkers.
+   */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /**
+   * Module 12.5 B3 — Map ruleCode → severity merged DB.
+   */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 // ---------------------------------------------------------------------------

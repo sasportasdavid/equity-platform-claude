@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   CAP_TABLE_RULES,
   ESOP_PERCENT_BEST_PRACTICE,
@@ -328,5 +328,161 @@ describe('CAP_TABLE_RULES', () => {
     const soft = CAP_TABLE_RULES.filter((r) => r.enforcement === 'soft');
     expect(hard).toHaveLength(3);
     expect(soft).toHaveLength(1);
+  });
+});
+
+// ===========================================================================
+// Module 12.5 B3 — Lecture des seuils + severity depuis ctx
+// ===========================================================================
+
+describe('ROUND_AMOUNT_CONSISTENCY — params dynamiques (Module 12.5 B3)', () => {
+  it('utilise tolerancePct=5 (org permissive) — 4 % passe', async () => {
+    const input: CapTableCheckInput = {
+      scope: 'FUNDING_ROUND_CREATE',
+      amountRaised: 1_000_000,
+      pricePerShare: 100,
+      investors: [{ amount: 960_000, units: 9600 }],
+    };
+    const ctx: CapTableCheckContext = {
+      ...baseCtx,
+      effectiveParamsByRule: { ROUND_AMOUNT_CONSISTENCY: { tolerancePct: 5 } },
+    };
+    const result = await ROUND_AMOUNT_CONSISTENCY.check(input, ctx);
+    expect(result).toBeNull();
+  });
+
+  it('utilise tolerancePct=0.5 (org strict) — 1 % bloque', async () => {
+    const input: CapTableCheckInput = {
+      scope: 'FUNDING_ROUND_CREATE',
+      amountRaised: 1_000_000,
+      pricePerShare: 100,
+      investors: [{ amount: 990_000, units: 9900 }],
+    };
+    const ctx: CapTableCheckContext = {
+      ...baseCtx,
+      effectiveParamsByRule: { ROUND_AMOUNT_CONSISTENCY: { tolerancePct: 0.5 } },
+    };
+    const result = await ROUND_AMOUNT_CONSISTENCY.check(input, ctx);
+    expect(result?.severity).toBe('ERROR');
+    expect(result?.message).toMatch(/±0\.5 %/);
+  });
+
+  it('fallback sur 1 % si effectiveParamsByRule absent (DB indispo)', async () => {
+    const input: CapTableCheckInput = {
+      scope: 'FUNDING_ROUND_CREATE',
+      amountRaised: 1_000_000,
+      pricePerShare: 100,
+      investors: [{ amount: 980_000, units: 9800 }],
+    };
+    const result = await ROUND_AMOUNT_CONSISTENCY.check(input, baseCtx);
+    expect(result?.severity).toBe('ERROR');
+    expect(result?.message).toMatch(/±1 %/);
+  });
+});
+
+describe('ESOP_PERCENT_BEST_PRACTICE — params dynamiques + cross-validation (Module 12.5 B3)', () => {
+  it('utilise minPct=8 / maxPct=20 (org custom) — 18 % passe', async () => {
+    const input: CapTableCheckInput = {
+      scope: 'SHARE_CLASS_CREATE',
+      code: 'ESOP',
+      classType: 'ESOP',
+      poolTotalUnits: 180000, // 18%
+    };
+    const ctx: CapTableCheckContext = {
+      ...baseCtx,
+      companyTotalSharesIncludingPool: 1_000_000,
+      effectiveParamsByRule: {
+        ESOP_PERCENT_BEST_PRACTICE: { minPct: 8, maxPct: 20 },
+      },
+    };
+    const result = await ESOP_PERCENT_BEST_PRACTICE.check(input, ctx);
+    expect(result).toBeNull();
+  });
+
+  it('utilise default 5/15 — 18 % émet WARNING ESOP_TOO_LARGE', async () => {
+    const input: CapTableCheckInput = {
+      scope: 'SHARE_CLASS_CREATE',
+      code: 'ESOP',
+      classType: 'ESOP',
+      poolTotalUnits: 180000, // 18%
+    };
+    const ctx: CapTableCheckContext = {
+      ...baseCtx,
+      companyTotalSharesIncludingPool: 1_000_000,
+    };
+    const result = await ESOP_PERCENT_BEST_PRACTICE.check(input, ctx);
+    expect(result?.code).toBe('ESOP_TOO_LARGE');
+    expect(result?.message).toMatch(/5–15 % recommandé/);
+  });
+
+  it('cross-validation : minPct >= maxPct → fallback aux defaults + warn', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const input: CapTableCheckInput = {
+      scope: 'SHARE_CLASS_CREATE',
+      code: 'ESOP',
+      classType: 'ESOP',
+      poolTotalUnits: 100000, // 10% — dans les defaults (5-15) mais hors d'une éventuelle config invalide
+    };
+    const ctx: CapTableCheckContext = {
+      ...baseCtx,
+      companyTotalSharesIncludingPool: 1_000_000,
+      effectiveParamsByRule: {
+        ESOP_PERCENT_BEST_PRACTICE: { minPct: 25, maxPct: 10 }, // INVALIDE
+      },
+    };
+    const result = await ESOP_PERCENT_BEST_PRACTICE.check(input, ctx);
+    // 10 % est dans la fourchette default 5-15 → null après fallback
+    expect(result).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('config invalide'));
+    warnSpy.mockRestore();
+  });
+
+  it('respecte severity DB error au lieu de WARNING par défaut', async () => {
+    const input: CapTableCheckInput = {
+      scope: 'SHARE_CLASS_CREATE',
+      code: 'ESOP',
+      classType: 'ESOP',
+      poolTotalUnits: 30000, // 3%
+    };
+    const ctx: CapTableCheckContext = {
+      ...baseCtx,
+      companyTotalSharesIncludingPool: 1_000_000,
+      effectiveSeverityByRule: { ESOP_PERCENT_BEST_PRACTICE: 'error' },
+    };
+    const result = await ESOP_PERCENT_BEST_PRACTICE.check(input, ctx);
+    expect(result?.severity).toBe('ERROR');
+    expect(result?.code).toBe('ESOP_TOO_SMALL');
+  });
+});
+
+describe('SHARE_CLASS_CODE_UNIQUE / POOL_OVER_ALLOCATION — severity dynamique (Module 12.5 B3)', () => {
+  it('SHARE_CLASS_CODE_UNIQUE respecte severity DB warning', async () => {
+    const input: CapTableCheckInput = {
+      scope: 'SHARE_CLASS_CREATE',
+      code: 'PREF_A',
+      classType: 'PREFERRED',
+    };
+    const ctx: CapTableCheckContext = {
+      ...baseCtx,
+      existingShareClassCodes: new Set(['PREF_A']),
+      effectiveSeverityByRule: { SHARE_CLASS_CODE_UNIQUE: 'warning' },
+    };
+    const result = await SHARE_CLASS_CODE_UNIQUE.check(input, ctx);
+    expect(result?.severity).toBe('WARNING');
+  });
+
+  it('POOL_OVER_ALLOCATION respecte severity DB warning', async () => {
+    const input: CapTableCheckInput = {
+      scope: 'SHARE_CLASS_CREATE',
+      code: 'ESOP',
+      classType: 'ESOP',
+      poolTotalUnits: 0,
+    };
+    const ctx: CapTableCheckContext = {
+      ...baseCtx,
+      effectiveSeverityByRule: { POOL_OVER_ALLOCATION: 'warning' },
+    };
+    const result = await POOL_OVER_ALLOCATION.check(input, ctx);
+    expect(result?.severity).toBe('WARNING');
   });
 });

@@ -15,7 +15,11 @@ import {
   type BulkAwardImportInput,
 } from '@equity/shared';
 import { logAuditEvent } from '@/lib/audit';
-import { runComplianceChecks, runValuationComplianceChecks } from '@/lib/compliance/runChecks';
+import {
+  runApprovalAwardComplianceChecks,
+  runComplianceChecks,
+  runValuationComplianceChecks,
+} from '@/lib/compliance/runChecks';
 import { hasPermission, requirePermission } from '@/lib/auth/rbac';
 import {
   canTransition,
@@ -342,7 +346,11 @@ export async function transitionAward(input: unknown): Promise<ActionVoid | Acti
   // Aggregation : les errors des 2 jeux de rules sont mergées avant le hard
   // block. Les warnings sont concaténés et stockés ensemble.
   if (toStatus === 'PROPOSED') {
-    const [compliance, valuationCompliance] = await Promise.all([
+    // Module 12.5 B4 — Résolution dette #14 : runApprovalAwardComplianceChecks
+    // ajouté en parallèle pour brancher WORKFLOW_REQUIRED_FOR_AGA (hard block
+    // si plan AGA sans workflow attaché ni default org). L'admin peut downgrade
+    // ou désactiver via Module 12 settings.
+    const [compliance, valuationCompliance, approvalCompliance] = await Promise.all([
       runComplianceChecks('AWARD_PROPOSAL', {
         planId: award.plan_id,
         beneficiaryId: award.beneficiary_id,
@@ -354,10 +362,19 @@ export async function transitionAward(input: unknown): Promise<ActionVoid | Acti
         planId: award.plan_id,
         toStatus: 'PROPOSED',
       }),
+      runApprovalAwardComplianceChecks({ awardId, planId: award.plan_id }, user.activeOrgId),
     ]);
 
-    const allErrors = [...compliance.errors, ...valuationCompliance.errors];
-    const allWarnings = [...compliance.warnings, ...valuationCompliance.warnings];
+    const allErrors = [
+      ...compliance.errors,
+      ...valuationCompliance.errors,
+      ...approvalCompliance.errors,
+    ];
+    const allWarnings = [
+      ...compliance.warnings,
+      ...valuationCompliance.warnings,
+      ...approvalCompliance.warnings,
+    ];
 
     if (allErrors.length > 0) {
       return {

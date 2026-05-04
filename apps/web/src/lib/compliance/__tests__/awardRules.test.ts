@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AGA_30_PERCENT_CAP,
+  AGA_APPROACHING_CAP,
   BSPCE_BENEFICIARY_TYPE,
   GRANT_DATE_RECENT,
   POOL_AVAILABLE,
@@ -181,5 +182,203 @@ describe('GRANT_DATE_RECENT', () => {
 
   it("rule enforcement = soft (n'est jamais ERROR)", () => {
     expect(GRANT_DATE_RECENT.enforcement).toBe('soft');
+  });
+});
+
+// ===========================================================================
+// Module 12.5 B1 — Lecture des seuils + severity depuis ctx
+// ===========================================================================
+
+describe('AGA_30_PERCENT_CAP — params dynamiques (Module 12.5 B1)', () => {
+  it('utilise capPct=20 du ctx (org strict) — 25 % bloque', async () => {
+    const issue = await AGA_30_PERCENT_CAP.check(
+      { ...baseInput, unitsGranted: 5_000 },
+      makeCtx({
+        plan: { ...makeCtx({}).plan, plan_type: 'AGA' },
+        agaAllocatedTotal: 20_000, // 25 / 100 = 25 %
+        companyTotalShares: 100_000,
+        effectiveParamsByRule: { AGA_30_PERCENT_CAP: { capPct: 20 } },
+      }),
+    );
+    expect(issue).not.toBeNull();
+    expect(issue?.severity).toBe('ERROR');
+    expect(issue?.message).toMatch(/25\.0 %/);
+    expect(issue?.message).toMatch(/max légal 20 %/);
+  });
+
+  it('utilise capPct=40 (org permissive) — 35 % passe', async () => {
+    const issue = await AGA_30_PERCENT_CAP.check(
+      { ...baseInput, unitsGranted: 15_000 },
+      makeCtx({
+        plan: { ...makeCtx({}).plan, plan_type: 'AGA' },
+        agaAllocatedTotal: 20_000, // 35 / 100 = 35 %
+        companyTotalShares: 100_000,
+        effectiveParamsByRule: { AGA_30_PERCENT_CAP: { capPct: 40 } },
+      }),
+    );
+    expect(issue).toBeNull();
+  });
+
+  it('fallback sur 30 % si effectiveParamsByRule absent (DB indispo)', async () => {
+    const issue = await AGA_30_PERCENT_CAP.check(
+      { ...baseInput, unitsGranted: 15_000 },
+      makeCtx({
+        plan: { ...makeCtx({}).plan, plan_type: 'AGA' },
+        agaAllocatedTotal: 20_000, // 35 %
+        companyTotalShares: 100_000,
+      }),
+    );
+    expect(issue).not.toBeNull();
+    expect(issue?.message).toMatch(/max légal 30 %/);
+  });
+
+  it('respecte severity DB warning au lieu de ERROR par défaut', async () => {
+    const issue = await AGA_30_PERCENT_CAP.check(
+      { ...baseInput, unitsGranted: 15_000 },
+      makeCtx({
+        plan: { ...makeCtx({}).plan, plan_type: 'AGA' },
+        agaAllocatedTotal: 20_000,
+        companyTotalShares: 100_000,
+        effectiveSeverityByRule: { AGA_30_PERCENT_CAP: 'warning' },
+      }),
+    );
+    expect(issue?.severity).toBe('WARNING');
+  });
+});
+
+describe('AGA_APPROACHING_CAP — params dynamiques (Module 12.5 B1)', () => {
+  it('utilise warningPct=20 du ctx — 25 % émet le warning', async () => {
+    const issue = await AGA_APPROACHING_CAP.check(
+      { ...baseInput, unitsGranted: 5_000 },
+      makeCtx({
+        plan: { ...makeCtx({}).plan, plan_type: 'AGA' },
+        agaAllocatedTotal: 20_000, // 25 %
+        companyTotalShares: 100_000,
+        effectiveParamsByRule: { AGA_APPROACHING_CAP: { warningPct: 20 } },
+      }),
+    );
+    expect(issue).not.toBeNull();
+    expect(issue?.severity).toBe('WARNING');
+    expect(issue?.code).toBe('AGA_APPROACHING_CAP');
+  });
+
+  it('retourne null si pct > capPct (zone géré par AGA_30_PERCENT_CAP hard)', async () => {
+    const issue = await AGA_APPROACHING_CAP.check(
+      { ...baseInput, unitsGranted: 15_000 },
+      makeCtx({
+        plan: { ...makeCtx({}).plan, plan_type: 'AGA' },
+        agaAllocatedTotal: 20_000, // 35 % > 30
+        companyTotalShares: 100_000,
+      }),
+    );
+    expect(issue).toBeNull();
+  });
+
+  it('messages affichent le capPct effectif (org cap personnalisé 25 %)', async () => {
+    const issue = await AGA_APPROACHING_CAP.check(
+      { ...baseInput, unitsGranted: 3_000 },
+      makeCtx({
+        plan: { ...makeCtx({}).plan, plan_type: 'AGA' },
+        agaAllocatedTotal: 20_000, // 23 %
+        companyTotalShares: 100_000,
+        effectiveParamsByRule: {
+          AGA_30_PERCENT_CAP: { capPct: 25 },
+          AGA_APPROACHING_CAP: { warningPct: 22 },
+        },
+      }),
+    );
+    expect(issue).not.toBeNull();
+    expect(issue?.message).toMatch(/max légal 25 %/);
+  });
+
+  it('fallback default 27 % si params absent — 28 % émet warning', async () => {
+    const issue = await AGA_APPROACHING_CAP.check(
+      { ...baseInput, unitsGranted: 8_000 },
+      makeCtx({
+        plan: { ...makeCtx({}).plan, plan_type: 'AGA' },
+        agaAllocatedTotal: 20_000, // 28 %
+        companyTotalShares: 100_000,
+      }),
+    );
+    expect(issue).not.toBeNull();
+    expect(issue?.severity).toBe('WARNING');
+  });
+});
+
+describe('GRANT_DATE_RECENT — params dynamiques (Module 12.5 B1)', () => {
+  it('utilise maxDaysAgo=7 (org strict) — 10j émet warning', async () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 10);
+    const issue = await GRANT_DATE_RECENT.check(
+      { ...baseInput, grantDate: d.toISOString().slice(0, 10) },
+      makeCtx({
+        effectiveParamsByRule: { GRANT_DATE_RECENT: { maxDaysAgo: 7 } },
+      }),
+    );
+    expect(issue).not.toBeNull();
+    expect(issue?.message).toMatch(/seuil 7 jours/);
+  });
+
+  it('utilise maxDaysAgo=90 (org permissive) — 35j passe', async () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 35);
+    const issue = await GRANT_DATE_RECENT.check(
+      { ...baseInput, grantDate: d.toISOString().slice(0, 10) },
+      makeCtx({
+        effectiveParamsByRule: { GRANT_DATE_RECENT: { maxDaysAgo: 90 } },
+      }),
+    );
+    expect(issue).toBeNull();
+  });
+
+  it('fallback default 30 jours si params absent', async () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 35);
+    const issue = await GRANT_DATE_RECENT.check(
+      { ...baseInput, grantDate: d.toISOString().slice(0, 10) },
+      makeCtx({}),
+    );
+    expect(issue).not.toBeNull();
+    expect(issue?.message).toMatch(/seuil 30 jours/);
+  });
+
+  it('respecte severity DB error au lieu de WARNING par défaut', async () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 35);
+    const issue = await GRANT_DATE_RECENT.check(
+      { ...baseInput, grantDate: d.toISOString().slice(0, 10) },
+      makeCtx({
+        effectiveSeverityByRule: { GRANT_DATE_RECENT: 'error' },
+      }),
+    );
+    expect(issue?.severity).toBe('ERROR');
+  });
+});
+
+describe('BSPCE_BENEFICIARY_TYPE — severity dynamique (Module 12.5 B1)', () => {
+  it('respecte severity DB warning au lieu de ERROR par défaut', async () => {
+    const issue = await BSPCE_BENEFICIARY_TYPE.check(
+      baseInput,
+      makeCtx({
+        beneficiary: { id: 'b', beneficiary_type: 'CONSULTANT', email: 'c@example.com' },
+        effectiveSeverityByRule: { BSPCE_BENEFICIARY_TYPE: 'warning' },
+      }),
+    );
+    expect(issue?.severity).toBe('WARNING');
+    expect(issue?.code).toBe('BSPCE_BENEFICIARY_TYPE');
+  });
+});
+
+describe('POOL_AVAILABLE — severity dynamique (Module 12.5 B1)', () => {
+  it('respecte severity DB warning (admin downgrade)', async () => {
+    const issue = await POOL_AVAILABLE.check(
+      { ...baseInput, unitsGranted: 500 },
+      makeCtx({
+        poolStatus: { remaining: 100 },
+        effectiveSeverityByRule: { POOL_AVAILABLE: 'warning' },
+      }),
+    );
+    expect(issue?.severity).toBe('WARNING');
+    expect(issue?.code).toBe('POOL_AVAILABLE');
   });
 });

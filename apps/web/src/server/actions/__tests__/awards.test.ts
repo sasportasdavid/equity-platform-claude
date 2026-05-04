@@ -34,6 +34,7 @@ vi.mock('@/lib/audit', () => ({
 }));
 
 // Mock runComplianceChecks (B7) + runValuationComplianceChecks (Module 11 B6)
+// + runApprovalAwardComplianceChecks (Module 12.5 B4 — dette #14 résolue)
 // — par défaut "no issues" pour ne pas casser les tests existants. Les tests
 // dédiés compliance sont dans src/lib/compliance/__tests__/.
 vi.mock('@/lib/compliance/runChecks', () => ({
@@ -41,6 +42,9 @@ vi.mock('@/lib/compliance/runChecks', () => ({
     .fn()
     .mockResolvedValue({ errors: [], warnings: [], hasHardBlocks: false }),
   runValuationComplianceChecks: vi
+    .fn()
+    .mockResolvedValue({ errors: [], warnings: [], hasHardBlocks: false }),
+  runApprovalAwardComplianceChecks: vi
     .fn()
     .mockResolvedValue({ errors: [], warnings: [], hasHardBlocks: false }),
 }));
@@ -558,5 +562,71 @@ describe('Server Actions awards', () => {
       expect(codes).toContain('BSPCE_BENEFICIARY_TYPE');
       expect(codes).toContain('VALUATION_STALE_BLOCKING');
     }
+  });
+
+  // Module 12.5 B4 — Résolution dette #14 : WORKFLOW_REQUIRED_FOR_AGA branché
+  // dans transitionAward(_, 'PROPOSED'). Hard block AGA sans workflow.
+  it('transitionAward DRAFT→PROPOSED : WORKFLOW_REQUIRED_FOR_AGA hard block (dette #14)', async () => {
+    mockState.awardSelect = {
+      data: {
+        id: 'a-uuid',
+        status: 'DRAFT',
+        plan_id: 'p-uuid',
+        beneficiary_id: 'b-uuid',
+        units_granted: 100,
+        units_vested: 0,
+        vesting_start_date: null,
+        grant_date: '2026-04-28',
+      },
+      error: null,
+    };
+
+    const runChecksMod = await import('@/lib/compliance/runChecks');
+    vi.mocked(runChecksMod.runApprovalAwardComplianceChecks).mockResolvedValueOnce({
+      errors: [
+        {
+          severity: 'ERROR',
+          code: 'WORKFLOW_REQUIRED_FOR_AGA',
+          message: 'Plan AGA sans workflow attaché',
+        },
+      ],
+      warnings: [],
+      hasHardBlocks: true,
+    });
+
+    const { transitionAward } = await import('../awards');
+    const res = await transitionAward({
+      awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+      toStatus: 'PROPOSED',
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      const codes = res.complianceIssues?.map((i) => i.code) ?? [];
+      expect(codes).toContain('WORKFLOW_REQUIRED_FOR_AGA');
+    }
+  });
+
+  it('transitionAward AGA→PROPOSED : workflow attaché → ok=true (no issue)', async () => {
+    mockState.awardSelect = {
+      data: {
+        id: 'a-uuid',
+        status: 'DRAFT',
+        plan_id: 'p-uuid',
+        beneficiary_id: 'b-uuid',
+        units_granted: 100,
+        units_vested: 0,
+        vesting_start_date: null,
+        grant_date: '2026-04-28',
+      },
+      error: null,
+    };
+    // Mocks default ok (no issues) — déjà set au top du fichier
+    const { transitionAward } = await import('../awards');
+    const res = await transitionAward({
+      awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+      toStatus: 'PROPOSED',
+    });
+    expect(res.ok).toBe(true);
   });
 });

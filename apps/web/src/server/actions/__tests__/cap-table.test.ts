@@ -153,6 +153,13 @@ vi.mock('@/lib/audit', () => ({
   logAuditEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Module 12.5 B3 — bypass effective rules loading dans les tests SA cap_table.
+// Le runner appelle loadEffectiveRule(code) × 4 ; ici on retourne null partout
+// pour activer le fallback legacy (constantes hard-codées dans capTableRules).
+vi.mock('@/lib/compliance/effectiveRules', () => ({
+  loadEffectiveRule: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn().mockResolvedValue({
     from: (table: string) => makeBuilder(table),

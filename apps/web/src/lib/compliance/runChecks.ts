@@ -75,18 +75,40 @@ async function runRules<TData, TCtx>(
 }
 
 /**
- * Helper compliance — Module 3b B7.
+ * Helper compliance — Module 3b B7 (initial) + Module 12.5 B1
+ * (wiring effectiveParamsByRule + effectiveSeverityByRule pour les 5 award
+ * rules).
  *
- * Charge le contexte (plan + beneficiary + poolStatus) côté serveur via
- * 1 query parallèle, puis lance toutes les rules applicables au plan_type
- * en parallèle (Promise.all). Aggregé en errors / warnings selon enforcement.
+ * Charge le contexte (plan + beneficiary + poolStatus + effective rules
+ * config) côté serveur en parallèle, puis lance toutes les rules applicables
+ * au plan_type en parallèle (Promise.all). Aggregé en errors / warnings
+ * selon enforcement.
  *
- * Spec : docs/MODULE_03B_AWARDS_LIFECYCLE.md §7.
+ * Spec : docs/MODULE_03B_AWARDS_LIFECYCLE.md §7 + docs/MODULE_12_*.md §3.2.
+ *
+ * Module 12.5 B1 — Lecture config DB :
+ *   1. Pour chaque rule du registry V1 (5 codes), on appelle `loadEffectiveRule(code)`
+ *      pour récupérer la config effective (params merged + severity + active).
+ *   2. Si `is_active=false` côté DB → la rule est filtrée (pas exécutée).
+ *   3. Les params + severity sont injectés dans `ctx.effectiveParamsByRule`
+ *      / `effectiveSeverityByRule`. Les checkers les lisent via `readNumberParam`
+ *      / `readSeverity` (`rules/_helpers.ts`) avec fallback sur les constantes
+ *      hard-codées.
+ *   4. Si `loadEffectiveRule` retourne null (DB indispo, rule absente du
+ *      catalogue), la rule s'exécute en mode legacy avec ses defaults.
  *
  * `scope` est réservé pour V2 (Module 12) où on aura des rules différentes
- * pour PROPOSAL vs MODIFICATION. En V1, les 4 rules s'appliquent uniquement
+ * pour PROPOSAL vs MODIFICATION. En V1, les 5 rules s'appliquent uniquement
  * au scope AWARD_PROPOSAL.
  */
+const AWARD_RULE_CODES: RuleCode[] = [
+  'BSPCE_BENEFICIARY_TYPE',
+  'AGA_30_PERCENT_CAP',
+  'AGA_APPROACHING_CAP',
+  'POOL_AVAILABLE',
+  'GRANT_DATE_RECENT',
+];
+
 export async function runComplianceChecks(
   scope: 'AWARD_PROPOSAL' | 'AWARD_MODIFICATION',
   input: AwardCheckInput,
@@ -100,8 +122,10 @@ export async function runComplianceChecks(
 
   const supabase = await createSupabaseServerClient();
 
-  // Charge plan + beneficiary en parallèle (1 RTT chacun, 2 total)
-  const [planRes, beneficiaryRes] = await Promise.all([
+  // Charge plan + beneficiary + 5 effective rules en parallèle (Module 12.5 B1).
+  // Les RPC `get_effective_rule` sont stables et touchent une vue indexée
+  // sur (rule_code) — coût négligeable.
+  const [planRes, beneficiaryRes, ...effectiveRules] = await Promise.all([
     supabase
       .from('plans')
       .select('id, plan_type, pool_size, pool_allocated, company_id, org_id')
@@ -112,6 +136,7 @@ export async function runComplianceChecks(
       .select('id, beneficiary_type, email')
       .eq('id', input.beneficiaryId)
       .maybeSingle(),
+    ...AWARD_RULE_CODES.map((code) => loadEffectiveRule(code)),
   ]);
 
   if (planRes.error || !planRes.data) {
@@ -139,6 +164,24 @@ export async function runComplianceChecks(
       warnings: [],
       hasHardBlocks: true,
     };
+  }
+
+  // Module 12.5 B1 — Construit les maps params + severity pour le ctx.
+  // `is_active=false` côté DB → on exclut la rule du registry à exécuter.
+  const effectiveParamsByRule: Record<string, Record<string, unknown>> = {};
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  const activeCodes = new Set<string>(AWARD_RULE_CODES); // default actif si DB indispo
+
+  for (let i = 0; i < AWARD_RULE_CODES.length; i++) {
+    const code = AWARD_RULE_CODES[i]!;
+    const eff = effectiveRules[i];
+    if (!eff) continue; // DB indispo / rule absente → fallback legacy
+    if (!eff.is_active) {
+      activeCodes.delete(code);
+      continue;
+    }
+    effectiveParamsByRule[code] = eff.effective_params;
+    effectiveSeverityByRule[code] = eff.effective_severity;
   }
 
   // Module 10 B7 : charge la cap table pour activer AGA_30_PERCENT_CAP
@@ -189,11 +232,15 @@ export async function runComplianceChecks(
     },
     agaAllocatedTotal,
     companyTotalShares,
+    effectiveParamsByRule,
+    effectiveSeverityByRule,
   };
 
-  // Filtre les rules applicables (plan_type ou *)
+  // Filtre les rules applicables (plan_type ou *) ET actives DB Module 12.5 B1
   const applicableRules = AWARD_RULES.filter(
-    (rule) => rule.appliesTo.includes('*') || rule.appliesTo.includes(ctx.plan.plan_type),
+    (rule) =>
+      activeCodes.has(rule.code) &&
+      (rule.appliesTo.includes('*') || rule.appliesTo.includes(ctx.plan.plan_type)),
   );
 
   return runRules(applicableRules, input, ctx);
@@ -204,12 +251,26 @@ export async function runComplianceChecks(
 // ---------------------------------------------------------------------------
 
 /**
- * Helper compliance bénéficiaires — Module 4 B2.
+ * Helper compliance bénéficiaires — Module 4 B2 + Module 12.5 B2.
  *
- * Charge le ctx serveur (collision email intra-org) puis exécute les 5 rules
- * BENEFICIARY_RULES en parallèle. Appelé depuis createBeneficiary +
- * updateBeneficiary (Server Actions). Pas dans bulkCreateBeneficiaries (V1).
+ * Charge le ctx serveur (collision email intra-org + BSPCE active count
+ * + 6 effective rules config) puis exécute les rules actives en parallèle.
+ * Appelé depuis createBeneficiary + updateBeneficiary (Server Actions).
+ * Pas dans bulkCreateBeneficiaries (V1).
+ *
+ * Module 12.5 B2 — Pré-charge les 6 beneficiary rules effective config
+ * en parallèle (pattern Module 12 B2 + Module 12.5 B1). Si DB indispo,
+ * fallback legacy (constantes hard-codées dans les rules).
  */
+const BENEFICIARY_RULE_CODES: RuleCode[] = [
+  'EMAIL_UNIQUE_IN_ORG',
+  'TAX_RESIDENCE_FRANCE_CONSISTENCY',
+  'HIRE_DATE_REASONABLE',
+  'MANAGER_NOT_SELF',
+  'IBAN_FORMAT',
+  'BSPCE_BENEFICIARY_TYPE_REVERSE',
+];
+
 export async function runBeneficiaryComplianceChecks(
   input: BeneficiaryCheckInput,
   orgId: string,
@@ -218,12 +279,13 @@ export async function runBeneficiaryComplianceChecks(
 
   // Charge la collision email intra-org (pour EMAIL_UNIQUE_IN_ORG) +
   // optionnellement le count BSPCE actifs (Module 4 B6 — uniquement si on
-  // update vers un type risqué CONSULTANT/EXTERNAL).
+  // update vers un type risqué CONSULTANT/EXTERNAL) + 6 effective rules
+  // config (Module 12.5 B2). Tout en parallèle.
   const needsBspceCheck =
     input.id != null &&
     (input.beneficiaryType === 'CONSULTANT' || input.beneficiaryType === 'EXTERNAL');
 
-  const [existingRes, bspceRes] = await Promise.all([
+  const [existingRes, bspceRes, ...effectiveRules] = await Promise.all([
     supabase
       .from('beneficiaries')
       .select('id')
@@ -240,16 +302,39 @@ export async function runBeneficiaryComplianceChecks(
           .not('status', 'in', '(CANCELLED,FORFEITED,EXPIRED,FULLY_EXERCISED)')
           .is('deleted_at', null)
       : Promise.resolve({ count: null as number | null }),
+    ...BENEFICIARY_RULE_CODES.map((code) => loadEffectiveRule(code)),
   ]);
+
+  // Module 12.5 B2 — Construit les maps params + severity pour le ctx.
+  // `is_active=false` côté DB → on exclut la rule du registry.
+  const effectiveParamsByRule: Record<string, Record<string, unknown>> = {};
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  const activeCodes = new Set<string>(BENEFICIARY_RULE_CODES);
+
+  for (let i = 0; i < BENEFICIARY_RULE_CODES.length; i++) {
+    const code = BENEFICIARY_RULE_CODES[i]!;
+    const eff = effectiveRules[i];
+    if (!eff) continue; // DB indispo / rule absente → fallback legacy
+    if (!eff.is_active) {
+      activeCodes.delete(code);
+      continue;
+    }
+    effectiveParamsByRule[code] = eff.effective_params;
+    effectiveSeverityByRule[code] = eff.effective_severity;
+  }
 
   const ctx: BeneficiaryCheckContext = {
     orgId,
     beneficiary: input.id ? { id: input.id, email: input.email } : null,
     emailCollisionId: existingRes.data?.id ?? null,
     bspceActiveAwardsCount: needsBspceCheck ? (bspceRes.count ?? 0) : null,
+    effectiveParamsByRule,
+    effectiveSeverityByRule,
   };
 
-  return runRules(BENEFICIARY_RULES, input, ctx);
+  // Filtre les rules actives DB Module 12.5 B2
+  const activeRules = BENEFICIARY_RULES.filter((rule) => activeCodes.has(rule.code));
+  return runRules(activeRules, input, ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -257,11 +342,18 @@ export async function runBeneficiaryComplianceChecks(
 // ---------------------------------------------------------------------------
 
 /**
- * WORKFLOW_REQUIRED_FOR_AGA — appelé depuis transitionAward(*, 'PROPOSED')
- * pour générer un soft warning si AGA + pas de workflow attaché.
+ * WORKFLOW_REQUIRED_FOR_AGA — Module 5 B2 (initial) + Module 12.5 B4
+ * (résolution dette #14, branchement dans `transitionAward`).
+ *
+ * Appelé depuis :
+ *   - `transitionAward(_, 'PROPOSED')` côté `awards.ts` (Module 12.5 B4) —
+ *     hard block si plan AGA sans workflow attaché ni default org.
+ *   - Helper `checkAwardApprovalCompliance` (legacy Module 5 B2) — supprimé
+ *     en B4 (0 callers).
  *
  * Le ctx est chargé ici : plan + flag workflowAttached (workflow attach_to_plan
- * OU default org pour AWARD_GRANT).
+ * OU default org pour AWARD_GRANT) + Module 12.5 B4 effective rule severity
+ * (override admin via UI Module 12).
  */
 export async function runApprovalAwardComplianceChecks(
   input: ApprovalAwardCheckInput,
@@ -269,7 +361,7 @@ export async function runApprovalAwardComplianceChecks(
 ): Promise<ComplianceCheckResult> {
   const supabase = await createSupabaseServerClient();
 
-  const [planRes, attachedRes, defaultRes] = await Promise.all([
+  const [planRes, attachedRes, defaultRes, effectiveRule] = await Promise.all([
     supabase.from('plans').select('id, plan_type').eq('id', input.planId).maybeSingle(),
     supabase
       .from('approval_workflows')
@@ -285,11 +377,23 @@ export async function runApprovalAwardComplianceChecks(
       .eq('is_default', true)
       .eq('is_active', true)
       .is('deleted_at', null),
+    loadEffectiveRule('WORKFLOW_REQUIRED_FOR_AGA'),
   ]);
+
+  // Module 12.5 B4 — Si la rule est désactivée DB, on skip silencieusement.
+  if (effectiveRule && !effectiveRule.is_active) {
+    return { errors: [], warnings: [], hasHardBlocks: false };
+  }
+
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  if (effectiveRule) {
+    effectiveSeverityByRule['WORKFLOW_REQUIRED_FOR_AGA'] = effectiveRule.effective_severity;
+  }
 
   const ctx: ApprovalAwardCheckContext = {
     plan: planRes.data ?? null,
     workflowAttached: (attachedRes.count ?? 0) > 0 || (defaultRes.count ?? 0) > 0,
+    effectiveSeverityByRule,
   };
 
   return runRules(APPROVAL_AWARD_RULES, input, ctx);
@@ -298,21 +402,32 @@ export async function runApprovalAwardComplianceChecks(
 /**
  * NO_SELF_APPROVAL — appelé depuis approveDecision/rejectDecision avant le RPC
  * pour bloquer le self-approval.
+ *
+ * Module 12.5 B4 — pré-charge l'effective rule pour respecter la severity DB
+ * + supporter is_active=false (admin off-switch).
  */
 export async function runApprovalDecisionComplianceChecks(
   input: ApprovalDecisionCheckInput,
 ): Promise<ComplianceCheckResult> {
   const supabase = await createSupabaseServerClient();
 
-  // Récupérer la decision → request → award (created_by)
-  const { data: row } = await supabase
-    .from('approval_decisions')
-    .select('request_id, approval_requests!inner(award_id)')
-    .eq('id', input.decisionId)
-    .maybeSingle();
+  // Récupérer la decision → request → award (created_by) + effective rule en parallèle
+  const [decisionRes, effectiveRule] = await Promise.all([
+    supabase
+      .from('approval_decisions')
+      .select('request_id, approval_requests!inner(award_id)')
+      .eq('id', input.decisionId)
+      .maybeSingle(),
+    loadEffectiveRule('NO_SELF_APPROVAL'),
+  ]);
 
-  // approval_requests join → award_id
-  const requestRow = row as { approval_requests?: { award_id?: string | null } } | null;
+  if (effectiveRule && !effectiveRule.is_active) {
+    return { errors: [], warnings: [], hasHardBlocks: false };
+  }
+
+  const requestRow = decisionRes.data as {
+    approval_requests?: { award_id?: string | null };
+  } | null;
   const awardId = requestRow?.approval_requests?.award_id ?? null;
 
   let relatedAward: ApprovalDecisionCheckContext['relatedAward'] = null;
@@ -325,19 +440,27 @@ export async function runApprovalDecisionComplianceChecks(
     if (aw) relatedAward = { id: aw.id, created_by: aw.created_by };
   }
 
-  const ctx: ApprovalDecisionCheckContext = { relatedAward };
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  if (effectiveRule) {
+    effectiveSeverityByRule['NO_SELF_APPROVAL'] = effectiveRule.effective_severity;
+  }
+
+  const ctx: ApprovalDecisionCheckContext = { relatedAward, effectiveSeverityByRule };
   return runRules(APPROVAL_DECISION_RULES, input, ctx);
 }
 
 /**
  * WORKFLOW_HAS_VALID_STEPS — appelé depuis createWorkflow/updateWorkflow.
- * Pré-charge userExistsMap (USER steps) + roleUserCountMap (ROLE/ANY/ALL steps).
+ * Pré-charge userExistsMap (USER steps) + roleUserCountMap (ROLE/ANY/ALL steps)
+ * + Module 12.5 B4 effective rule severity / is_active.
  */
 export async function runApprovalWorkflowComplianceChecks(
   input: ApprovalWorkflowCheckInput,
   orgId: string,
 ): Promise<ComplianceCheckResult> {
   const supabase = await createSupabaseServerClient();
+
+  const effectiveRulePromise = loadEffectiveRule('WORKFLOW_HAS_VALID_STEPS');
 
   const userIdsToCheck = Array.from(
     new Set(
@@ -383,7 +506,21 @@ export async function runApprovalWorkflowComplianceChecks(
     }
   }
 
-  const ctx: ApprovalWorkflowCheckContext = { userExistsMap, roleUserCountMap };
+  // Module 12.5 B4 — résoudre l'effective rule (chargée en parallèle au début)
+  const effectiveRule = await effectiveRulePromise;
+  if (effectiveRule && !effectiveRule.is_active) {
+    return { errors: [], warnings: [], hasHardBlocks: false };
+  }
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  if (effectiveRule) {
+    effectiveSeverityByRule['WORKFLOW_HAS_VALID_STEPS'] = effectiveRule.effective_severity;
+  }
+
+  const ctx: ApprovalWorkflowCheckContext = {
+    userExistsMap,
+    roleUserCountMap,
+    effectiveSeverityByRule,
+  };
   return runRules(APPROVAL_WORKFLOW_RULES, input, ctx);
 }
 
@@ -396,24 +533,69 @@ export async function runApprovalWorkflowComplianceChecks(
  * V1 : la colonne plans.fmv_set_at n'existe pas encore (Module 11), donc
  * ctx.fmvSetAt est null par défaut → la rule retourne null (no-op). Le
  * caller peut passer un `fmvSetAt` explicite si on a la donnée ailleurs.
+ *
+ * Module 12.5 B3 — pré-charge la config DB pour FMV_RECENT_ENOUGH (1 RPC).
+ * Si désactivée par l'org, la rule est filtrée. Params/severity injectés
+ * dans le ctx pour lecture par les checkers.
  */
 export async function runDocumentGenerationComplianceChecks(
   input: DocumentGenerationCheckInput,
   fmvSetAt?: string | null,
 ): Promise<ComplianceCheckResult> {
-  const ctx: DocumentGenerationCheckContext = { fmvSetAt: fmvSetAt ?? null };
-  return runRules(DOCUMENT_GENERATION_RULES, input, ctx);
+  const eff = await loadEffectiveRule('FMV_RECENT_ENOUGH');
+
+  const effectiveParamsByRule: Record<string, Record<string, unknown>> = {};
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  const isActive = eff?.is_active ?? true;
+  if (eff && eff.is_active) {
+    effectiveParamsByRule['FMV_RECENT_ENOUGH'] = eff.effective_params;
+    effectiveSeverityByRule['FMV_RECENT_ENOUGH'] = eff.effective_severity;
+  }
+
+  const ctx: DocumentGenerationCheckContext = {
+    fmvSetAt: fmvSetAt ?? null,
+    effectiveParamsByRule,
+    effectiveSeverityByRule,
+  };
+  const rules = isActive ? DOCUMENT_GENERATION_RULES : [];
+  return runRules(rules, input, ctx);
 }
 
 /**
  * SIGNERS_COMPLETE_INFO + DOCUMENT_NOT_VOIDED — appelé depuis
  * sendDocumentForSignature (B3). Pas de ctx async nécessaire (toutes les
  * données sont déjà dans l'input).
+ *
+ * Module 12.5 B3 — pré-charge la config DB pour les 2 rules en parallèle.
+ * Filtre is_active=false. Pas de params dynamiques (V1 booléen pur), seule
+ * la severity est lue.
  */
+const DOCUMENT_SIGNATURE_RULE_CODES: RuleCode[] = ['SIGNERS_COMPLETE_INFO', 'DOCUMENT_NOT_VOIDED'];
+
 export async function runDocumentSignatureComplianceChecks(
   input: DocumentSignatureCheckInput,
 ): Promise<ComplianceCheckResult> {
-  return runRules(DOCUMENT_SIGNATURE_RULES, input, {} as DocumentSignatureCheckContext);
+  const effectiveRules = await Promise.all(
+    DOCUMENT_SIGNATURE_RULE_CODES.map((code) => loadEffectiveRule(code)),
+  );
+
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  const activeCodes = new Set<string>(DOCUMENT_SIGNATURE_RULE_CODES);
+
+  for (let i = 0; i < DOCUMENT_SIGNATURE_RULE_CODES.length; i++) {
+    const code = DOCUMENT_SIGNATURE_RULE_CODES[i]!;
+    const eff = effectiveRules[i];
+    if (!eff) continue;
+    if (!eff.is_active) {
+      activeCodes.delete(code);
+      continue;
+    }
+    effectiveSeverityByRule[code] = eff.effective_severity;
+  }
+
+  const ctx: DocumentSignatureCheckContext = { effectiveSeverityByRule };
+  const activeRules = DOCUMENT_SIGNATURE_RULES.filter((r) => activeCodes.has(r.code));
+  return runRules(activeRules, input, ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,17 +609,30 @@ export async function runDocumentSignatureComplianceChecks(
  * Ctx pré-chargé :
  *   - `existingShareClassCodes` : pour SHARE_CLASS_CODE_UNIQUE
  *   - `companyTotalSharesIncludingPool` : pour ESOP_PERCENT_BEST_PRACTICE
+ *   - Module 12.5 B3 : `effectiveParamsByRule` + `effectiveSeverityByRule`
+ *     pour les 4 cap_table rules (chargés en parallèle via 4× loadEffectiveRule).
  *
  * Appelé depuis :
  *   - `createShareClass` (scope SHARE_CLASS_CREATE) → Module 10 B2
  *   - `createFundingRound` (scope FUNDING_ROUND_CREATE) → Module 10 B2
  *   - V2 : POOL_TOPUP scenario apply (Module 12)
  */
+const CAP_TABLE_RULE_CODES: RuleCode[] = [
+  'SHARE_CLASS_CODE_UNIQUE',
+  'ROUND_AMOUNT_CONSISTENCY',
+  'POOL_OVER_ALLOCATION',
+  'ESOP_PERCENT_BEST_PRACTICE',
+];
+
 export async function runCapTableComplianceChecks(
   input: CapTableCheckInput,
   orgId: string,
 ): Promise<ComplianceCheckResult> {
   const supabase = await createSupabaseServerClient();
+
+  // Module 12.5 B3 — pré-charge les 4 effective rules en parallèle des
+  // queries métier. Les RPC `get_effective_rule` sont stables.
+  const effectivePromises = CAP_TABLE_RULE_CODES.map((code) => loadEffectiveRule(code));
 
   // Pré-charge codes existants (uniquement pour SHARE_CLASS_CREATE)
   const existingShareClassCodes = new Set<string>();
@@ -467,13 +662,36 @@ export async function runCapTableComplianceChecks(
     }
   }
 
+  const effectiveRules = await Promise.all(effectivePromises);
+
+  // Module 12.5 B3 — Build maps params + severity, filtre is_active=false
+  const effectiveParamsByRule: Record<string, Record<string, unknown>> = {};
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  const activeCodes = new Set<string>(CAP_TABLE_RULE_CODES);
+
+  for (let i = 0; i < CAP_TABLE_RULE_CODES.length; i++) {
+    const code = CAP_TABLE_RULE_CODES[i]!;
+    const eff = effectiveRules[i];
+    if (!eff) continue;
+    if (!eff.is_active) {
+      activeCodes.delete(code);
+      continue;
+    }
+    effectiveParamsByRule[code] = eff.effective_params;
+    effectiveSeverityByRule[code] = eff.effective_severity;
+  }
+
   const ctx: CapTableCheckContext = {
     existingShareClassCodes,
     companyTotalSharesIncludingPool,
+    effectiveParamsByRule,
+    effectiveSeverityByRule,
   };
 
-  // Filtre les rules applicables au scope
-  const applicableRules = CAP_TABLE_RULES.filter((rule) => rule.appliesTo.includes(input.scope));
+  // Filtre les rules applicables au scope ET actives DB
+  const applicableRules = CAP_TABLE_RULES.filter(
+    (rule) => activeCodes.has(rule.code) && rule.appliesTo.includes(input.scope),
+  );
 
   return runRules(applicableRules, input, ctx);
 }

@@ -4,12 +4,15 @@ import type {
   ValuationCheckContext,
   ValuationCheckInput,
 } from '../types';
+import { readNumberParam, readSeverity } from './_helpers';
 
 /**
  * Module 11 B6 — Compliance rules valuation IFRS 2.
  * Module 12 B2 — Refactor : lecture des seuils depuis `ctx.effectiveParamsByRule`
  *                (pré-chargé via `loadEffectiveRule` dans `runChecks.ts`).
  *                Fallback sur les constantes hard-codées si absent.
+ * Module 12.5 B1 — Helpers `readNumberParam` / `readSeverity` extraits dans
+ *                  `_helpers.ts` (partagés avec awardRules + autres scopes).
  *
  * 2 rules V1 :
  *   1. VALUATION_STALE_BLOCKING (hard)  — valuation IFRS 2 obligatoire
@@ -34,37 +37,6 @@ import type {
 /** Fallback constantes Module 11 B6 — utilisées si DB Module 12 indispo. */
 const STALE_THRESHOLD_DAYS_DEFAULT = 90;
 const FMV_DEVIATION_THRESHOLD_DEFAULT = 0.2; // 20 %
-
-/**
- * Lit un param numérique depuis `ctx.effectiveParamsByRule[ruleCode]`,
- * fallback sur `defaultValue` si absent ou non-numeric.
- */
-function readNumberParam(
-  ctx: ValuationCheckContext,
-  ruleCode: string,
-  paramName: string,
-  defaultValue: number,
-): number {
-  const params = ctx.effectiveParamsByRule?.[ruleCode];
-  const raw = params?.[paramName];
-  return typeof raw === 'number' && Number.isFinite(raw) ? raw : defaultValue;
-}
-
-/**
- * Mappe la severity DB Module 12 ('error'/'warning') vers le format
- * legacy Module 11 ('ERROR'/'WARNING'). Fallback sur la severity legacy
- * si pas de remap DB.
- */
-function readSeverity(
-  ctx: ValuationCheckContext,
-  ruleCode: string,
-  legacy: 'ERROR' | 'WARNING',
-): 'ERROR' | 'WARNING' {
-  const dbSeverity = ctx.effectiveSeverityByRule?.[ruleCode];
-  if (dbSeverity === 'error') return 'ERROR';
-  if (dbSeverity === 'warning') return 'WARNING';
-  return legacy;
-}
 
 export const VALUATION_STALE_BLOCKING: ComplianceRule<ValuationCheckInput, ValuationCheckContext> =
   {
