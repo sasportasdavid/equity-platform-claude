@@ -319,54 +319,102 @@ describe('complianceRuleOverrideInputSchema (input updateOverride SA)', () => {
   });
 });
 
-describe('simulationResultSchema (output simulateChange B4)', () => {
-  it('parse une response valide', () => {
+describe('simulationResultSchema (output simulateChange B5)', () => {
+  it('parse une response valide avec sample newly blocked', () => {
     const parsed = simulationResultSchema.parse({
       ruleCode: 'VALUATION_STALE_BLOCKING',
-      passingCount: 12,
-      failingCount: 3,
-      notEvaluableCount: 0,
-      impactedSampleIds: [
-        '11111111-1111-4111-8111-111111111111',
-        '22222222-2222-4222-8222-222222222222',
+      simulationSupported: true,
+      currentCompliant: 15,
+      currentNonCompliant: 0,
+      afterCompliant: 12,
+      afterNonCompliant: 3,
+      newlyBlocked: 3,
+      newlyUnblocked: 0,
+      sampleNewlyBlocked: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          label: 'Plan BSPCE 2024',
+          reason: 'Valuation a 105j > nouveau seuil 90j',
+        },
       ],
+      totalEvaluated: 15,
+      notSupportedReason: null,
     });
-    expect(parsed.failingCount).toBe(3);
-    expect(parsed.impactedSampleIds).toHaveLength(2);
+    expect(parsed.newlyBlocked).toBe(3);
+    expect(parsed.sampleNewlyBlocked).toHaveLength(1);
+    expect(parsed.simulationSupported).toBe(true);
   });
 
-  it('rejette counts negatifs', () => {
+  it('parse une response simulationSupported=false avec reason', () => {
+    const parsed = simulationResultSchema.parse({
+      ruleCode: 'BSPCE_BENEFICIARY_TYPE',
+      simulationSupported: false,
+      currentCompliant: 0,
+      currentNonCompliant: 0,
+      afterCompliant: 0,
+      afterNonCompliant: 0,
+      newlyBlocked: 0,
+      newlyUnblocked: 0,
+      sampleNewlyBlocked: [],
+      totalEvaluated: 0,
+      notSupportedReason: 'Rule sans paramètre numérique',
+    });
+    expect(parsed.simulationSupported).toBe(false);
+    expect(parsed.notSupportedReason).toMatch(/sans param/i);
+  });
+
+  it('rejette counts négatifs', () => {
     const r = simulationResultSchema.safeParse({
       ruleCode: 'VALUATION_STALE_BLOCKING',
-      passingCount: -1,
-      failingCount: 0,
-      notEvaluableCount: 0,
-      impactedSampleIds: [],
+      simulationSupported: true,
+      currentCompliant: -1,
+      currentNonCompliant: 0,
+      afterCompliant: 0,
+      afterNonCompliant: 0,
+      newlyBlocked: 0,
+      newlyUnblocked: 0,
+      sampleNewlyBlocked: [],
+      totalEvaluated: 0,
+      notSupportedReason: null,
     });
     expect(r.success).toBe(false);
   });
 
-  it('rejette > 10 sample IDs (cap V1)', () => {
+  it('rejette > 10 sample items (cap V1)', () => {
+    const tooMany = Array.from({ length: 11 }, (_, i) => ({
+      id: `${'1'.repeat(8)}-1111-4111-8111-${i.toString().padStart(12, '0')}`,
+      label: `Item ${i}`,
+      reason: 'test',
+    }));
     const r = simulationResultSchema.safeParse({
       ruleCode: 'VALUATION_STALE_BLOCKING',
-      passingCount: 0,
-      failingCount: 11,
-      notEvaluableCount: 0,
-      impactedSampleIds: Array.from(
-        { length: 11 },
-        (_, i) => `${'1'.repeat(8)}-1111-4111-8111-${i.toString().padStart(12, '0')}`,
-      ),
+      simulationSupported: true,
+      currentCompliant: 0,
+      currentNonCompliant: 0,
+      afterCompliant: 0,
+      afterNonCompliant: 11,
+      newlyBlocked: 11,
+      newlyUnblocked: 0,
+      sampleNewlyBlocked: tooMany,
+      totalEvaluated: 11,
+      notSupportedReason: null,
     });
     expect(r.success).toBe(false);
   });
 
-  it('rejette UUID malforme dans impactedSampleIds', () => {
+  it('rejette UUID malformé dans sample item', () => {
     const r = simulationResultSchema.safeParse({
       ruleCode: 'VALUATION_STALE_BLOCKING',
-      passingCount: 0,
-      failingCount: 1,
-      notEvaluableCount: 0,
-      impactedSampleIds: ['not-a-uuid'],
+      simulationSupported: true,
+      currentCompliant: 0,
+      currentNonCompliant: 0,
+      afterCompliant: 0,
+      afterNonCompliant: 1,
+      newlyBlocked: 1,
+      newlyUnblocked: 0,
+      sampleNewlyBlocked: [{ id: 'not-a-uuid', label: 'X', reason: 'Y' }],
+      totalEvaluated: 1,
+      notSupportedReason: null,
     });
     expect(r.success).toBe(false);
   });

@@ -199,28 +199,64 @@ export const simulateComplianceChangeInputSchema = complianceRuleOverrideInputSc
 export type SimulateComplianceChangeInput = z.input<typeof simulateComplianceChangeInputSchema>;
 
 // ---------------------------------------------------------------------------
-// 5. Output simulation (B4)
+// 5. Output simulation (B5 — what-if simulator)
 // ---------------------------------------------------------------------------
 
 /**
- * Réponse de `simulateComplianceChange`. Structure stable pour le UI.
+ * Élément d'échantillon pour le preview. L'UI utilise ces items pour montrer
+ * "Voici les 10 plans/awards qui seraient nouvellement bloqués si vous
+ * appliquez ce changement".
+ */
+export const simulationSampleItemSchema = z.object({
+  id: z.string().uuid(),
+  /** Label humain (plan name, award number, beneficiary fullName, etc.) */
+  label: z.string(),
+  /** Raison spécifique (ex: "Valuation à 105j > nouveau seuil 90j"). */
+  reason: z.string(),
+});
+export type SimulationSampleItem = z.infer<typeof simulationSampleItemSchema>;
+
+/**
+ * Module 12 B5 — Réponse de `simulateComplianceChange`.
  *
- * V1 (Q5=a) : juste les counts agrégés. V2 = preview détaillé par
- * award/plan impacté.
+ * Compare l'état actuel (config DB) avec une config proposée pour mesurer
+ * combien d'entités basculeraient compliant ↔ non-compliant.
+ *
+ * V1 :
+ *   - `simulationSupported=false` → la rule n'est pas simulable (toggle-only,
+ *     ou logique trop complexe pour V1). UI affiche message "Simulation non
+ *     applicable".
+ *   - Sinon : counts + delta + échantillon des items "newly blocked".
+ *
+ * Effet prospectif uniquement (Q4=b) : on ne modifie PAS les entités
+ * existantes, on calcule juste l'impact si la nouvelle config était appliquée
+ * aux prochaines transitions.
  */
 export const simulationResultSchema = z.object({
   ruleCode: ruleCodeSchema,
-  /** Count d'entités qui PASSERAIENT la rule avec la nouvelle config. */
-  passingCount: z.number().int().nonnegative(),
-  /** Count d'entités qui ÉCHOUERAIENT (= bloquées si severity=error, ou warning sinon). */
-  failingCount: z.number().int().nonnegative(),
-  /** Count d'entités non-évaluables (data manquante, etc.). */
-  notEvaluableCount: z.number().int().nonnegative(),
+  /** `false` si la rule n'a pas de helper de simulation V1. */
+  simulationSupported: z.boolean(),
+  /** Compte d'entités qui PASSAIENT la rule avec la config actuelle. */
+  currentCompliant: z.number().int().nonnegative(),
+  /** Compte d'entités qui ÉCHOUAIENT avec la config actuelle. */
+  currentNonCompliant: z.number().int().nonnegative(),
+  /** Compte d'entités qui PASSERAIENT avec la config proposée. */
+  afterCompliant: z.number().int().nonnegative(),
+  /** Compte d'entités qui ÉCHOUERAIENT avec la config proposée. */
+  afterNonCompliant: z.number().int().nonnegative(),
+  /** Compte d'entités qui basculeraient compliant → non-compliant. */
+  newlyBlocked: z.number().int().nonnegative(),
+  /** Compte d'entités qui basculeraient non-compliant → compliant. */
+  newlyUnblocked: z.number().int().nonnegative(),
+  /** Échantillon des items "newly blocked" (cap 10) pour preview UI. */
+  sampleNewlyBlocked: z.array(simulationSampleItemSchema).max(10),
   /**
-   * Échantillon d'IDs d'entités impactées (pour CTA "Voir les awards
-   * concernés"). Cap V1 = 10 IDs max.
+   * Total d'entités évaluées dans cette simulation (= base de calcul). Permet
+   * à l'UI d'afficher "X / Y plans impactés" pour mise en contexte.
    */
-  impactedSampleIds: z.array(z.string().uuid()).max(10),
+  totalEvaluated: z.number().int().nonnegative(),
+  /** Si `simulationSupported=false` : message expliquant pourquoi. */
+  notSupportedReason: z.string().nullable(),
 });
 export type SimulationResult = z.infer<typeof simulationResultSchema>;
 
