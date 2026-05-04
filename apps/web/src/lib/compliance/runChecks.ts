@@ -481,24 +481,69 @@ export async function runApprovalWorkflowComplianceChecks(
  * V1 : la colonne plans.fmv_set_at n'existe pas encore (Module 11), donc
  * ctx.fmvSetAt est null par défaut → la rule retourne null (no-op). Le
  * caller peut passer un `fmvSetAt` explicite si on a la donnée ailleurs.
+ *
+ * Module 12.5 B3 — pré-charge la config DB pour FMV_RECENT_ENOUGH (1 RPC).
+ * Si désactivée par l'org, la rule est filtrée. Params/severity injectés
+ * dans le ctx pour lecture par les checkers.
  */
 export async function runDocumentGenerationComplianceChecks(
   input: DocumentGenerationCheckInput,
   fmvSetAt?: string | null,
 ): Promise<ComplianceCheckResult> {
-  const ctx: DocumentGenerationCheckContext = { fmvSetAt: fmvSetAt ?? null };
-  return runRules(DOCUMENT_GENERATION_RULES, input, ctx);
+  const eff = await loadEffectiveRule('FMV_RECENT_ENOUGH');
+
+  const effectiveParamsByRule: Record<string, Record<string, unknown>> = {};
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  const isActive = eff?.is_active ?? true;
+  if (eff && eff.is_active) {
+    effectiveParamsByRule['FMV_RECENT_ENOUGH'] = eff.effective_params;
+    effectiveSeverityByRule['FMV_RECENT_ENOUGH'] = eff.effective_severity;
+  }
+
+  const ctx: DocumentGenerationCheckContext = {
+    fmvSetAt: fmvSetAt ?? null,
+    effectiveParamsByRule,
+    effectiveSeverityByRule,
+  };
+  const rules = isActive ? DOCUMENT_GENERATION_RULES : [];
+  return runRules(rules, input, ctx);
 }
 
 /**
  * SIGNERS_COMPLETE_INFO + DOCUMENT_NOT_VOIDED — appelé depuis
  * sendDocumentForSignature (B3). Pas de ctx async nécessaire (toutes les
  * données sont déjà dans l'input).
+ *
+ * Module 12.5 B3 — pré-charge la config DB pour les 2 rules en parallèle.
+ * Filtre is_active=false. Pas de params dynamiques (V1 booléen pur), seule
+ * la severity est lue.
  */
+const DOCUMENT_SIGNATURE_RULE_CODES: RuleCode[] = ['SIGNERS_COMPLETE_INFO', 'DOCUMENT_NOT_VOIDED'];
+
 export async function runDocumentSignatureComplianceChecks(
   input: DocumentSignatureCheckInput,
 ): Promise<ComplianceCheckResult> {
-  return runRules(DOCUMENT_SIGNATURE_RULES, input, {} as DocumentSignatureCheckContext);
+  const effectiveRules = await Promise.all(
+    DOCUMENT_SIGNATURE_RULE_CODES.map((code) => loadEffectiveRule(code)),
+  );
+
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  const activeCodes = new Set<string>(DOCUMENT_SIGNATURE_RULE_CODES);
+
+  for (let i = 0; i < DOCUMENT_SIGNATURE_RULE_CODES.length; i++) {
+    const code = DOCUMENT_SIGNATURE_RULE_CODES[i]!;
+    const eff = effectiveRules[i];
+    if (!eff) continue;
+    if (!eff.is_active) {
+      activeCodes.delete(code);
+      continue;
+    }
+    effectiveSeverityByRule[code] = eff.effective_severity;
+  }
+
+  const ctx: DocumentSignatureCheckContext = { effectiveSeverityByRule };
+  const activeRules = DOCUMENT_SIGNATURE_RULES.filter((r) => activeCodes.has(r.code));
+  return runRules(activeRules, input, ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -512,17 +557,30 @@ export async function runDocumentSignatureComplianceChecks(
  * Ctx pré-chargé :
  *   - `existingShareClassCodes` : pour SHARE_CLASS_CODE_UNIQUE
  *   - `companyTotalSharesIncludingPool` : pour ESOP_PERCENT_BEST_PRACTICE
+ *   - Module 12.5 B3 : `effectiveParamsByRule` + `effectiveSeverityByRule`
+ *     pour les 4 cap_table rules (chargés en parallèle via 4× loadEffectiveRule).
  *
  * Appelé depuis :
  *   - `createShareClass` (scope SHARE_CLASS_CREATE) → Module 10 B2
  *   - `createFundingRound` (scope FUNDING_ROUND_CREATE) → Module 10 B2
  *   - V2 : POOL_TOPUP scenario apply (Module 12)
  */
+const CAP_TABLE_RULE_CODES: RuleCode[] = [
+  'SHARE_CLASS_CODE_UNIQUE',
+  'ROUND_AMOUNT_CONSISTENCY',
+  'POOL_OVER_ALLOCATION',
+  'ESOP_PERCENT_BEST_PRACTICE',
+];
+
 export async function runCapTableComplianceChecks(
   input: CapTableCheckInput,
   orgId: string,
 ): Promise<ComplianceCheckResult> {
   const supabase = await createSupabaseServerClient();
+
+  // Module 12.5 B3 — pré-charge les 4 effective rules en parallèle des
+  // queries métier. Les RPC `get_effective_rule` sont stables.
+  const effectivePromises = CAP_TABLE_RULE_CODES.map((code) => loadEffectiveRule(code));
 
   // Pré-charge codes existants (uniquement pour SHARE_CLASS_CREATE)
   const existingShareClassCodes = new Set<string>();
@@ -552,13 +610,36 @@ export async function runCapTableComplianceChecks(
     }
   }
 
+  const effectiveRules = await Promise.all(effectivePromises);
+
+  // Module 12.5 B3 — Build maps params + severity, filtre is_active=false
+  const effectiveParamsByRule: Record<string, Record<string, unknown>> = {};
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  const activeCodes = new Set<string>(CAP_TABLE_RULE_CODES);
+
+  for (let i = 0; i < CAP_TABLE_RULE_CODES.length; i++) {
+    const code = CAP_TABLE_RULE_CODES[i]!;
+    const eff = effectiveRules[i];
+    if (!eff) continue;
+    if (!eff.is_active) {
+      activeCodes.delete(code);
+      continue;
+    }
+    effectiveParamsByRule[code] = eff.effective_params;
+    effectiveSeverityByRule[code] = eff.effective_severity;
+  }
+
   const ctx: CapTableCheckContext = {
     existingShareClassCodes,
     companyTotalSharesIncludingPool,
+    effectiveParamsByRule,
+    effectiveSeverityByRule,
   };
 
-  // Filtre les rules applicables au scope
-  const applicableRules = CAP_TABLE_RULES.filter((rule) => rule.appliesTo.includes(input.scope));
+  // Filtre les rules applicables au scope ET actives DB
+  const applicableRules = CAP_TABLE_RULES.filter(
+    (rule) => activeCodes.has(rule.code) && rule.appliesTo.includes(input.scope),
+  );
 
   return runRules(applicableRules, input, ctx);
 }

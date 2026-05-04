@@ -215,6 +215,13 @@ export type DocumentGenerationCheckInput = {
 export type DocumentGenerationCheckContext = {
   /** Date ISO de la dernière mise à jour de la FMV du plan. NULL si jamais setté. */
   fmvSetAt: string | null;
+  /**
+   * Module 12.5 B3 — Map ruleCode → params merged depuis DB. Lu via
+   * `readNumberParam` pour FMV_RECENT_ENOUGH (`staleDays`).
+   */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /** Module 12.5 B3 — severity merged DB pour FMV_RECENT_ENOUGH. */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 export type DocumentSignatureCheckInput = {
@@ -226,7 +233,16 @@ export type DocumentSignatureCheckInput = {
   }>;
 };
 
-export type DocumentSignatureCheckContext = Record<string, never>;
+/**
+ * Module 12.5 B3 — Le ctx signature ne portait initialement aucune donnée.
+ * On ajoute uniquement `effectiveSeverityByRule` (les 2 rules
+ * SIGNERS_COMPLETE_INFO + DOCUMENT_NOT_VOIDED n'ont pas de params).
+ * `effectiveParamsByRule` reste optionnel (placeholder, jamais lu V1).
+ */
+export type DocumentSignatureCheckContext = {
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
+};
 
 // ---------------------------------------------------------------------------
 // Module 10 B7 — Cap Table compliance
@@ -271,6 +287,16 @@ export type CapTableCheckContext = {
    * `ESOP_PERCENT_BEST_PRACTICE`. NULL si la cap table est vide.
    */
   companyTotalSharesIncludingPool: number | null;
+  /**
+   * Module 12.5 B3 — Map ruleCode → params merged depuis DB
+   * (`loadEffectiveRule`). Pré-chargé par `runCapTableComplianceChecks`
+   * pour les 4 cap_table rules. Lus via `readNumberParam` côté checkers.
+   */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /**
+   * Module 12.5 B3 — Map ruleCode → severity merged DB.
+   */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 // ---------------------------------------------------------------------------

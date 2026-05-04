@@ -774,23 +774,24 @@ proxy.
 110-116. **Dettes Module 12 (PR #28)** — voir
 `memory/module_12_complete.md`. Notable :
 
-- **#110 Wiring partiel rules → effective params** : Module 12.5 B1+B2
+- **#110 Wiring partiel rules → effective params** : Module 12.5 B1+B2+B3
   livrés 2026-05-04 (branche `feat/module-12-5-wiring-21-rules`, pré-PR).
-  - **B1** : 5 award rules wired (BSPCE_BENEFICIARY_TYPE, AGA_30_PERCENT_CAP,
-    AGA_APPROACHING_CAP, POOL_AVAILABLE, GRANT_DATE_RECENT) avec helper
-    `_helpers.ts` partagé + extension `runComplianceChecks`.
-  - **B2** : 6 beneficiary rules wired (EMAIL_UNIQUE_IN_ORG,
-    TAX_RESIDENCE_FRANCE_CONSISTENCY, HIRE_DATE_REASONABLE, MANAGER_NOT_SELF,
-    IBAN_FORMAT, BSPCE_BENEFICIARY_TYPE_REVERSE) + extension
-    `runBeneficiaryComplianceChecks`. HIRE_DATE_REASONABLE évolue V1.X
-    (`maxFutureMonths` default 3 — précédemment warning sur n'importe
-    quel futur). Anomalie #114 préservée (sub-rule HIRE_DATE_INVALID
-    reste ERROR hardcoded).
-  - **10 rules restantes** (cap_table 4, document 3, approval 3) → B3-B4.
+  18/21 rules wired (86 %).
+  - **B1** : 5 award rules wired (helper `_helpers.ts` partagé +
+    extension `runComplianceChecks`).
+  - **B2** : 6 beneficiary rules wired. HIRE_DATE_REASONABLE évolue V1.X
+    (`maxFutureMonths` default 3). Anomalie #114 préservée (sub-rule
+    HIRE_DATE_INVALID reste ERROR hardcoded).
+  - **B3** : 4 cap_table + 3 document rules wired + **migration 00094c**
+    (`toleranceEur` → `tolerancePct` 1 % default, scale linéaire avec
+    taille round). FMV_RECENT_ENOUGH évolue V1.X (`12 mois` → `90 jours`,
+    severity DB `'error'` au lieu de `'soft'` warning legacy — plus strict).
+    ESOP_PERCENT_BEST_PRACTICE cross-validation defensive
+    (`minPct >= maxPct` → fallback defaults + warn).
+  - **3 rules restantes** (approval) → B4 + closure.
   - Effet actuel : la page UI Module 12 impacte runtime pour `valuation`
-    (Module 12 B2) + `award` (B1) + `beneficiary` (B2). Les 3 autres scopes
-    (cap_table, document, approval) affichent les configs mais ne les
-    lisent pas encore.
+    (Module 12 B2) + `award` (B1) + `beneficiary` (B2) + `cap_table` +
+    `document` (B3). Seul `approval` reste à wire.
 - **#111 Severity drift code/DB** : 4 rules ont severity ajustée en DB
   (TAX_RESIDENCE, WORKFLOW_REQUIRED_FOR_AGA, FMV_RECENT_ENOUGH,
   BSPCE_BENEFICIARY_TYPE_REVERSE). Le checker code n'utilise pas
