@@ -370,12 +370,50 @@ identiques + service_role injecté automatiquement.
         (commit bec24e0) — débloque les bénéficiaires purs sans
         membership ACTIVE. La layout /portal/\* fait son propre check.
 
+- [x] Module 9 — Exercise Workflow (mergé sur master, PRs #13-#18)
+  - B1 DB + 3 RPCs (request_exercise/confirm_payment/cancel) + 10
+    migrations 00056-00065 + 1 hotfix RLS 00066
+  - B2 Lib pure TS simulation fiscale FR 2026 (BSPCE/SO/BSA/AGA)
+  - B3 4 pages portal exercise + 2 Server Actions + 5 composants
+  - B4 3 pages dashboard admin (inbox + detail + workflows) + 4 SA
+  - B5 Notifications + Documents Exercise (5 templates email + 2 PDF
+    - RPC load_exercise_document_context + 5 hooks fire-and-forget)
+  - 614 tests workspace post-M9, drift cloud +3
+
+- [x] Module 10 — Cap Table Dynamique (mergé 2026-05-04 sur master,
+      commit `0ceda7c`, PR #25)
+  - [x] B1 — DB schema (11 migrations 00080-00089 + 00082b namespace
+        correction) : 4 tables, 3 RPCs, 1 hook M9→M10, 14 permissions
+  - [x] B2 — Server Actions share_classes + funding_rounds (5 SA)
+  - [x] B3 — `compute_cap_table` RPC + page principale + ValuationToggle + CapTableMatrix + sidebar nav
+  - [x] B4 — Scénarios déterministes (4 SA NEW_ROUND/POOL_TOPUP/
+        BULK_EXERCISE/EXIT) + dilution-comparator + cap-table-tabs + cache 24h + share-class-form V5 (page minimale)
+  - [x] B5 — DEFERRED V1.5 : endpoint Python
+        `/compute/dilution-monte-carlo` absent côté Fly.io
+        → page placeholder + memory `module_10_b5_skipped.md`
+        (action mainteneur Fly)
+  - [x] B6 — Snapshots + portal positions + bulk import (4 SA :
+        createManualSnapshot, freezeSnapshot, deleteSnapshot,
+        bulkImportPositions) + page `/portal/positions` (admin
+        client pattern) + tab Évolution réactivé
+  - [x] B6+ — cleanup cron deferred V1.5 (Option β user) +
+        UI wording "Snapshots quotidiens automatiques disponibles V1.5" + memory `module_10_b6_cron_skipped.md` (action mainteneur DB)
+  - [x] B7 — Compliance V1 (5 rules) + activation
+        `AGA_30_PERCENT_CAP` (résolution dette #3) + 25 tests neufs
+        (capTableRules.test.ts) + `runCapTableComplianceChecks`
+        runner + ctx loader cap table dans `runComplianceChecks`
+        Module 3b
+  - **Statistiques** : 698 tests workspace (vs 521 pré-M10, +177),
+    +12 165 LOC, 11 migrations cloud + 1 deferred V1.5,
+    13 Server Actions, 9 pages dashboard + 1 portal, 11 composants,
+    5 compliance rules. 15 erratums spec consolidés, 6 dettes V2
+    ouvertes (#88-#93), 1 dette résolue (#3).
+
 ### À venir
 
-- [ ] Module 9 — Exercise Workflow
-- [ ] Module 10 — Cap Table dynamique
-- [ ] Module 11 — IFRS 2 finalisation
-- [ ] Module 12 — Compliance Engine V2 (configurable)
+- [ ] Module 11 — IFRS 2 finalisation (refonte dette #1 normalizers
+      contextuels rate vs sigma + dette #11 incremental_fair_value + page UI valuation_runs + visualisation Monte Carlo)
+- [ ] Module 12 — Compliance Engine V2 (configurable par org)
 - [ ] Module 13 — Audit Trail & Reporting
 
 ### Design System V1 — Editorial Finance (PR #12 ready-for-review)
