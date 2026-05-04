@@ -30,21 +30,29 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import {
+  bulkImportPositionsSchema,
   cancelFundingRoundSchema,
   createFundingRoundSchema,
+  createManualSnapshotSchema,
   createScenarioSchema,
   createShareClassSchema,
+  deleteSnapshotSchema,
+  freezeSnapshotSchema,
   updateShareClassSchema,
   uuidSchema,
+  type BulkImportPositionsInput,
   type CancelFundingRoundInput,
   type CreateFundingRoundInput,
+  type CreateManualSnapshotInput,
   type CreateScenarioInput,
   type CreateShareClassInput,
+  type ImportPositionRowInput,
   type UpdateShareClassInput,
 } from '@equity/shared';
 import type { TablesUpdate } from '@equity/shared';
 import { logAuditEvent } from '@/lib/audit';
 import { requirePermission } from '@/lib/auth/rbac';
+import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 // ---------------------------------------------------------------------------
@@ -703,4 +711,390 @@ export async function runScenario(
     .eq('org_id', user.activeOrgId);
 
   return { ok: true, result: rpcResult, cached: false };
+}
+
+// ============================================================================
+// SNAPSHOTS (B6)
+// ============================================================================
+
+/**
+ * Crée un snapshot manuel via RPC `materialize_snapshot` (SECURITY DEFINER).
+ *
+ * Si `isImmutable=true`, freeze immédiatement après matérialisation (2 RPCs
+ * mais atomicité best-effort — si freeze fail, le snapshot existe en mutable
+ * et l'erreur est remontée).
+ *
+ * `snapshot_type='MANUAL_FREEZE'` (cf CHECK constraint 00083).
+ */
+export async function createManualSnapshot(
+  input: CreateManualSnapshotInput,
+): Promise<ActionOk<{ id: string; isImmutable: boolean }> | ActionError> {
+  const parsed = createManualSnapshotSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+  const data = parsed.data;
+
+  const user = await requirePermission('captable.snapshot.create');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const supabase = await createSupabaseServerClient();
+
+  const { data: snapshotId, error: rpcErr } = await supabase.rpc('materialize_snapshot', {
+    p_org_id: user.activeOrgId,
+    p_asof_date: data.asofDate,
+    p_snapshot_type: 'MANUAL_FREEZE',
+    p_triggered_by_round_id: undefined,
+    p_label: data.label ?? undefined,
+  });
+
+  if (rpcErr || !snapshotId) {
+    return {
+      ok: false,
+      error: `materialize_snapshot échoué: ${rpcErr?.message ?? 'unknown'}`,
+    };
+  }
+
+  // Optionnel : freeze immédiat (admin client bypass RLS no_update — cf freezeSnapshot)
+  if (data.isImmutable) {
+    const admin = getSupabaseAdminClient();
+    const { error: freezeErr } = await admin
+      .from('cap_table_snapshots')
+      .update({ is_immutable: true, updated_at: new Date().toISOString() })
+      .eq('id', snapshotId as string)
+      .eq('org_id', user.activeOrgId);
+    if (freezeErr) {
+      return {
+        ok: false,
+        error: `Snapshot créé mais freeze échoué: ${freezeErr.message}`,
+      };
+    }
+  }
+
+  await logAuditEvent({
+    eventType: 'captable.snapshot_created_manual',
+    resourceType: 'cap_table_snapshots',
+    resourceId: snapshotId as string,
+    metadata: {
+      asof_date: data.asofDate,
+      label: data.label ?? null,
+      is_immutable: data.isImmutable,
+    },
+  });
+
+  revalidatePath('/dashboard/captable/snapshots');
+  revalidatePath('/dashboard/captable');
+  return { ok: true, id: snapshotId as string, isImmutable: data.isImmutable };
+}
+
+/**
+ * Freeze un snapshot existant (`is_immutable: false → true`).
+ *
+ * La RLS policy `snapshots_no_update` (00083) = `USING (FALSE)` bloque tous
+ * les UPDATE via le client cookie-based. Pour respecter cette policy sans
+ * relâcher la sécurité côté DB, on utilise le client admin (service_role
+ * bypass RLS) avec **double ownership check côté SA** :
+ *   1. requirePermission('captable.snapshot.create')
+ *   2. Vérification org_id du snapshot vs activeOrgId du user
+ *   3. Idempotence : re-freeze d'un snapshot déjà immutable = no-op
+ */
+export async function freezeSnapshot(id: string): Promise<ActionVoid | ActionError> {
+  const parsed = freezeSnapshotSchema.safeParse({ id });
+  if (!parsed.success) return validationError(parsed.error);
+
+  const user = await requirePermission('captable.snapshot.create');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const cookie = await createSupabaseServerClient();
+
+  // Ownership check via cookie client (RLS SELECT actif → ne voit que son org)
+  const { data: existing, error: loadErr } = await cookie
+    .from('cap_table_snapshots')
+    .select('id, org_id, is_immutable')
+    .eq('id', parsed.data.id)
+    .eq('org_id', user.activeOrgId)
+    .maybeSingle();
+
+  if (loadErr || !existing) {
+    return { ok: false, error: 'Snapshot introuvable ou hors org' };
+  }
+
+  // Idempotence : si déjà frozen, retour ok silencieux
+  if (existing.is_immutable) {
+    return { ok: true };
+  }
+
+  // UPDATE via admin client (bypass RLS no_update). Ownership déjà validée.
+  const admin = getSupabaseAdminClient();
+  const { error: updErr } = await admin
+    .from('cap_table_snapshots')
+    .update({ is_immutable: true, updated_at: new Date().toISOString() })
+    .eq('id', parsed.data.id)
+    .eq('org_id', user.activeOrgId);
+
+  if (updErr) {
+    return { ok: false, error: `Freeze échoué: ${updErr.message}` };
+  }
+
+  await logAuditEvent({
+    eventType: 'captable.snapshot_frozen',
+    resourceType: 'cap_table_snapshots',
+    resourceId: parsed.data.id,
+    metadata: {},
+  });
+
+  revalidatePath('/dashboard/captable/snapshots');
+  revalidatePath(`/dashboard/captable/snapshots/${parsed.data.id}`);
+  return { ok: true };
+}
+
+/**
+ * Supprime un snapshot mutable. RLS policy bloque DELETE si `is_immutable=true`.
+ * Double-check côté SA pour message d'erreur clair.
+ */
+export async function deleteSnapshot(id: string): Promise<ActionVoid | ActionError> {
+  const parsed = deleteSnapshotSchema.safeParse({ id });
+  if (!parsed.success) return validationError(parsed.error);
+
+  const user = await requirePermission('captable.snapshot.create');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const supabase = await createSupabaseServerClient();
+
+  const { data: existing, error: loadErr } = await supabase
+    .from('cap_table_snapshots')
+    .select('id, is_immutable, label, snapshot_type')
+    .eq('id', parsed.data.id)
+    .eq('org_id', user.activeOrgId)
+    .maybeSingle();
+
+  if (loadErr || !existing) {
+    return { ok: false, error: 'Snapshot introuvable ou hors org' };
+  }
+
+  if (existing.is_immutable) {
+    return { ok: false, error: 'Snapshot immutable — suppression impossible (PRE_AUDIT lock).' };
+  }
+
+  const { error: delErr } = await supabase
+    .from('cap_table_snapshots')
+    .delete()
+    .eq('id', parsed.data.id)
+    .eq('org_id', user.activeOrgId);
+
+  if (delErr) {
+    return { ok: false, error: `Suppression échouée: ${delErr.message}` };
+  }
+
+  await logAuditEvent({
+    eventType: 'captable.snapshot_deleted',
+    resourceType: 'cap_table_snapshots',
+    resourceId: parsed.data.id,
+    metadata: {
+      label: existing.label,
+      snapshot_type: existing.snapshot_type,
+    },
+  });
+
+  revalidatePath('/dashboard/captable/snapshots');
+  return { ok: true };
+}
+
+// ============================================================================
+// BULK IMPORT (B6)
+// ============================================================================
+
+export type ImportRowError = {
+  rowIndex: number;
+  field: string | null;
+  message: string;
+};
+
+export type BulkImportSummary = {
+  rowsTotal: number;
+  rowsCreated: number;
+  errors: ImportRowError[];
+};
+
+/**
+ * Bulk import de positions cap_table via CSV.
+ *
+ * Pattern Module 4 bulkCreateBeneficiaries / Module 3b bulkCreateAwards :
+ *  1. Validation Zod par row (collecte toutes les erreurs avant DB)
+ *  2. Resolution share_class_id par code + beneficiary_id par email (si type=BENEFICIARY)
+ *  3. INSERT batch atomique (rollback si une row fail)
+ *
+ * Limite : 500 rows max (cf BULK_IMPORT_MAX_ROWS).
+ *
+ * Note : on ne traite PAS l'upsert. Si une position existe déjà sur
+ * (share_class, stakeholder, source), l'INSERT levera une erreur et toute
+ * la transaction est annulée (atomicité).
+ */
+export async function bulkImportPositions(
+  input: BulkImportPositionsInput,
+): Promise<ActionOk<{ summary: BulkImportSummary }> | ActionError> {
+  const parsed = bulkImportPositionsSchema.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error);
+  const data = parsed.data;
+
+  const user = await requirePermission('captable.import');
+  if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
+
+  const supabase = await createSupabaseServerClient();
+  const errors: ImportRowError[] = [];
+
+  // 1. Resolve share_classes par code (1 query consolidée)
+  const codes = Array.from(new Set(data.rows.map((r) => r.shareClassCode)));
+  const { data: classes, error: classesErr } = await supabase
+    .from('share_classes')
+    .select('id, code, is_active')
+    .eq('org_id', user.activeOrgId)
+    .in('code', codes);
+
+  if (classesErr) {
+    return { ok: false, error: `Lookup share_classes échoué: ${classesErr.message}` };
+  }
+
+  const classByCode = new Map<string, { id: string; deactivated: boolean }>();
+  for (const c of classes ?? []) {
+    classByCode.set(c.code, { id: c.id, deactivated: !c.is_active });
+  }
+
+  // 2. Resolve beneficiaries par email (uniquement pour rows BENEFICIARY)
+  const beneficiaryEmails = Array.from(
+    new Set(
+      data.rows
+        .filter((r) => r.stakeholderType === 'BENEFICIARY' && r.stakeholderEmail)
+        .map((r) => r.stakeholderEmail as string),
+    ),
+  );
+
+  const beneficiaryByEmail = new Map<string, string>();
+  if (beneficiaryEmails.length > 0) {
+    const { data: benefs, error: benefsErr } = await supabase
+      .from('beneficiaries')
+      .select('id, email')
+      .eq('org_id', user.activeOrgId)
+      .in('email', beneficiaryEmails)
+      .is('deleted_at', null);
+
+    if (benefsErr) {
+      return { ok: false, error: `Lookup beneficiaries échoué: ${benefsErr.message}` };
+    }
+    for (const b of benefs ?? []) {
+      if (b.email) beneficiaryByEmail.set(b.email, b.id);
+    }
+  }
+
+  // 3. Build INSERT rows + collecte erreurs de résolution
+  type InsertRow = {
+    org_id: string;
+    share_class_id: string;
+    stakeholder_type: ImportPositionRowInput['stakeholderType'];
+    stakeholder_id: string | null;
+    stakeholder_name: string;
+    stakeholder_email: string | null;
+    units: number;
+    cost_basis_per_unit: number | null;
+    acquired_at: string;
+    source: 'BULK_IMPORT';
+    notes: string | null;
+  };
+
+  const insertRows: InsertRow[] = [];
+  for (const [i, row] of data.rows.entries()) {
+    const klass = classByCode.get(row.shareClassCode);
+    if (!klass) {
+      errors.push({
+        rowIndex: i,
+        field: 'shareClassCode',
+        message: `Classe ${row.shareClassCode} introuvable dans cet org`,
+      });
+      continue;
+    }
+    if (klass.deactivated) {
+      errors.push({
+        rowIndex: i,
+        field: 'shareClassCode',
+        message: `Classe ${row.shareClassCode} désactivée`,
+      });
+      continue;
+    }
+
+    let stakeholderId: string | null = null;
+    if (row.stakeholderType === 'BENEFICIARY') {
+      if (!row.stakeholderEmail) {
+        errors.push({
+          rowIndex: i,
+          field: 'stakeholderEmail',
+          message: 'Email requis pour stakeholderType=BENEFICIARY',
+        });
+        continue;
+      }
+      stakeholderId = beneficiaryByEmail.get(row.stakeholderEmail) ?? null;
+      if (!stakeholderId) {
+        errors.push({
+          rowIndex: i,
+          field: 'stakeholderEmail',
+          message: `Bénéficiaire ${row.stakeholderEmail} introuvable`,
+        });
+        continue;
+      }
+    } else if (row.stakeholderType !== 'POOL_RESERVE') {
+      // FOUNDER / INVESTOR / ENTITY : pas de table dédiée V1.
+      // Pattern aligné sur create_funding_round (00086) : UUID placeholder stable.
+      // V2 = créer table `investors` + `entities` et résoudre par référence.
+      stakeholderId = crypto.randomUUID();
+    }
+
+    insertRows.push({
+      org_id: user.activeOrgId,
+      share_class_id: klass.id,
+      stakeholder_type: row.stakeholderType,
+      stakeholder_id: stakeholderId,
+      stakeholder_name: row.stakeholderName,
+      stakeholder_email: row.stakeholderEmail ?? null,
+      units: row.units,
+      cost_basis_per_unit: row.costBasisPerUnit ?? null,
+      acquired_at: row.acquiredAt,
+      source: 'BULK_IMPORT',
+      notes: row.notes ?? null,
+    });
+  }
+
+  if (errors.length > 0) {
+    const first = errors[0]!;
+    return {
+      ok: false,
+      error: `${errors.length} ligne(s) en erreur — corrigez avant import. Première erreur ligne ${first.rowIndex + 1}: ${first.message}`,
+      validationIssues: errors.length,
+    };
+  }
+
+  // 4. Atomic INSERT (Postgres transaction implicite sur insert array)
+  const { error: insertErr, count } = await supabase
+    .from('cap_table_positions')
+    .insert(insertRows, { count: 'exact' });
+
+  if (insertErr) {
+    return { ok: false, error: `Insert atomique échoué: ${insertErr.message}` };
+  }
+
+  await logAuditEvent({
+    eventType: 'captable.positions_bulk_imported',
+    resourceType: 'cap_table_positions',
+    metadata: {
+      rows_total: data.rows.length,
+      rows_created: count ?? 0,
+    },
+  });
+
+  revalidatePath('/dashboard/captable');
+
+  return {
+    ok: true,
+    summary: {
+      rowsTotal: data.rows.length,
+      rowsCreated: count ?? 0,
+      errors: [],
+    },
+  };
 }

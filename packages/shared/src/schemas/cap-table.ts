@@ -292,3 +292,82 @@ export const getCapTableInputSchema = z.object({
 });
 
 export type GetCapTableInput = z.input<typeof getCapTableInputSchema>;
+
+// ---------------------------------------------------------------------------
+// Snapshots (B6)
+// ---------------------------------------------------------------------------
+
+export const SNAPSHOT_TYPES = [
+  'POST_ROUND',
+  'PRE_AUDIT',
+  'YEAR_END',
+  'MANUAL_FREEZE',
+  'NIGHTLY',
+] as const;
+export type SnapshotType = (typeof SNAPSHOT_TYPES)[number];
+
+export const createManualSnapshotSchema = z.object({
+  asofDate: z.string().date(),
+  label: z.string().trim().min(2).max(200).optional(),
+  isImmutable: z.boolean().default(false),
+});
+
+export type CreateManualSnapshotInput = z.input<typeof createManualSnapshotSchema>;
+
+export const freezeSnapshotSchema = z.object({
+  id: uuidSchema,
+});
+
+export const deleteSnapshotSchema = z.object({
+  id: uuidSchema,
+});
+
+// ---------------------------------------------------------------------------
+// Bulk import positions (B6)
+// ---------------------------------------------------------------------------
+
+export const STAKEHOLDER_TYPES_IMPORT = [
+  'FOUNDER',
+  'INVESTOR',
+  'BENEFICIARY',
+  'ENTITY',
+  'POOL_RESERVE',
+] as const;
+export type StakeholderTypeImport = (typeof STAKEHOLDER_TYPES_IMPORT)[number];
+
+/**
+ * Une ligne CSV d'import de positions cap table.
+ *
+ * Le mapping côté Server Action gère la résolution :
+ *   - share_class par `code` (lookup share_classes)
+ *   - beneficiary par `email` si stakeholderType = BENEFICIARY (lookup beneficiaries)
+ */
+export const importPositionRowSchema = z.object({
+  stakeholderType: z.enum(STAKEHOLDER_TYPES_IMPORT),
+  stakeholderName: z.string().trim().min(2).max(200),
+  stakeholderEmail: z.string().trim().toLowerCase().email().optional(),
+  shareClassCode: z
+    .string()
+    .min(2)
+    .max(20)
+    .regex(/^[A-Z0-9_]+$/, 'Code classe invalide'),
+  units: z.number().positive(),
+  acquiredAt: z.string().date(),
+  costBasisPerUnit: z.number().min(0).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export type ImportPositionRowInput = z.input<typeof importPositionRowSchema>;
+
+export const BULK_IMPORT_MAX_ROWS = 500;
+
+export const bulkImportPositionsSchema = z
+  .object({
+    rows: z.array(importPositionRowSchema).min(1).max(BULK_IMPORT_MAX_ROWS),
+  })
+  .refine((data) => data.rows.length <= BULK_IMPORT_MAX_ROWS, {
+    message: `Maximum ${BULK_IMPORT_MAX_ROWS} positions par import`,
+    path: ['rows'],
+  });
+
+export type BulkImportPositionsInput = z.input<typeof bulkImportPositionsSchema>;

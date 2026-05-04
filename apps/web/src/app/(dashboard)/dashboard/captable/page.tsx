@@ -1,15 +1,17 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { ImportIcon, Plus } from 'lucide-react';
+import { Camera, ImportIcon, Plus } from 'lucide-react';
 import { VIEW_MODES, type ViewMode } from '@equity/shared';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { CapTableTabs } from '@/components/captable/cap-table-tabs';
+import type { CapTableEvolutionProps, EvolutionPoint } from '@/components/captable/evolution-chart';
 import { ValuationToggle } from '@/components/captable/valuation-toggle';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ScalesIllustration } from '@/components/shared/illustrations';
 import { PageShell } from '@/components/shared/PageShell';
 import { hasPermission, requireUser } from '@/lib/auth/rbac';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getCapTable } from '@/server/queries/cap-table';
 
 export const metadata: Metadata = {
@@ -46,6 +48,51 @@ export default async function CapTablePage(props: { searchParams: Promise<{ view
   ) as ViewMode;
 
   const result = await getCapTable({ viewMode });
+
+  // Load snapshots history (B6) pour le tab Évolution. Limit 30 récents.
+  const supabaseRead = await createSupabaseServerClient();
+  const [snapshotsResult, roundsResult] = await Promise.all([
+    supabaseRead
+      .from('cap_table_snapshots')
+      .select('snapshot_date, totals_by_class')
+      .order('snapshot_date', { ascending: true })
+      .limit(30),
+    supabaseRead
+      .from('funding_rounds')
+      .select('name, closed_at')
+      .eq('status', 'CLOSED')
+      .not('closed_at', 'is', null)
+      .order('closed_at', { ascending: true }),
+  ]);
+
+  // Construit les datapoints + classTypes uniques depuis les snapshots
+  const evolution: CapTableEvolutionProps | undefined = (() => {
+    const rows = snapshotsResult.data ?? [];
+    if (rows.length === 0) return undefined;
+    const allClassTypes = new Set<string>();
+    const points: EvolutionPoint[] = rows.map((row) => {
+      const totals = (row.totals_by_class as Record<string, number> | null) ?? {};
+      // Agrège par class_type : on a totals_by_class par CODE (ex COMMON, PREF_A).
+      // Pour le tab évolution on veut par TYPE (ex COMMON, PREFERRED, ESOP).
+      // V1 simple : on prend le code comme proxy du type. Si la convention de
+      // codes alignée avec types tient (COMMON, PREF_A, PREF_B → on regroupe
+      // par préfixe), on pourrait raffiner. Pour V1 on garde par code.
+      const point: EvolutionPoint = { date: row.snapshot_date };
+      for (const [code, units] of Object.entries(totals)) {
+        allClassTypes.add(code);
+        point[code] = Number(units);
+      }
+      return point;
+    });
+    return {
+      points,
+      classTypes: Array.from(allClassTypes).sort(),
+      rounds: (roundsResult.data ?? []).map((r) => ({
+        date: r.closed_at as string,
+        label: r.name,
+      })),
+    };
+  })();
 
   if (!result.ok) {
     return (
@@ -84,10 +131,18 @@ export default async function CapTablePage(props: { searchParams: Promise<{ view
         <PageShell.TitleRule />
         <PageShell.Subtitle>{subtitle}</PageShell.Subtitle>
         <PageShell.Actions>
-          <Button variant="outline" disabled title="Disponible en B6">
-            <ImportIcon className="mr-1 size-4" />
-            Importer historique
-          </Button>
+          <Link href="/dashboard/captable/import">
+            <Button variant="outline">
+              <ImportIcon className="mr-1 size-4" />
+              Importer
+            </Button>
+          </Link>
+          <Link href="/dashboard/captable/snapshots">
+            <Button variant="outline">
+              <Camera className="mr-1 size-4" />
+              Snapshots
+            </Button>
+          </Link>
           <Link href="/dashboard/captable/scenarios/new">
             <Button>
               <Plus className="mr-1 size-4" />
@@ -107,6 +162,7 @@ export default async function CapTablePage(props: { searchParams: Promise<{ view
             positions={positions}
             totalsByClass={totals_by_class}
             grandTotal={grand_total_units}
+            evolution={evolution}
           />
         ) : (
           <EmptyState

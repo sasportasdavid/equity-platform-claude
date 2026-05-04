@@ -613,6 +613,30 @@ Notable : #29 STATUSES_ALLOWING_GENERATE hard-codé,
   - ownership check explicite (RLS owner-only en doublon). Acceptable
     V1, V2 = ajouter perm dédiée si besoin de dissocier les rôles
     CRUD scenarios.
+- **#90 Migration 00090 cron nightly snapshot non appliquée cloud
+  (Module 10 B6)** : `apply_migration` MCP bloqué session +
+  `supabase db push` drift timestamps cloud / sequential local. Fichier
+  local existe ([00090_module_10_cron_nightly_snapshot.sql](supabase/migrations/00090_module_10_cron_nightly_snapshot.sql))
+  à appliquer manuellement par user (Dashboard SQL Editor ou
+  `migration repair`). Sans cron, snapshots auto quotidiens
+  inactifs — manuels UI fonctionnels indépendamment. Voir
+  `memory/module_10_b6_complete.md` §"Action user requise".
+- **#91 Pas de RPC `freeze_snapshot`** (Module 10 B6) : initialement
+  planifiée puis abandonnée — `freezeSnapshot` SA utilise admin
+  client (service_role bypass RLS `snapshots_no_update USING(FALSE)`)
+  avec ownership check manuel. Sécurité équivalente, déploiement V1
+  simplifié. V2 = re-écrire en RPC SECURITY DEFINER si besoin
+  d'audit DB level.
+- **#92 portal/positions sans % consolidé V1** (Module 10 B6) :
+  BENEFICIARY n'a pas la perm `captable.read.all` ni RLS dédiée pour
+  grand_total. V1 affiche units, cost basis total/moyen mais pas le %
+  du capital. V2 = RPC `get_org_total_units_for_portal(p_user_id)`
+  SECURITY DEFINER scope-org. Disclaimer V1 affiché en bas de page.
+- **#93 Sidebar dashboard nested nav non supporté** : Module 10 B6
+  voulait `Cap Table > Snapshots` sub-item. Pattern actuel
+  `NAV_SECTIONS` flat. Boutons exposés dans header de la page cap
+  table à la place. V2 = refactor sidebar pour sub-items
+  conditionnels.
 
 **Découverte E2E B5** : le proxy `/onboarding/create-org` redirigeait
 les bénéficiaires purs (BENEFICIARY uniquement, pas de membership

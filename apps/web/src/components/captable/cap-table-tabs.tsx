@@ -1,20 +1,20 @@
 'use client';
 
 /**
- * Module 10 B4 — Tabs view sur la page principale `/dashboard/captable`.
+ * Module 10 B4 + B6 — Tabs view sur la page principale `/dashboard/captable`.
  *
- * 3 tabs disponibles V1 :
+ * 4 tabs disponibles :
  *   - Tableau (CapTableMatrix)
  *   - Camembert (EditorialPieChart par share_class)
  *   - Waterfall (EditorialWaterfall — top 10 stakeholders)
- *
- * Tab Évolution = B6 (besoin snapshots historisés). Disabled en V1.
+ *   - Évolution (CapTableEvolutionChart — réactivé B6 dès qu'on a 2+ snapshots)
  */
 
 import { useState } from 'react';
 import { LineChart, PieChart as PieIcon, Table2, TrendingUp } from 'lucide-react';
 import type { CapTablePosition } from '@/server/queries/cap-table';
 import { CapTableMatrix } from './cap-table-matrix';
+import { CapTableEvolutionChart, type CapTableEvolutionProps } from './evolution-chart';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EditorialPieChart } from '@/components/charts/editorial-pie-chart';
 import { EditorialWaterfall } from '@/components/charts/editorial-waterfall';
@@ -23,6 +23,7 @@ export type CapTableTabsProps = {
   positions: CapTablePosition[];
   totalsByClass: Record<string, number>;
   grandTotal: number;
+  evolution?: CapTableEvolutionProps;
 };
 
 function buildPieData(totalsByClass: Record<string, number>) {
@@ -58,10 +59,20 @@ function buildWaterfallData(
   return data;
 }
 
-export function CapTableTabs({ positions, totalsByClass, grandTotal }: CapTableTabsProps) {
+export function CapTableTabs({
+  positions,
+  totalsByClass,
+  grandTotal,
+  evolution,
+}: CapTableTabsProps) {
   const [tab, setTab] = useState('table');
   const pieData = buildPieData(totalsByClass);
   const waterfallData = buildWaterfallData(positions);
+
+  const evolutionDisabled = !evolution || evolution.points.length < 2;
+  const evolutionTitle = evolutionDisabled
+    ? `Au moins 2 snapshots requis (${evolution?.points.length ?? 0} disponible${(evolution?.points.length ?? 0) > 1 ? 's' : ''})`
+    : `${evolution.points.length} snapshots`;
 
   return (
     <Tabs value={tab} onValueChange={setTab} className="w-full">
@@ -78,7 +89,7 @@ export function CapTableTabs({ positions, totalsByClass, grandTotal }: CapTableT
           <TrendingUp className="mr-1 size-4" />
           Waterfall
         </TabsTrigger>
-        <TabsTrigger value="evolution" disabled title="Disponible en B6 (snapshots historisés)">
+        <TabsTrigger value="evolution" disabled={evolutionDisabled} title={evolutionTitle}>
           <LineChart className="mr-1 size-4" />
           Évolution
         </TabsTrigger>
@@ -109,6 +120,16 @@ export function CapTableTabs({ positions, totalsByClass, grandTotal }: CapTableT
       <TabsContent value="waterfall" className="mt-4">
         <EditorialWaterfall data={waterfallData} unit=" u." height={400} />
       </TabsContent>
+
+      {evolution ? (
+        <TabsContent value="evolution" className="mt-4">
+          <CapTableEvolutionChart
+            points={evolution.points}
+            classTypes={evolution.classTypes}
+            rounds={evolution.rounds}
+          />
+        </TabsContent>
+      ) : null}
     </Tabs>
   );
 }

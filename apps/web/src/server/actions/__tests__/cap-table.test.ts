@@ -163,6 +163,12 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }));
 
+vi.mock('@/lib/supabase/admin', () => ({
+  getSupabaseAdminClient: vi.fn().mockReturnValue({
+    from: (table: string) => makeBuilder(table),
+  }),
+}));
+
 import {
   cancelFundingRound,
   createFundingRound,
