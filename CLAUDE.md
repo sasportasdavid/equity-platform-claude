@@ -598,6 +598,22 @@ Notable : #29 STATUSES_ALLOWING_GENERATE hard-codé,
 - #76 phone read-back impossible côté ProfileEditForm (V2 RPC déchiffre)
 - #78 no "renvoyer document" via portail (V2 email auto signed URL 24h)
 
+81-X. **Dettes Module 10 (PR #25)** — voir `memory/module_10_b{1..7}_complete.md`. Notable :
+
+- **#88 Module 10 B5 V1.5** : endpoint Python `/compute/dilution-monte-carlo`
+  absent côté `equity-gem-quant-tonnom.fly.dev` (HTTP 404 confirmé 2026-05-04).
+  Skip propre Branche B : page placeholder
+  `/dashboard/captable/exit-simulator` + permission
+  `captable.scenario.run_montecarlo` seedée + schema Zod
+  `runMonteCarloExitSchema` prêt. Réactivation V1.5 ≈ 5h dev frontend
+  une fois endpoint Python livré. Spec endpoint à transmettre au
+  mainteneur Fly : voir `memory/module_10_b5_skipped.md` §2.
+- **#89 Permission `captable.scenario.update` absente du seed 00089** :
+  `updateScenario`/`deleteScenario` mappent sur `captable.scenario.create`
+  - ownership check explicite (RLS owner-only en doublon). Acceptable
+    V1, V2 = ajouter perm dédiée si besoin de dissocier les rôles
+    CRUD scenarios.
+
 **Découverte E2E B5** : le proxy `/onboarding/create-org` redirigeait
 les bénéficiaires purs (BENEFICIARY uniquement, pas de membership
 ACTIVE → JWT sans `active_org_id`). Fix `bec24e0` : ajout `/portal` à
