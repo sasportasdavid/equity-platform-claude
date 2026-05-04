@@ -82,7 +82,7 @@ C'est le module qui **clôture** l'écosystème valorisation. Après Module 11, 
 - **Module 1** : tables `audit_events`, RLS patterns
 - **Module 2** : RBAC, permissions
 - **Module 3a** : `plans`, page `/dashboard/plans/[id]` (8 onglets, on touche l'onglet Valuation)
-- **Module 3a B5** (PR #19-24) : `valuation_runs` table + payload V2 + Edge Function `quant-multi-tranche` qui appelle Fly.io
+- **Module 3a B5** (PR #19-24) : `valuation_runs` table + payload V2 + Edge Function `compute-valuation` qui appelle Fly.io
 - **Moteur Python Fly.io** : endpoint `/compute/multi-tranche` v2.5.0+ avec `VisualizationPayload` à brancher
 - **Module 5** : workflow approval (réutilisé pour `FMV_DEVIATION_WARNING` si > seuil)
 - **Module 10 (B7)** : pattern compliance rules `runChecks.ts` (`runValuationComplianceChecks`)
@@ -112,7 +112,7 @@ C'est le module qui **clôture** l'écosystème valorisation. Après Module 11, 
 │  → Server Action requestValuationRun(planId, includeVisualization)  │
 │      │                                                                │
 │      ├─ INSERT valuation_runs status='RUNNING'                       │
-│      ├─ Trigger Edge Function quant-multi-tranche (existante PR#19)  │
+│      ├─ Trigger Edge Function compute-valuation (existante PR#19)  │
 │      │   └─ POST Python /compute/multi-tranche                       │
 │      │       avec config.include_visualization = true                │
 │      │                                                                │
@@ -211,7 +211,7 @@ ALTER TABLE valuation_runs
   ADD COLUMN IF NOT EXISTS visualization_summary_json JSONB,
   ADD COLUMN IF NOT EXISTS run_type TEXT NOT NULL DEFAULT 'MANUAL'
     CHECK (run_type IN ('MANUAL', 'CRON_MONTHLY', 'CRON_STALE_REFRESH', 'TRIGGERED_BY_MODIFICATION')),
-  ADD COLUMN IF NOT EXISTS triggered_by_user_id UUID REFERENCES auth.users(id);
+  ADD COLUMN IF NOT EXISTS triggered_by UUID REFERENCES auth.users(id);
 
 -- Index pour requêtes "dernière valuation par plan"
 CREATE INDEX IF NOT EXISTS idx_valuation_runs_plan_latest
@@ -295,7 +295,7 @@ BEGIN
        AND (lvp.valued_at IS NULL OR lvp.valued_at < NOW() - INTERVAL '30 days')
   LOOP
     -- Insert un valuation_run en status='QUEUED' avec run_type='CRON_MONTHLY'
-    -- Le worker (Edge Function quant-multi-tranche) le picke et l'exécute
+    -- Le worker (Edge Function compute-valuation) le picke et l'exécute
     INSERT INTO valuation_runs (plan_id, org_id, status, run_type, payload_sent)
     VALUES (
       v_plan.id, v_plan.org_id, 'QUEUED', 'CRON_MONTHLY',
@@ -455,7 +455,7 @@ export async function callMultiTrancheCompute(payload: unknown): Promise<PyMonte
 
 ### 3.3 Refonte normalizers (dette #1)
 
-`apps/web/src/server/queries/buildPythonPayload.ts` (existant, à refactorer) :
+`supabase/functions/_shared/buildPythonPayload.ts` (existant, à refactorer) :
 
 ```typescript
 // AVANT (dette #1 - une seule fonction pour tout) :
@@ -543,7 +543,7 @@ export async function requestValuationRun(input: unknown): Promise<Result<{ runI
       org_id: user.activeOrgId,
       status: 'RUNNING',
       run_type: 'MANUAL',
-      triggered_by_user_id: user.id,
+      triggered_by: user.id,
       payload_sent: payload,
       includes_visualization: parsed.data.includeVisualization,
     })
@@ -668,7 +668,7 @@ export async function listValuationRuns(
 }
 ```
 
-### 3.5 Wiring Edge Function existant `quant-multi-tranche`
+### 3.5 Wiring Edge Function existant `compute-valuation`
 
 ⚠️ **ATTENTION** : la Edge Function existante (PR #19) appelle déjà `/compute/multi-tranche`. Module 11 **ne la remplace pas** — il l'enrichit pour qu'elle :
 
