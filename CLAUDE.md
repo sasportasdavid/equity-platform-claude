@@ -613,14 +613,16 @@ Notable : #29 STATUSES_ALLOWING_GENERATE hard-codé,
   - ownership check explicite (RLS owner-only en doublon). Acceptable
     V1, V2 = ajouter perm dédiée si besoin de dissocier les rôles
     CRUD scenarios.
-- **#90 Migration 00090 cron nightly snapshot non appliquée cloud
-  (Module 10 B6)** : `apply_migration` MCP bloqué session +
-  `supabase db push` drift timestamps cloud / sequential local. Fichier
-  local existe ([00090_module_10_cron_nightly_snapshot.sql](supabase/migrations/00090_module_10_cron_nightly_snapshot.sql))
-  à appliquer manuellement par user (Dashboard SQL Editor ou
-  `migration repair`). Sans cron, snapshots auto quotidiens
-  inactifs — manuels UI fonctionnels indépendamment. Voir
-  `memory/module_10_b6_complete.md` §"Action user requise".
+- **#90 Cron nightly snapshot DEFERRED V1.5** (Module 10 B6) : suite
+  arbitrage user, le fichier migration a été supprimé du repo
+  (Option β : éviter dette flottante). SQL complet conservé dans
+  `memory/module_10_b6_cron_skipped.md` §1 pour réactivation V1.5.
+  Mainteneur DB devra recréer la migration côté cloud quand
+  l'environnement le permettra. UI V1 mise à jour pour ne pas
+  mentir : "Snapshots quotidiens automatiques disponibles V1.5"
+  affiché aux endroits concernés. Snapshots manuels + auto
+  post-round fonctionnent normalement V1 (RPC `materialize_snapshot`
+  appliqué B1).
 - **#91 Pas de RPC `freeze_snapshot`** (Module 10 B6) : initialement
   planifiée puis abandonnée — `freezeSnapshot` SA utilise admin
   client (service_role bypass RLS `snapshots_no_update USING(FALSE)`)
@@ -630,8 +632,13 @@ Notable : #29 STATUSES_ALLOWING_GENERATE hard-codé,
 - **#92 portal/positions sans % consolidé V1** (Module 10 B6) :
   BENEFICIARY n'a pas la perm `captable.read.all` ni RLS dédiée pour
   grand_total. V1 affiche units, cost basis total/moyen mais pas le %
-  du capital. V2 = RPC `get_org_total_units_for_portal(p_user_id)`
-  SECURITY DEFINER scope-org. Disclaimer V1 affiché en bas de page.
+  du capital. **Design V2 (reco user)** : RPC
+  `get_my_position_with_org_total(p_beneficiary_id)` SECURITY DEFINER
+  qui retourne **uniquement** un ratio pré-calculé
+  `{ my_units: N, my_percent: 0.0123 }` — pas le grand_total brut.
+  Respecte la confidentialité (le BENEFICIARY ne voit pas le total
+  org) tout en donnant l'info utile. Disclaimer V1 affiché en bas
+  de page : "% consolidé disponible en V2".
 - **#93 Sidebar dashboard nested nav non supporté** : Module 10 B6
   voulait `Cap Table > Snapshots` sub-item. Pattern actuel
   `NAV_SECTIONS` flat. Boutons exposés dans header de la page cap

@@ -62,8 +62,8 @@ export default async function SnapshotsListPage() {
         <PageShell.TitleRule />
         <PageShell.Subtitle>
           {list.length} snapshot{list.length > 1 ? 's' : ''} archivé
-          {list.length > 1 ? 's' : ''} · Auto post-round + nightly + manuels (PRE_AUDIT,
-          MANUAL_FREEZE)
+          {list.length > 1 ? 's' : ''} · Auto post-round + manuels (PRE_AUDIT, MANUAL_FREEZE).
+          Snapshots quotidiens automatiques disponibles V1.5.
         </PageShell.Subtitle>
         {canCreate ? (
           <PageShell.Actions>
@@ -78,7 +78,7 @@ export default async function SnapshotsListPage() {
             variant="list"
             illustration={<VaultIllustration />}
             title="Aucun snapshot pour le moment"
-            description="Créez un snapshot manuel pour figer l'état de votre cap table à une date précise (audit, levée, fin d'année). Un snapshot automatique est aussi pris chaque nuit à 02:00 UTC."
+            description="Créez un snapshot manuel pour figer l'état de votre cap table à une date précise (audit, levée, fin d'année). Les snapshots automatiques quotidiens arrivent en V1.5."
             action={
               canCreate
                 ? {

@@ -5,6 +5,7 @@ import {
   CSV_TEMPLATE_HEADERS,
   parsePositionsCsv,
   validateRow,
+  type ParsedImportRow,
 } from '../bulk-import-positions-helpers';
 
 /**
@@ -229,10 +230,10 @@ describe('computeSummary', () => {
   });
 
   it('counts invalid rows separately', () => {
-    const rows = [
+    const rows: ParsedImportRow[] = [
       {
         __raw: {},
-        stakeholderType: 'FOUNDER' as const,
+        stakeholderType: 'FOUNDER',
         stakeholderName: 'Alice',
         shareClassCode: 'COMMON',
         units: 500000,
@@ -240,8 +241,9 @@ describe('computeSummary', () => {
       },
       {
         __raw: {},
-        // @ts-expect-error invalid intentional
-        stakeholderType: 'UNKNOWN',
+        // Cast forcé pour tester le rejet d'un type inconnu (la fonction computeSummary
+        // doit traiter cette row en `invalid` via validateRow → Zod fail).
+        stakeholderType: 'UNKNOWN' as ParsedImportRow['stakeholderType'],
         stakeholderName: 'Bob',
         shareClassCode: 'COMMON',
         units: 1000,

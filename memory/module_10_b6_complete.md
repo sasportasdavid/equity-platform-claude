@@ -57,24 +57,21 @@ type: project
 
 ## Migrations
 
-### 00090 — cron nightly snapshot
+### 00090 — cron nightly snapshot — DEFERRED V1.5 (cleanup post-B6)
 
-**Fichier local** : [00090_module_10_cron_nightly_snapshot.sql](supabase/migrations/00090_module_10_cron_nightly_snapshot.sql)
+**Décision finale (post-commit B6)** : suite à l'arbitrage user (Option β), la migration `00090_module_10_cron_nightly_snapshot.sql` a été **supprimée du repo** dans le commit cleanup `feat(module-10): cron deferred V1.5 + UI wording fix`. Raison : MCP Supabase apply_migration bloqué session + CLI db push drift → impossible d'aligner cloud + local cette session. Garder la migration en repo créerait un trou : code en repo qui n'existe pas en cloud.
 
-**Statut cloud** : ⚠️ **NON APPLIQUÉ — bloqué session par MCP Supabase permission**.
+Le SQL complet est conservé dans `memory/module_10_b6_cron_skipped.md` §1 pour réutilisation V1.5.
 
-Le tool `apply_migration` retourne `permission denied` pour les 2 project_ids essayés (`vryjvccyvmrwfvayvuls` puis `ytlfnxcrclugrsbvqdkb`). Le CLI `supabase db push` est bloqué par drift entre timestamps cloud et numéros sequential locaux. La migration doit être appliquée manuellement par le user via :
+**UI mise à jour pour ne pas mentir à l'user V1** :
 
-- Dashboard Supabase SQL Editor, ou
-- Direct psql, ou
-- `supabase migration repair` puis `db push`
+- snapshots/page.tsx Subtitle : "Snapshots quotidiens automatiques disponibles V1.5"
+- snapshots/page.tsx EmptyState : "arrivent en V1.5"
+- evolution-chart.tsx empty state : "les snapshots automatiques quotidiens arrivent en V1.5"
 
-Contenu :
+**B6 sans aucune migration cloud** : les 4 Server Actions (createManualSnapshot, freezeSnapshot, deleteSnapshot, bulkImportPositions) reposent uniquement sur les RPCs/tables existants (B1 : 00080-00089).
 
-1. Helper `materialize_nightly_snapshots_all_orgs()` SECURITY DEFINER — boucle sur les orgs ayant ≥1 share_class active, capture les exceptions par org
-2. `cron.schedule('cap-table-nightly-snapshot', '0 2 * * *', ...)` — 02:00 UTC chaque jour
-
-**Pas de RPC freeze_snapshot** : la branche initiale prévoyait un RPC SECURITY DEFINER, abandonnée au profit de l'admin client (cf décision archi ci-dessus). Une seule migration B6 vs 2 prévues.
+**Pas de RPC freeze_snapshot** : abandonnée au profit de l'admin client (cf décision archi ci-dessus).
 
 ## Tests
 

@@ -69,7 +69,7 @@ export function CapTableEvolutionChart({ points, classTypes, rounds }: CapTableE
           <CardTitle className="text-base">Évolution de la cap table</CardTitle>
           <CardDescription>
             Au moins 2 snapshots sont requis pour visualiser l&apos;évolution dans le temps. Créez
-            un snapshot manuel ou attendez le snapshot nocturne automatique (02:00 UTC).
+            des snapshots manuels (les snapshots automatiques quotidiens arrivent en V1.5).
           </CardDescription>
         </CardHeader>
         <CardContent className="text-muted-foreground py-8 text-center text-sm">
