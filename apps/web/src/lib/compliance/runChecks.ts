@@ -75,18 +75,40 @@ async function runRules<TData, TCtx>(
 }
 
 /**
- * Helper compliance — Module 3b B7.
+ * Helper compliance — Module 3b B7 (initial) + Module 12.5 B1
+ * (wiring effectiveParamsByRule + effectiveSeverityByRule pour les 5 award
+ * rules).
  *
- * Charge le contexte (plan + beneficiary + poolStatus) côté serveur via
- * 1 query parallèle, puis lance toutes les rules applicables au plan_type
- * en parallèle (Promise.all). Aggregé en errors / warnings selon enforcement.
+ * Charge le contexte (plan + beneficiary + poolStatus + effective rules
+ * config) côté serveur en parallèle, puis lance toutes les rules applicables
+ * au plan_type en parallèle (Promise.all). Aggregé en errors / warnings
+ * selon enforcement.
  *
- * Spec : docs/MODULE_03B_AWARDS_LIFECYCLE.md §7.
+ * Spec : docs/MODULE_03B_AWARDS_LIFECYCLE.md §7 + docs/MODULE_12_*.md §3.2.
+ *
+ * Module 12.5 B1 — Lecture config DB :
+ *   1. Pour chaque rule du registry V1 (5 codes), on appelle `loadEffectiveRule(code)`
+ *      pour récupérer la config effective (params merged + severity + active).
+ *   2. Si `is_active=false` côté DB → la rule est filtrée (pas exécutée).
+ *   3. Les params + severity sont injectés dans `ctx.effectiveParamsByRule`
+ *      / `effectiveSeverityByRule`. Les checkers les lisent via `readNumberParam`
+ *      / `readSeverity` (`rules/_helpers.ts`) avec fallback sur les constantes
+ *      hard-codées.
+ *   4. Si `loadEffectiveRule` retourne null (DB indispo, rule absente du
+ *      catalogue), la rule s'exécute en mode legacy avec ses defaults.
  *
  * `scope` est réservé pour V2 (Module 12) où on aura des rules différentes
- * pour PROPOSAL vs MODIFICATION. En V1, les 4 rules s'appliquent uniquement
+ * pour PROPOSAL vs MODIFICATION. En V1, les 5 rules s'appliquent uniquement
  * au scope AWARD_PROPOSAL.
  */
+const AWARD_RULE_CODES: RuleCode[] = [
+  'BSPCE_BENEFICIARY_TYPE',
+  'AGA_30_PERCENT_CAP',
+  'AGA_APPROACHING_CAP',
+  'POOL_AVAILABLE',
+  'GRANT_DATE_RECENT',
+];
+
 export async function runComplianceChecks(
   scope: 'AWARD_PROPOSAL' | 'AWARD_MODIFICATION',
   input: AwardCheckInput,
@@ -100,8 +122,10 @@ export async function runComplianceChecks(
 
   const supabase = await createSupabaseServerClient();
 
-  // Charge plan + beneficiary en parallèle (1 RTT chacun, 2 total)
-  const [planRes, beneficiaryRes] = await Promise.all([
+  // Charge plan + beneficiary + 5 effective rules en parallèle (Module 12.5 B1).
+  // Les RPC `get_effective_rule` sont stables et touchent une vue indexée
+  // sur (rule_code) — coût négligeable.
+  const [planRes, beneficiaryRes, ...effectiveRules] = await Promise.all([
     supabase
       .from('plans')
       .select('id, plan_type, pool_size, pool_allocated, company_id, org_id')
@@ -112,6 +136,7 @@ export async function runComplianceChecks(
       .select('id, beneficiary_type, email')
       .eq('id', input.beneficiaryId)
       .maybeSingle(),
+    ...AWARD_RULE_CODES.map((code) => loadEffectiveRule(code)),
   ]);
 
   if (planRes.error || !planRes.data) {
@@ -139,6 +164,24 @@ export async function runComplianceChecks(
       warnings: [],
       hasHardBlocks: true,
     };
+  }
+
+  // Module 12.5 B1 — Construit les maps params + severity pour le ctx.
+  // `is_active=false` côté DB → on exclut la rule du registry à exécuter.
+  const effectiveParamsByRule: Record<string, Record<string, unknown>> = {};
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  const activeCodes = new Set<string>(AWARD_RULE_CODES); // default actif si DB indispo
+
+  for (let i = 0; i < AWARD_RULE_CODES.length; i++) {
+    const code = AWARD_RULE_CODES[i]!;
+    const eff = effectiveRules[i];
+    if (!eff) continue; // DB indispo / rule absente → fallback legacy
+    if (!eff.is_active) {
+      activeCodes.delete(code);
+      continue;
+    }
+    effectiveParamsByRule[code] = eff.effective_params;
+    effectiveSeverityByRule[code] = eff.effective_severity;
   }
 
   // Module 10 B7 : charge la cap table pour activer AGA_30_PERCENT_CAP
@@ -189,11 +232,15 @@ export async function runComplianceChecks(
     },
     agaAllocatedTotal,
     companyTotalShares,
+    effectiveParamsByRule,
+    effectiveSeverityByRule,
   };
 
-  // Filtre les rules applicables (plan_type ou *)
+  // Filtre les rules applicables (plan_type ou *) ET actives DB Module 12.5 B1
   const applicableRules = AWARD_RULES.filter(
-    (rule) => rule.appliesTo.includes('*') || rule.appliesTo.includes(ctx.plan.plan_type),
+    (rule) =>
+      activeCodes.has(rule.code) &&
+      (rule.appliesTo.includes('*') || rule.appliesTo.includes(ctx.plan.plan_type)),
   );
 
   return runRules(applicableRules, input, ctx);

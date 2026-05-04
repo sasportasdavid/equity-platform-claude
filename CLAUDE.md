@@ -774,13 +774,16 @@ proxy.
 110-116. **Dettes Module 12 (PR #28)** — voir
 `memory/module_12_complete.md`. Notable :
 
-- **#110 Wiring partiel rules → effective params** : 21 rules code
-  restent en mode hardcoded V1 (constants au lieu de
-  `effectiveParamsByRule`). Seules les 2 rules valuation
-  (B2 + Module 11 B6) sont fully wired. Le wiring complet pour
-  award/beneficiary/cap_table/document/approval est différé V1.5
-  (~6h dev par scope). Effet V1 : la page UI Module 12 affiche les
-  configs mais elles n'impactent que les 2 rules valuation au runtime.
+- **#110 Wiring partiel rules → effective params** : Module 12.5 B1
+  livré 2026-05-04 (branche `feat/module-12-5-wiring-21-rules`,
+  pré-PR) — 5 award rules wired (BSPCE_BENEFICIARY_TYPE, AGA_30_PERCENT_CAP,
+  AGA_APPROACHING_CAP, POOL_AVAILABLE, GRANT_DATE_RECENT) avec helper
+  `_helpers.ts` partagé + extension `runComplianceChecks`. **16 rules
+  restantes** (beneficiary 6, cap_table 4, document 3, approval 3) encore
+  hardcoded V1 → planifié B2-B5 du même chantier (~1.5h chacun, pattern
+  établi). Effet actuel : la page UI Module 12 impacte runtime pour
+  `valuation` (Module 12 B2) + `award` (Module 12.5 B1). Les 4 autres
+  scopes affichent les configs mais ne les lisent pas encore.
 - **#111 Severity drift code/DB** : 4 rules ont severity ajustée en DB
   (TAX_RESIDENCE, WORKFLOW_REQUIRED_FOR_AGA, FMV_RECENT_ENOUGH,
   BSPCE_BENEFICIARY_TYPE_REVERSE). Le checker code n'utilise pas

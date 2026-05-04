@@ -1,11 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { EffectiveRule, RuleCode } from '@equity/shared';
 // Mock global de `server-only` configuré dans vitest.setup.ts
 
 /**
- * Tests `runComplianceChecks` — Module 3b B7.
+ * Tests `runComplianceChecks` — Module 3b B7 + Module 12.5 B1.
  *
  * Mock Supabase via le pattern utilisé dans les autres Server Action tests
  * (apps/web/src/server/actions/__tests__/awards.test.ts).
+ *
+ * Module 12.5 B1 — mock `loadEffectiveRule` pour découpler les tests
+ * d'intégration `runComplianceChecks` du chargement DB. Par défaut retourne
+ * `null` (= fallback legacy, comportement Module 3b B7). Les tests dédiés
+ * Module 12.5 (params dynamiques + désactivation) override cas par cas via
+ * `vi.mocked(loadEffectiveRule).mockResolvedValueOnce(...)`.
  */
 
 const mockState = {
@@ -29,8 +36,32 @@ function makeBuilder(table: string) {
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn().mockResolvedValue({
     from: (table: string) => makeBuilder(table),
+    // Module 12.5 B1 — supabase.rpc('compute_cap_table', ...) appelé pour les
+    // plans AGA. Default null pour bypass le code path AGA dans les tests
+    // qui n'utilisent que BSPCE/STOCK_OPTION.
+    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
   }),
 }));
+
+vi.mock('../effectiveRules', () => ({
+  loadEffectiveRule: vi.fn().mockResolvedValue(null),
+}));
+
+/** Helper pour forger un EffectiveRule minimal (test fixture). */
+function makeEffectiveRule(
+  ruleCode: RuleCode,
+  overrides: Partial<EffectiveRule> = {},
+): EffectiveRule {
+  return {
+    rule_code: ruleCode,
+    scope: 'award',
+    is_active: true,
+    effective_severity: 'error',
+    effective_params: {},
+    cta_url_template: null,
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   mockState.planRow = { data: null, error: null };
@@ -175,5 +206,155 @@ describe('runComplianceChecks', () => {
     expect(res.hasHardBlocks).toBe(false);
     expect(res.errors).toEqual([]);
     expect(res.warnings.find((w) => w.code === 'GRANT_DATE_RECENT')).toBeDefined();
+  });
+});
+
+// ===========================================================================
+// Module 12.5 B1 — Wiring effectiveParamsByRule + désactivation par org
+// ===========================================================================
+
+describe('runComplianceChecks — Module 12.5 B1 effective rules wiring', () => {
+  it('GRANT_DATE_RECENT désactivée DB (is_active=false) → pas de warning même à 35j', async () => {
+    mockState.planRow = {
+      data: {
+        id: 'p',
+        plan_type: 'BSPCE',
+        pool_size: 10000,
+        pool_allocated: 1000,
+        company_id: 'c',
+      },
+      error: null,
+    };
+    mockState.beneficiaryRow = {
+      data: { id: 'b', beneficiary_type: 'EMPLOYEE', email: 'x@e.com' },
+      error: null,
+    };
+    const oldDate = new Date();
+    oldDate.setDate(oldDate.getDate() - 35);
+
+    const effMod = await import('../effectiveRules');
+    const loadEff = vi.mocked(effMod.loadEffectiveRule);
+    loadEff.mockImplementation(async (code) => {
+      if (code === 'GRANT_DATE_RECENT') {
+        return makeEffectiveRule('GRANT_DATE_RECENT', {
+          is_active: false,
+          effective_severity: 'warning',
+        });
+      }
+      return null; // legacy fallback pour les autres
+    });
+
+    const { runComplianceChecks } = await import('../runChecks');
+    const res = await runComplianceChecks('AWARD_PROPOSAL', {
+      ...validInput,
+      grantDate: oldDate.toISOString().slice(0, 10),
+    });
+    expect(res.warnings.find((w) => w.code === 'GRANT_DATE_RECENT')).toBeUndefined();
+
+    loadEff.mockReset();
+    loadEff.mockResolvedValue(null);
+  });
+
+  it('GRANT_DATE_RECENT param maxDaysAgo=60 → 35j passe (org permissive)', async () => {
+    mockState.planRow = {
+      data: {
+        id: 'p',
+        plan_type: 'BSPCE',
+        pool_size: 10000,
+        pool_allocated: 1000,
+        company_id: 'c',
+      },
+      error: null,
+    };
+    mockState.beneficiaryRow = {
+      data: { id: 'b', beneficiary_type: 'EMPLOYEE', email: 'x@e.com' },
+      error: null,
+    };
+    const oldDate = new Date();
+    oldDate.setDate(oldDate.getDate() - 35);
+
+    const effMod = await import('../effectiveRules');
+    const loadEff = vi.mocked(effMod.loadEffectiveRule);
+    loadEff.mockImplementation(async (code) => {
+      if (code === 'GRANT_DATE_RECENT') {
+        return makeEffectiveRule('GRANT_DATE_RECENT', {
+          is_active: true,
+          effective_severity: 'warning',
+          effective_params: { maxDaysAgo: 60 },
+        });
+      }
+      return null;
+    });
+
+    const { runComplianceChecks } = await import('../runChecks');
+    const res = await runComplianceChecks('AWARD_PROPOSAL', {
+      ...validInput,
+      grantDate: oldDate.toISOString().slice(0, 10),
+    });
+    expect(res.warnings.find((w) => w.code === 'GRANT_DATE_RECENT')).toBeUndefined();
+
+    loadEff.mockReset();
+    loadEff.mockResolvedValue(null);
+  });
+
+  it('BSPCE_BENEFICIARY_TYPE désactivée → CONSULTANT/BSPCE passe', async () => {
+    mockState.planRow = {
+      data: {
+        id: 'p',
+        plan_type: 'BSPCE',
+        pool_size: 10000,
+        pool_allocated: 1000,
+        company_id: 'c',
+      },
+      error: null,
+    };
+    mockState.beneficiaryRow = {
+      data: { id: 'b', beneficiary_type: 'CONSULTANT', email: 'c@e.com' },
+      error: null,
+    };
+
+    const effMod = await import('../effectiveRules');
+    const loadEff = vi.mocked(effMod.loadEffectiveRule);
+    loadEff.mockImplementation(async (code) => {
+      if (code === 'BSPCE_BENEFICIARY_TYPE') {
+        return makeEffectiveRule('BSPCE_BENEFICIARY_TYPE', { is_active: false });
+      }
+      return null;
+    });
+
+    const { runComplianceChecks } = await import('../runChecks');
+    const res = await runComplianceChecks('AWARD_PROPOSAL', validInput);
+    expect(res.errors.find((e) => e.code === 'BSPCE_BENEFICIARY_TYPE')).toBeUndefined();
+    expect(res.hasHardBlocks).toBe(false);
+
+    loadEff.mockReset();
+    loadEff.mockResolvedValue(null);
+  });
+
+  it('POOL_AVAILABLE désactivée → pool insuffisant ne bloque plus (admin off-switch)', async () => {
+    mockState.planRow = {
+      data: { id: 'p', plan_type: 'BSPCE', pool_size: 100, pool_allocated: 50, company_id: 'c' },
+      error: null,
+    };
+    mockState.beneficiaryRow = {
+      data: { id: 'b', beneficiary_type: 'EMPLOYEE', email: 'x@e.com' },
+      error: null,
+    };
+
+    const effMod = await import('../effectiveRules');
+    const loadEff = vi.mocked(effMod.loadEffectiveRule);
+    loadEff.mockImplementation(async (code) => {
+      if (code === 'POOL_AVAILABLE') {
+        return makeEffectiveRule('POOL_AVAILABLE', { is_active: false });
+      }
+      return null;
+    });
+
+    const { runComplianceChecks } = await import('../runChecks');
+    const res = await runComplianceChecks('AWARD_PROPOSAL', { ...validInput, unitsGranted: 200 });
+    expect(res.errors.find((e) => e.code === 'POOL_AVAILABLE')).toBeUndefined();
+
+    loadEff.mockReset();
+    loadEff.mockResolvedValue(null);
   });
 });

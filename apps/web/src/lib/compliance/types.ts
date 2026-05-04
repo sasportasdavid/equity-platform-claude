@@ -51,6 +51,21 @@ export type AwardCheckContext = {
    * si Module 10 pas livré.
    */
   companyTotalShares?: number | null;
+  /**
+   * Module 12.5 B1 — Map ruleCode → params merged depuis DB (via
+   * `loadEffectiveRule`). Les checkers lisent les seuils via
+   * `readNumberParam(ctx, ruleCode, paramName, default)` avec fallback sur
+   * la constante hard-codée. Le wiring depuis `runComplianceChecks` est
+   * fait pour les 5 award rules : BSPCE_BENEFICIARY_TYPE, AGA_30_PERCENT_CAP,
+   * AGA_APPROACHING_CAP, POOL_AVAILABLE, GRANT_DATE_RECENT.
+   */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /**
+   * Module 12.5 B1 — Map ruleCode → severity merged DB. V1 = défaut
+   * `severity_default`, sauf override explicite côté table
+   * `compliance_rule_overrides.severity_override`.
+   */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 /**
