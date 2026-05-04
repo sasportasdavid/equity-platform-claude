@@ -10,6 +10,8 @@ import {
 import { CAP_TABLE_RULES } from './rules/capTableRules';
 import { DOCUMENT_GENERATION_RULES, DOCUMENT_SIGNATURE_RULES } from './rules/documentRules';
 import { VALUATION_RULES } from './rules/valuationRules';
+import { loadEffectiveRule } from './effectiveRules';
+import type { RuleCode } from '@equity/shared';
 import type {
   ApprovalAwardCheckContext,
   ApprovalAwardCheckInput,
@@ -492,36 +494,70 @@ export async function runCapTableComplianceChecks(
  * award sur un plan sans valorisation récente. Les warnings (FMV deviation)
  * sont remontés à l'UI mais n'empêchent pas la transition.
  *
- * Spec : docs/MODULE_11_IFRS2_VALUATION_VIZ.md §6.
+ * Module 12 B2 — Lecture des params depuis DB :
+ *   1. Pour chaque rule du registry V1, on appelle `loadEffectiveRule(code)`
+ *      pour récupérer la config effective (params merged + severity + active).
+ *   2. Si `is_active=false` côté DB → la rule est filtrée (pas exécutée).
+ *   3. Les params + severity sont injectés dans `ctx.effectiveParamsByRule`
+ *      / `effectiveSeverityByRule`. Les checkers les lisent via
+ *      `readNumberParam()` avec fallback sur les constantes hard-codées.
+ *   4. Si `loadEffectiveRule` retourne null (DB indispo, rule absente du
+ *      catalogue), la rule s'exécute en mode legacy (Module 11 B6) avec ses
+ *      defaults.
+ *
+ * Spec : docs/MODULE_11_IFRS2_VALUATION_VIZ.md §6 + docs/MODULE_12_*.md §3.2.
  */
 export async function runValuationComplianceChecks(
   input: ValuationCheckInput,
 ): Promise<ComplianceCheckResult> {
   const supabase = await createSupabaseServerClient();
 
-  // Charge les 2 derniers runs DONE pour ce plan + leurs fair_value_per_unit.
-  // L'ordre est par completed_at DESC (les NULL trient en bas naturellement
-  // car on filtre sur status='DONE' qui implique completed_at non-null).
-  const { data: runs } = await supabase
-    .from('valuation_runs')
-    .select('id, completed_at, valuation_results ( fair_value_per_instrument )')
-    .eq('plan_id', input.planId)
-    .eq('status', 'DONE')
-    .order('completed_at', { ascending: false })
-    .limit(2);
+  // Module 12 B2 — Pré-charge la config effective DB pour les 2 rules valuation
+  // en parallèle des données métier. 2 RPC calls supplémentaires, négligeables
+  // (la vue est cross-join × 22 → quelques µs côté Postgres).
+  const valuationRuleCodes: RuleCode[] = ['VALUATION_STALE_BLOCKING', 'FMV_DEVIATION_WARNING'];
+
+  const [runsRes, ...effectiveRules] = await Promise.all([
+    supabase
+      .from('valuation_runs')
+      .select('id, completed_at, valuation_results ( fair_value_per_instrument )')
+      .eq('plan_id', input.planId)
+      .eq('status', 'DONE')
+      .order('completed_at', { ascending: false })
+      .limit(2),
+    ...valuationRuleCodes.map((code) => loadEffectiveRule(code)),
+  ]);
 
   type RunRow = {
     id: string;
     completed_at: string | null;
     valuation_results: { fair_value_per_instrument: number | null }[] | null;
   };
-  const rows = (runs ?? []) as RunRow[];
+  const rows = (runsRes.data ?? []) as RunRow[];
   const fvFromRow = (row: RunRow): number | null => {
     const arr = row.valuation_results;
     if (!Array.isArray(arr) || arr.length === 0) return null;
     const v = arr[0]?.fair_value_per_instrument;
     return v == null ? null : Number(v);
   };
+
+  // Construit les maps params + severity par ruleCode pour le ctx.
+  // is_active=false → on exclut la rule du registry à exécuter.
+  const effectiveParamsByRule: Record<string, Record<string, unknown>> = {};
+  const effectiveSeverityByRule: Record<string, 'error' | 'warning'> = {};
+  const activeCodes = new Set<string>(valuationRuleCodes); // default actif si DB indispo
+
+  for (let i = 0; i < valuationRuleCodes.length; i++) {
+    const code = valuationRuleCodes[i]!;
+    const eff = effectiveRules[i];
+    if (!eff) continue; // DB indispo / rule absente → fallback legacy
+    if (!eff.is_active) {
+      activeCodes.delete(code);
+      continue;
+    }
+    effectiveParamsByRule[code] = eff.effective_params;
+    effectiveSeverityByRule[code] = eff.effective_severity;
+  }
 
   const latestRow = rows[0];
   const previousRow = rows[1];
@@ -542,7 +578,11 @@ export async function runValuationComplianceChecks(
             fairValuePerUnit: fvFromRow(previousRow),
           }
         : null,
+    effectiveParamsByRule,
+    effectiveSeverityByRule,
   };
 
-  return runRules(VALUATION_RULES, input, ctx);
+  // Filtre les rules active (Module 12 B2) — désactivation par org
+  const activeRules = VALUATION_RULES.filter((r) => activeCodes.has(r.code));
+  return runRules(activeRules, input, ctx);
 }

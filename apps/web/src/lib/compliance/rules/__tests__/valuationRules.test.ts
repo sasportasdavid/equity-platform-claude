@@ -185,3 +185,85 @@ describe('VALUATION_RULES (registry)', () => {
     }
   });
 });
+
+// ===========================================================================
+// Module 12 B2 — Lecture des seuils depuis ctx.effectiveParamsByRule
+// ===========================================================================
+
+describe('VALUATION_STALE_BLOCKING — params dynamiques (Module 12 B2)', () => {
+  it('utilise staleDays=60 du ctx.effectiveParamsByRule (override DB)', async () => {
+    const ctx: ValuationCheckContext = {
+      latestRun: { runId: 'r1', completedAt: daysAgo(75), fairValuePerUnit: 10 },
+      previousRun: null,
+      effectiveParamsByRule: { VALUATION_STALE_BLOCKING: { staleDays: 60 } },
+    };
+    // 75j >  60j → ERROR attendu (alors qu'avec default 90, 75j passerait)
+    const issue = await VALUATION_STALE_BLOCKING.check(INPUT, ctx);
+    expect(issue).not.toBeNull();
+    expect(issue?.message).toMatch(/seuil IFRS 2 = 60 jours/);
+  });
+
+  it('utilise staleDays=180 (org permissive) — 100j passe', async () => {
+    const ctx: ValuationCheckContext = {
+      latestRun: { runId: 'r1', completedAt: daysAgo(100), fairValuePerUnit: 10 },
+      previousRun: null,
+      effectiveParamsByRule: { VALUATION_STALE_BLOCKING: { staleDays: 180 } },
+    };
+    const issue = await VALUATION_STALE_BLOCKING.check(INPUT, ctx);
+    expect(issue).toBeNull();
+  });
+
+  it('fallback sur 90j si effectiveParamsByRule absent (DB indispo)', async () => {
+    const ctx: ValuationCheckContext = {
+      latestRun: { runId: 'r1', completedAt: daysAgo(95), fairValuePerUnit: 10 },
+      previousRun: null,
+    };
+    const issue = await VALUATION_STALE_BLOCKING.check(INPUT, ctx);
+    expect(issue).not.toBeNull();
+    expect(issue?.message).toMatch(/seuil IFRS 2 = 90 jours/);
+  });
+
+  it('respecte severity DB warning au lieu de ERROR par défaut', async () => {
+    const ctx: ValuationCheckContext = {
+      latestRun: { runId: 'r1', completedAt: daysAgo(100), fairValuePerUnit: 10 },
+      previousRun: null,
+      effectiveParamsByRule: { VALUATION_STALE_BLOCKING: { staleDays: 90 } },
+      effectiveSeverityByRule: { VALUATION_STALE_BLOCKING: 'warning' },
+    };
+    const issue = await VALUATION_STALE_BLOCKING.check(INPUT, ctx);
+    expect(issue?.severity).toBe('WARNING');
+  });
+});
+
+describe('FMV_DEVIATION_WARNING — params dynamiques (Module 12 B2)', () => {
+  it('utilise deviationPct=10 du ctx.effectiveParamsByRule (org strict)', async () => {
+    const ctx: ValuationCheckContext = {
+      latestRun: { runId: 'r1', completedAt: daysAgo(1), fairValuePerUnit: 11.5 },
+      previousRun: { runId: 'r0', completedAt: daysAgo(30), fairValuePerUnit: 10 },
+      effectiveParamsByRule: { FMV_DEVIATION_WARNING: { deviationPct: 10 } },
+    };
+    // déviation 15 % > seuil 10 % → WARNING (alors qu'avec default 20%, ça passerait)
+    const issue = await FMV_DEVIATION_WARNING.check(INPUT, ctx);
+    expect(issue).not.toBeNull();
+    expect(issue?.severity).toBe('WARNING');
+  });
+
+  it('utilise deviationPct=50 (org permissive) — 25 % passe', async () => {
+    const ctx: ValuationCheckContext = {
+      latestRun: { runId: 'r1', completedAt: daysAgo(1), fairValuePerUnit: 12.5 },
+      previousRun: { runId: 'r0', completedAt: daysAgo(30), fairValuePerUnit: 10 },
+      effectiveParamsByRule: { FMV_DEVIATION_WARNING: { deviationPct: 50 } },
+    };
+    const issue = await FMV_DEVIATION_WARNING.check(INPUT, ctx);
+    expect(issue).toBeNull();
+  });
+
+  it('fallback sur 20% si effectiveParamsByRule absent (DB indispo)', async () => {
+    const ctx: ValuationCheckContext = {
+      latestRun: { runId: 'r1', completedAt: daysAgo(1), fairValuePerUnit: 12.5 },
+      previousRun: { runId: 'r0', completedAt: daysAgo(30), fairValuePerUnit: 10 },
+    };
+    const issue = await FMV_DEVIATION_WARNING.check(INPUT, ctx);
+    expect(issue?.severity).toBe('WARNING');
+  });
+});

@@ -263,6 +263,12 @@ export type ValuationCheckInput = {
 /**
  * Module 11 B6 — Ctx valuation. Pré-chargé dans `runChecks.ts` via 1-2
  * queries parallèles sur `latest_valuation_per_plan` + `valuation_runs`.
+ *
+ * Module 12 B2 — Étendu avec `effectiveParams` (params merged depuis DB via
+ * `loadEffectiveRule`) et `effectiveSeverity`. Si non fourni (rule absente
+ * de `compliance_rule_definitions` ou DB indisponible), les checks fallback
+ * sur les constantes hard-codées Module 11 B6 (`STALE_THRESHOLD_DAYS=90`,
+ * `FMV_DEVIATION_THRESHOLD=0.2`).
  */
 export type ValuationCheckContext = {
   /** Dernière valorisation DONE pour ce plan, NULL si jamais valorisé. */
@@ -280,6 +286,19 @@ export type ValuationCheckContext = {
     completedAt: string;
     fairValuePerUnit: number | null;
   } | null;
+  /**
+   * Module 12 B2 — Map ruleCode → params merged DB (via `loadEffectiveRule`).
+   * Le checker lit `effectiveParamsByRule['VALUATION_STALE_BLOCKING']?.staleDays`
+   * avec fallback sur la constante hard-codée si absent. Permet la config
+   * configurable par org sans casser les checks si la DB n'est pas dispo.
+   */
+  effectiveParamsByRule?: Record<string, Record<string, unknown> | undefined>;
+  /**
+   * Module 12 B2 — Map ruleCode → severity merged DB. V1 = même que
+   * `severity_default` (Q1=b confirme : pas de severity override en V1).
+   * Présence du champ optionnelle pour découplage progressif.
+   */
+  effectiveSeverityByRule?: Record<string, 'error' | 'warning' | undefined>;
 };
 
 // ---------------------------------------------------------------------------

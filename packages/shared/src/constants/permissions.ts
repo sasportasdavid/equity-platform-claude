@@ -134,6 +134,9 @@ export const PERMISSIONS = [
   'exercise_workflows.read',
   'exercise_workflows.update',
   'companies.fmv.update',
+
+  // Compliance rules config (Module 12 B1 — seedée en migration 00094)
+  'compliance_rules.config.write',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
