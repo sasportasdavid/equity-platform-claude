@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bell, Building2, ShieldCheck, User, Users } from 'lucide-react';
+import { Bell, Building2, ScrollText, ShieldCheck, User, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -33,6 +33,11 @@ const ITEMS: Item[] = [
     href: '/dashboard/settings/notifications',
     label: 'Notifications',
     icon: <Bell className="size-4" />,
+  },
+  {
+    href: '/dashboard/settings/compliance',
+    label: 'Compliance',
+    icon: <ScrollText className="size-4" />,
   },
 ];
 
