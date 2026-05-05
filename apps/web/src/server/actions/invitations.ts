@@ -2,6 +2,7 @@
 
 import crypto from 'node:crypto';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 import {
   acceptInvitationSchema,
   createInvitationSchema,
@@ -295,6 +296,96 @@ export async function acceptInvitation(
     success: true,
     redirectUrl: linkData?.properties?.action_link ?? `${env.NEXT_PUBLIC_APP_URL}/login`,
   };
+}
+
+// ===========================================================================
+// requestInvitationResendByToken — Module 14 PR §B3
+// ===========================================================================
+//
+// Quand un invité clique sur un lien d'invitation expiré ou déjà consommé,
+// la page `/accept-invite` affiche un fallback graceful avec un bouton
+// "Demander une nouvelle invitation". Ce bouton appelle cette Server
+// Action côté anon (pas de session requise — le user n'est pas encore
+// authentifié).
+//
+// Anti enumeration : on retourne TOUJOURS `{ ok: true }`, peu importe :
+//   - token absent ou invalide
+//   - invitation trouvée mais déjà acceptée / revoked / expirée
+//   - invited_by null ou user inviter introuvable
+// → empêche un attaquant de scanner les tokens valides via différence de
+//   réponse. Le seul side-effect réel est l'envoi d'email à l'inviteur
+//   quand toutes les conditions sont remplies.
+
+const RequestInvitationResendSchema = z.object({
+  token: z.string().min(8).max(128),
+});
+type RequestInvitationResendInput = z.input<typeof RequestInvitationResendSchema>;
+
+export type RequestInvitationResendResult = { ok: true };
+
+export async function requestInvitationResendByToken(
+  input: RequestInvitationResendInput,
+): Promise<RequestInvitationResendResult> {
+  const parsed = RequestInvitationResendSchema.safeParse(input);
+  if (!parsed.success) {
+    // Anti enum : silently OK
+    return { ok: true };
+  }
+  const { token } = parsed.data;
+  const admin = getSupabaseAdminClient();
+
+  // 1. Lookup invitation (any status, n'importe quel expires_at)
+  const { data: invitation } = await admin
+    .from('invitations')
+    .select('id, org_id, email, status, invited_by')
+    .eq('token', token)
+    .maybeSingle();
+
+  if (!invitation || !invitation.invited_by) {
+    return { ok: true };
+  }
+
+  // 2. Récupère email inviteur et org name
+  const [{ data: inviterData }, { data: org }] = await Promise.all([
+    admin.auth.admin.getUserById(invitation.invited_by),
+    admin.from('organizations').select('name').eq('id', invitation.org_id).maybeSingle(),
+  ]);
+
+  const inviterEmail = inviterData?.user?.email ?? null;
+  if (!inviterEmail) {
+    return { ok: true };
+  }
+
+  // 3. Send email via Resend (best-effort — pas de gate sur le retour)
+  await sendEmail({
+    to: inviterEmail,
+    template: 'invitation_expired_renotify',
+    variables: {
+      inviterEmail,
+      inviteeEmail: invitation.email,
+      orgName: org?.name ?? 'Capiwise',
+    },
+    audit: {
+      orgId: invitation.org_id,
+      relatedEntityType: 'INVITATION',
+      relatedEntityId: invitation.id,
+    },
+  });
+
+  // 4. Audit (best-effort — l'invitee est anonyme à ce point)
+  await logAuditEvent({
+    eventType: 'invitation.expired_resend_requested',
+    orgId: invitation.org_id,
+    userEmail: invitation.email,
+    resourceType: 'INVITATION',
+    resourceId: invitation.id,
+    metadata: {
+      inviter_email: inviterEmail,
+      invitation_status: invitation.status,
+    },
+  });
+
+  return { ok: true };
 }
 
 // ===========================================================================

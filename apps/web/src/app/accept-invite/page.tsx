@@ -8,6 +8,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { cn } from '@/lib/utils';
 import { AcceptInviteAction } from './accept-invite-action';
+import { RequestResendAction } from './request-resend-action';
 
 export const metadata: Metadata = {
   title: 'Accepter une invitation',
@@ -30,7 +31,10 @@ export default async function AcceptInvitePage({ searchParams }: { searchParams:
   const invite = data?.[0];
   if (error || !invite) {
     return (
-      <InvalidInvitationCard reason="Cette invitation est invalide, expirée ou déjà utilisée." />
+      <InvalidInvitationCard
+        reason="Cette invitation est invalide, expirée ou déjà utilisée."
+        token={token}
+      />
     );
   }
   const isBeneficiary = invite.is_for_beneficiary ?? false;
@@ -91,7 +95,7 @@ export default async function AcceptInvitePage({ searchParams }: { searchParams:
   );
 }
 
-function InvalidInvitationCard({ reason }: { reason: string }) {
+function InvalidInvitationCard({ reason, token }: { reason: string; token?: string }) {
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
@@ -101,7 +105,16 @@ function InvalidInvitationCard({ reason }: { reason: string }) {
         </CardTitle>
         <CardDescription>{reason}</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
+        {token ? (
+          <>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Vous pouvez demander à l’expéditeur original de vous renvoyer une nouvelle invitation.
+              Nous lui ferons suivre votre demande automatiquement.
+            </p>
+            <RequestResendAction token={token} />
+          </>
+        ) : null}
         <Link href="/login" className={cn(buttonVariants({ variant: 'outline' }), 'w-full')}>
           Retour à la connexion
         </Link>
