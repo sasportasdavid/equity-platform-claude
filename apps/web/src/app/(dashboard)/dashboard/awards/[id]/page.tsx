@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { PlanTypeBadge } from '@/components/plans/shared/PlanTypeBadge';
 import { AwardStatusBadge } from '@/components/awards/AwardStatusBadge';
 import { AwardDetailClient } from './award-detail-client';
+import { AwardHeroKpis } from '@/components/awards/detail/AwardHeroKpis';
 import { hasPermission, requirePermission } from '@/lib/auth/rbac';
 import { getAwardDetail } from '@/server/queries/awards';
 import { getApprovalRequestForAward } from '@/server/queries/approvals';
@@ -102,6 +103,26 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         </Link>
       }
     >
+      {/* DS V2 B1b — narrative subtitle italic + KPI hero banner */}
+      <p className="serif-italic text-ink-500 -mt-2 max-w-2xl text-sm leading-relaxed">
+        {Number(detail.award.units_granted) > 0
+          ? `${new Intl.NumberFormat('fr-FR').format(Number(detail.award.units_granted))} unités · ${beneficiaryName.split(' ')[0] ?? 'le bénéficiaire'} attend la suite du vesting.`
+          : 'Une attribution en construction.'}
+      </p>
+      <AwardHeroKpis
+        unitsGranted={Number(detail.award.units_granted)}
+        unitsVested={Number(detail.award.units_vested ?? 0)}
+        unitsExercised={Number(detail.award.units_exercised ?? 0)}
+        unitsOutstanding={
+          detail.award.units_outstanding != null ? Number(detail.award.units_outstanding) : null
+        }
+        totalFairValue={
+          detail.award.total_fair_value != null ? Number(detail.award.total_fair_value) : null
+        }
+        fairValuePerUnit={
+          detail.award.fair_value_per_unit != null ? Number(detail.award.fair_value_per_unit) : null
+        }
+      />
       {approvalRequest ? (
         <AwardApprovalCard
           request={approvalRequest}
