@@ -94,7 +94,9 @@ export function AwardVestingTab({
           <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                {/* DS V2 B1b : `hsl(var(--border))` invalide car tokens en HEX direct.
+                    Cf memory/design_system_v2_inventory.md Q2. */}
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(120, 113, 108, 0.4)" />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 11 }}
