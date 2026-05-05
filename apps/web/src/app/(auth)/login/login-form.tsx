@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AlertTriangle, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -233,8 +234,11 @@ export function LoginForm() {
           </Button>
         </form>
         <p className="text-muted-foreground mt-6 text-center text-xs">
-          Pas encore de compte ? L’inscription se fait uniquement par invitation. Demandez à votre
-          OWNER ou administrateur RH.
+          Pas encore de compte ?{' '}
+          <Link href="/signup" className="hover:text-foreground underline">
+            Créer un compte
+          </Link>
+          . Inscription gratuite par email — pas de mot de passe.
         </p>
       </CardContent>
     </Card>
