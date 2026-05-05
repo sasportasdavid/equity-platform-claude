@@ -14,6 +14,9 @@ import { buildAuditExportJson } from '@/lib/audit/export-json-builder';
 import { AuditReportPdf } from '@/lib/audit/audit-report-pdf';
 
 /**
+ * @deprecated PR #45 — UI appelle désormais `/api/audit/export?format=pdf`.
+ * Server Action gardée pour tests Vitest. V1.X = helpers partagés.
+ *
  * PR #42 B3 — Export PDF du registre d'audit (sealed report).
  *
  * Render via `@react-pdf/renderer` (Module 6 pattern). Réutilise le builder

@@ -12,6 +12,12 @@ import {
 import { buildAuditExportJson, type AuditExportJsonPayload } from '@/lib/audit/export-json-builder';
 
 /**
+ * @deprecated PR #45 — UI appelle désormais le route handler
+ * `/api/audit/export?format=json` (cf `apps/web/src/app/api/audit/export/route.ts`).
+ * Cette Server Action reste exportée pour les tests Vitest (couverture
+ * permission gate + builder + signature). Pas appelée depuis l'UI.
+ * V1.X = sortir le core en `lib/audit/export-helpers.ts` partagés.
+ *
  * PR #42 B2 — Export JSON signé (PRIMAIRE V1).
  *
  * Spec MODULE_13_AUDIT_TRAIL.md §7.3 figée :

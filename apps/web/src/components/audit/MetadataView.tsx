@@ -1,16 +1,16 @@
 import * as React from 'react';
-import { formatDiffValue } from '@/lib/audit/json-diff';
+import { formatDiffValue, shouldRenderAsBlock } from '@/lib/audit/json-diff';
 
 /**
- * PR #41 B5 — Affiche le `metadata` jsonb d'un audit_event en table key-value
- * formatée. C'est le cas dominant (90% des events n'ont que metadata).
+ * PR #41 B5 — Affiche le `metadata` jsonb d'un audit_event en table key-value.
+ * PR #45 B4 — Bug #6 P2 fix : objects/arrays nested rendus dans `<pre>` avec
+ * white-space: pre-wrap (au lieu d'oneliner illisibles), empty {} → "—".
  *
- * Server component pure. Utilise `formatDiffValue` pour un rendu type-aware
- * cohérent avec `JsonDiffView` (number → fr-FR, bool → Oui/Non, ISO date →
- * fr-FR long, UUID → tronqué, object → JSON pretty).
+ * Server component pure. Utilise `formatDiffValue` pour le rendu type-aware,
+ * et `shouldRenderAsBlock` pour décider du wrapper (`<pre>` vs inline `<dd>`).
  *
  * Liste filtrée : on masque les clés dont la valeur est `null`/`undefined`/
- * empty-string (réduit le bruit V1, V2 = formatter sémantique par event_type).
+ * empty-string (réduit le bruit V1).
  */
 
 export type MetadataViewProps = {
@@ -34,12 +34,16 @@ export function MetadataView({ metadata }: MetadataViewProps) {
 
   return (
     <dl className="cw-audit-kv" data-testid="audit-drawer-metadata">
-      {entries.map(([key, value]) => (
-        <React.Fragment key={key}>
-          <dt>{key}</dt>
-          <dd>{formatDiffValue(value)}</dd>
-        </React.Fragment>
-      ))}
+      {entries.map(([key, value]) => {
+        const formatted = formatDiffValue(value);
+        const block = shouldRenderAsBlock(value);
+        return (
+          <React.Fragment key={key}>
+            <dt>{key}</dt>
+            <dd>{block ? <pre className="cw-audit-kv-block">{formatted}</pre> : formatted}</dd>
+          </React.Fragment>
+        );
+      })}
     </dl>
   );
 }

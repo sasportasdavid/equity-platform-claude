@@ -890,6 +890,24 @@
     border-radius: 3px;
   }
 
+  /* PR #45 B4 — wrap multi-line JSON dans <pre> avec pre-wrap pour préserver
+     l'indentation. Empêche les oneliners illisibles sur metadata nested. */
+  .cw-audit-kv-block {
+    margin: 0;
+    padding: 8px 10px;
+    background: var(--paper-100);
+    border: 1px solid var(--paper-300);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-700);
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.45;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
   .cw-audit-diff {
     list-style: none;
     padding: 0;

@@ -138,6 +138,20 @@ export function formatDiffValue(value: unknown): string {
   }
 
   if (typeof value === 'object') {
+    // PR #45 B4 — fix Bug #6 P2 (audit.exported drawer rendering issues).
+    // Empty {} ou empty [] → "—" (placeholder DS V1 cohérent).
+    // Array de primitives → join avec virgule (lisible inline).
+    // Object/array nested → JSON pretty (le caller doit wrapper dans <pre>
+    // si il veut préserver les newlines via white-space: pre-wrap).
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '—';
+      const allPrimitive = value.every(
+        (v) => v === null || ['string', 'number', 'boolean'].includes(typeof v),
+      );
+      if (allPrimitive) return value.map((v) => formatDiffValue(v)).join(', ');
+    } else if (Object.keys(value as Record<string, unknown>).length === 0) {
+      return '—';
+    }
     try {
       return JSON.stringify(value, null, 2);
     } catch {
@@ -146,4 +160,21 @@ export function formatDiffValue(value: unknown): string {
   }
 
   return String(value);
+}
+
+/**
+ * PR #45 B4 — Détecte si une valeur formatée doit être rendue dans `<pre>`
+ * (multi-line, white-space: pre-wrap) plutôt qu'inline. Vrai pour les
+ * objects/arrays nested dont la sérialisation JSON contient des newlines.
+ *
+ * Utilisé par `MetadataView` pour décider du wrapper de rendu.
+ */
+export function shouldRenderAsBlock(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value !== 'object') return false;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return false;
+    return !value.every((v) => v === null || ['string', 'number', 'boolean'].includes(typeof v));
+  }
+  return Object.keys(value as Record<string, unknown>).length > 0;
 }
