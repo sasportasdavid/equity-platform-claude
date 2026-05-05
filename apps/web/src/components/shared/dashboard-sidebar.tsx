@@ -81,8 +81,8 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
       { href: '/dashboard/valuations', label: 'Valorisation IFRS 2', icon: Calculator },
       { href: '/dashboard/approvals', label: 'Approbations', icon: ShieldCheck },
       { href: '/dashboard/exercises', label: 'Exercices', icon: TrendingUp },
-      // Module 13 — pas livré V1 (cf docs/MODULE_13_AUDIT_TRAIL.md untracked)
-      { href: '/dashboard/audit-trail', label: 'Audit trail', icon: ScrollText, disabled: true },
+      // Module 13 V1 — page /audit-trail livrée PR #39 (RSC editorial).
+      { href: '/dashboard/audit-trail', label: 'Audit trail', icon: ScrollText },
       { href: '/dashboard/reports', label: 'Rapports', icon: FileBarChart2, disabled: true },
     ],
   },

@@ -1,5 +1,4 @@
 import 'server-only';
-import { unstable_cache } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 /**
@@ -109,48 +108,47 @@ export type AuditStats = {
 };
 
 /**
- * Stats agrégées pour le hero. Cache 60s (clé scope par session caller
- * via cookie — `unstable_cache` cohabite avec `createSupabaseServerClient`
- * en RSC car la RLS est appliquée à chaque query, pas au cache).
+ * Stats agrégées pour le hero.
  *
- * V1.5 : raffiner le cache en par-org explicite (clé `org:${orgId}:audit-stats`).
+ * V1 : pas de `unstable_cache` car `createSupabaseServerClient()` appelle
+ * `cookies()` qui ne peut pas vivre dans un scope de cache (Next.js
+ * l'interdit). Acceptable pour V1 car les sub-queries sont légères et
+ * la page audit n'est pas un workflow critique temps réel.
+ *
+ * V1.5 : refactor avec admin client (bypass RLS) wrap dans
+ * `unstable_cache(orgId)` + filtrer org_id explicitement (préserve
+ * l'isolation tout en activant le cache).
  */
 export async function getAuditStats(): Promise<AuditStats> {
-  return unstable_cache(
-    async () => {
-      const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
-      const [{ count: totalEvents }, typesRes, actorsRes, oldestRes] = await Promise.all([
-        supabase.from('audit_events').select('id', { count: 'exact', head: true }),
-        supabase.from('audit_events').select('event_type'),
-        supabase.from('audit_events').select('user_id'),
-        supabase
-          .from('audit_events')
-          .select('occurred_at')
-          .order('occurred_at', { ascending: true })
-          .limit(1)
-          .maybeSingle(),
-      ]);
+  const [{ count: totalEvents }, typesRes, actorsRes, oldestRes] = await Promise.all([
+    supabase.from('audit_events').select('id', { count: 'exact', head: true }),
+    supabase.from('audit_events').select('event_type'),
+    supabase.from('audit_events').select('user_id'),
+    supabase
+      .from('audit_events')
+      .select('occurred_at')
+      .order('occurred_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
-      const distinctTypes = new Set((typesRes.data ?? []).map((r) => r.event_type).filter(Boolean))
-        .size;
-      const distinctActors = new Set(
-        (actorsRes.data ?? []).map((r) => r.user_id).filter((id): id is string => Boolean(id)),
-      ).size;
+  const distinctTypes = new Set((typesRes.data ?? []).map((r) => r.event_type).filter(Boolean))
+    .size;
+  const distinctActors = new Set(
+    (actorsRes.data ?? []).map((r) => r.user_id).filter((id): id is string => Boolean(id)),
+  ).size;
 
-      const oldestIso = oldestRes.data?.occurred_at;
-      const daysCovered = oldestIso
-        ? Math.max(1, Math.ceil((Date.now() - Date.parse(oldestIso)) / 86_400_000))
-        : 0;
+  const oldestIso = oldestRes.data?.occurred_at;
+  const daysCovered = oldestIso
+    ? Math.max(1, Math.ceil((Date.now() - Date.parse(oldestIso)) / 86_400_000))
+    : 0;
 
-      return {
-        totalEvents: totalEvents ?? 0,
-        daysCovered,
-        distinctTypes,
-        distinctActors,
-      };
-    },
-    ['audit-stats'],
-    { tags: ['audit-stats'], revalidate: 60 },
-  )();
+  return {
+    totalEvents: totalEvents ?? 0,
+    daysCovered,
+    distinctTypes,
+    distinctActors,
+  };
 }
