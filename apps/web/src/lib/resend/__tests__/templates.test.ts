@@ -4,8 +4,8 @@ import { MODULE_7_TEMPLATE_CODES, TEMPLATES, type TemplateCode } from '../templa
 import { SAMPLE_VARS } from '@/app/dev/notifications/sample-vars';
 
 describe('TEMPLATES registry', () => {
-  it('expose 14 templates au total (5 Module 2 + 4 Module 7 + 5 Module 9 B5)', () => {
-    expect(Object.keys(TEMPLATES)).toHaveLength(14);
+  it('expose 15 templates au total (5 Module 2 + 4 Module 7 + 5 Module 9 B5 + 1 Module 14 B3)', () => {
+    expect(Object.keys(TEMPLATES)).toHaveLength(15);
   });
 
   it('chaque template a un Component + une fonction subject', () => {

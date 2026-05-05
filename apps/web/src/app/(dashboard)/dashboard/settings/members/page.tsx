@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 export default async function MembersPage() {
   const user = await requireUser();
-  if (!user.activeOrgId) redirect('/onboarding/create-org');
+  if (!user.activeOrgId) redirect('/onboarding/company');
 
   const canManage = await hasPermission('org.manage_members');
   if (!canManage) redirect('/unauthorized');

@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       api_keys: {
@@ -496,12 +471,15 @@ export type Database = {
           after_state: Json | null
           api_key_id: string | null
           before_state: Json | null
+          chain_position: number | null
+          event_hash: string | null
           event_type: string
           id: string
           ip_address: unknown
           metadata: Json
           occurred_at: string
           org_id: string | null
+          previous_hash: string | null
           request_id: string | null
           resource_id: string | null
           resource_type: string | null
@@ -513,12 +491,15 @@ export type Database = {
           after_state?: Json | null
           api_key_id?: string | null
           before_state?: Json | null
+          chain_position?: number | null
+          event_hash?: string | null
           event_type: string
           id?: string
           ip_address?: unknown
           metadata?: Json
           occurred_at?: string
           org_id?: string | null
+          previous_hash?: string | null
           request_id?: string | null
           resource_id?: string | null
           resource_type?: string | null
@@ -530,12 +511,15 @@ export type Database = {
           after_state?: Json | null
           api_key_id?: string | null
           before_state?: Json | null
+          chain_position?: number | null
+          event_hash?: string | null
           event_type?: string
           id?: string
           ip_address?: unknown
           metadata?: Json
           occurred_at?: string
           org_id?: string | null
+          previous_hash?: string | null
           request_id?: string | null
           resource_id?: string | null
           resource_type?: string | null
@@ -3897,38 +3881,53 @@ export type Database = {
       user_profiles: {
         Row: {
           avatar_url: string | null
+          cookie_preferences: Json
           created_at: string
           default_org_id: string | null
           deleted_at: string | null
           email: string
           full_name: string | null
           id: string
+          is_test_user: boolean
+          onboarding_completed_at: string | null
           phone: string | null
           preferences: Json
+          tos_accepted_at: string | null
+          tos_version_accepted: string | null
           updated_at: string
         }
         Insert: {
           avatar_url?: string | null
+          cookie_preferences?: Json
           created_at?: string
           default_org_id?: string | null
           deleted_at?: string | null
           email: string
           full_name?: string | null
           id: string
+          is_test_user?: boolean
+          onboarding_completed_at?: string | null
           phone?: string | null
           preferences?: Json
+          tos_accepted_at?: string | null
+          tos_version_accepted?: string | null
           updated_at?: string
         }
         Update: {
           avatar_url?: string | null
+          cookie_preferences?: Json
           created_at?: string
           default_org_id?: string | null
           deleted_at?: string | null
           email?: string
           full_name?: string | null
           id?: string
+          is_test_user?: boolean
+          onboarding_completed_at?: string | null
           phone?: string | null
           preferences?: Json
+          tos_accepted_at?: string | null
+          tos_version_accepted?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -4102,6 +4101,8 @@ export type Database = {
       }
       valuation_runs: {
         Row: {
+          callback_received_at: string | null
+          callback_secret: string | null
           completed_at: string | null
           created_at: string
           engine_version: string | null
@@ -4123,6 +4124,8 @@ export type Database = {
           triggered_by: string | null
         }
         Insert: {
+          callback_received_at?: string | null
+          callback_secret?: string | null
           completed_at?: string | null
           created_at?: string
           engine_version?: string | null
@@ -4144,6 +4147,8 @@ export type Database = {
           triggered_by?: string | null
         }
         Update: {
+          callback_received_at?: string | null
+          callback_secret?: string | null
           completed_at?: string | null
           created_at?: string
           engine_version?: string | null
@@ -4541,12 +4546,32 @@ export type Database = {
         Args: { p_reason: string; p_request_id: string }
         Returns: string
       }
+      canonical_audit_payload: {
+        Args: {
+          p_after_state: Json
+          p_before_state: Json
+          p_event_type: string
+          p_id: string
+          p_metadata: Json
+          p_occurred_at: string
+          p_org_id: string
+          p_resource_id: string
+          p_resource_type: string
+          p_user_email: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       complete_signature_request: {
         Args: {
           p_proof_certificate_url: string
           p_request_id: string
           p_signed_pdf_storage_path: string
         }
+        Returns: string
+      }
+      compute_audit_chain_hash: {
+        Args: { p_event_id: string }
         Returns: string
       }
       compute_cap_table: {
@@ -4627,6 +4652,10 @@ export type Database = {
         Returns: Json
       }
       encrypt_sensitive: { Args: { plaintext: string }; Returns: string }
+      ensure_user_profile_exists: {
+        Args: { p_email: string; p_user_id: string }
+        Returns: undefined
+      }
       evaluate_approval_request: {
         Args: { p_request_id: string }
         Returns: Json
@@ -4864,6 +4893,17 @@ export type Database = {
         Args: { wpgs: Json }
         Returns: boolean
       }
+      verify_audit_chain_integrity: {
+        Args: { p_org_id?: string }
+        Returns: {
+          out_broken_at: number
+          out_broken_event_id: string
+          out_is_intact: boolean
+          out_org_id: string
+          out_total_events: number
+          out_verified_events: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
@@ -4992,9 +5032,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },

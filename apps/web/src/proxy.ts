@@ -32,13 +32,14 @@ import { createServerClient } from '@supabase/ssr';
 const PUBLIC_ROUTES = new Set([
   '/',
   '/login',
+  '/signup',
   '/accept-invite',
   '/auth/callback',
   '/unauthorized',
   '/no-access',
 ]);
 
-const PUBLIC_PREFIXES = ['/api/webhooks/', '/_next/', '/favicon', '/static/', '/dev/'];
+const PUBLIC_PREFIXES = ['/api/webhooks/', '/_next/', '/favicon', '/static/', '/dev/', '/legal/'];
 
 /**
  * Routes accessibles à un user authentifié SANS `active_org_id` dans son JWT.
@@ -109,12 +110,22 @@ export async function proxy(request: NextRequest) {
   const activeOrgId =
     (user?.app_metadata as { active_org_id?: string } | null)?.active_org_id ?? null;
 
-  // Authed user qui visite /login → /dashboard ou /select-org selon contexte
-  // (la page /select-org décidera : redirect /onboarding/create-org si 0
-  // membership, picker si ≥1 — voir commentaire en haut de fichier)
-  if (isAuthed && pathname === '/login') {
+  const onboardingCompleted =
+    (user?.app_metadata as { onboarding_completed?: boolean } | null)?.onboarding_completed ===
+    true;
+
+  // Authed user qui visite /login ou /signup → /dashboard, /onboarding ou
+  // /select-org selon contexte (la page /select-org décidera : redirect
+  // /onboarding/company si 0 membership, picker si ≥1)
+  if (isAuthed && (pathname === '/login' || pathname === '/signup')) {
     const url = request.nextUrl.clone();
-    url.pathname = activeOrgId ? '/dashboard' : '/select-org';
+    if (!activeOrgId) {
+      url.pathname = '/select-org';
+    } else if (!onboardingCompleted) {
+      url.pathname = '/onboarding';
+    } else {
+      url.pathname = '/dashboard';
+    }
     url.search = '';
     return NextResponse.redirect(url);
   }
@@ -128,11 +139,36 @@ export async function proxy(request: NextRequest) {
   }
 
   // Authed sans org active sur route business → /select-org (qui décidera
-  // d'afficher le picker ou de rediriger vers /onboarding/create-org si
+  // d'afficher le picker ou de rediriger vers /onboarding/company si
   // l'user n'a vraiment aucune membership)
   if (isAuthed && !activeOrgId && !isPublic && !isNoOrgAllowed(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = '/select-org';
+    url.search = '';
+    return NextResponse.redirect(url);
+  }
+
+  // Module 14 §B2 — onboarding gate.
+  // Si user authed + active_org_id mais onboarding pas complété, force
+  // redirect vers /onboarding (sauf si déjà dans /onboarding/* ou /portal
+  // ou route publique). Lecture du JWT (`app_metadata.onboarding_completed`)
+  // — pas de DB lookup au proxy.
+  //
+  // /portal autorisé pour les BENEFICIARY purs (Module 8) — l'onboarding
+  // wizard cible les admins/operators ; un BENEFICIARY arrive via
+  // invitation → flow distinct.
+  if (
+    isAuthed &&
+    activeOrgId &&
+    !onboardingCompleted &&
+    !isPublic &&
+    !pathname.startsWith('/onboarding') &&
+    !pathname.startsWith('/portal') &&
+    !pathname.startsWith('/api/') &&
+    !ERROR_ROUTES.has(pathname)
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/onboarding';
     url.search = '';
     return NextResponse.redirect(url);
   }

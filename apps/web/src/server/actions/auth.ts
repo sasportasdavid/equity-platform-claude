@@ -3,10 +3,12 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
-import type { Role } from '@equity/shared';
-import { uuidSchema, emailSchema } from '@equity/shared';
+import type { Role, SignupWithMagicLinkInput } from '@equity/shared';
+import { uuidSchema, emailSchema, signupWithMagicLinkSchema } from '@equity/shared';
 import { logAuditEvent } from '@/lib/audit';
+import { ensureUserProfileExists } from '@/lib/auth/ensure-user-profile';
 import { getServerEnv } from '@/lib/env';
+import { checkRateLimitForCurrentRequest, formatRateLimitedMessage } from '@/lib/rate-limit/server';
 import { sendEmail } from '@/lib/resend/client';
 import { requireUser } from '@/lib/auth/rbac';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -49,6 +51,139 @@ export async function checkEmailExistsForLogin(rawEmail: string): Promise<boolea
     .eq('email', parsed.data)
     .maybeSingle();
   return !!profile;
+}
+
+// ===========================================================================
+// signupWithMagicLink — Module 14 PR #43 §B1 (Option C : magic-link only)
+// ===========================================================================
+//
+// Spec MODULE_02 §1.2 + §2.4 + brief PR #43.
+//
+// Flow :
+//   1. Valide Zod (email + tosAccepted=true + tosVersion).
+//   2. Anti email enumeration : si l'email a déjà un user_profile + une
+//      membership ACTIVE (= compte finalisé), on retourne `isNewUser: false`.
+//      Le client envoie quand même un magic-link via signInWithOtp côté
+//      browser → l'utilisateur reçoit un mail de login standard. Pas de
+//      différence visible entre "email existant" et "email nouveau".
+//   3. Si profile partiel (auth.users existe sans membership ou un user
+//      orphelin pre-trigger), update juste les ToS + audit.
+//   4. Si totalement nouveau : `auth.admin.createUser({ email_confirm: false })`
+//      (le user devra confirmer en cliquant le magic link au callback) →
+//      `ensureUserProfileExists` (RPC) → UPDATE ToS.
+//   5. Audit `auth.signup_initiated` (best-effort, sans org_id).
+//   6. Retour `{ ok: true, isNewUser: bool }`.
+//
+// **Pas d'envoi de magic link côté serveur** : le client appelle
+// `supabase.auth.signInWithOtp({ shouldCreateUser: false, ... })` après
+// le retour ok. Le PKCE verifier est posé en cookie côté browser, anti
+// pre-fetching Gmail / Apple Mail (cf. dette login form).
+//
+// **`shouldCreateUser: false` côté client** : on a déjà créé le user
+// côté Server Action. Si le user existait déjà (isNewUser=false), `false`
+// est aussi correct (login flow standard).
+
+export type SignupWithMagicLinkResult =
+  | { ok: true; isNewUser: boolean }
+  | { ok: false; error: string; fieldErrors?: Record<string, string[]> };
+
+export async function signupWithMagicLink(
+  input: SignupWithMagicLinkInput,
+): Promise<SignupWithMagicLinkResult> {
+  // Module 14 B5 — rate limit 5/15min/IP
+  const rl = await checkRateLimitForCurrentRequest('signup');
+  if (!rl.allowed) {
+    return { ok: false, error: formatRateLimitedMessage(rl.retryAfterMs) };
+  }
+
+  const parsed = signupWithMagicLinkSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: 'Veuillez corriger les erreurs ci-dessous.',
+      fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
+    };
+  }
+  const { email, tosVersion } = parsed.data;
+  const admin = getSupabaseAdminClient();
+  const nowIso = new Date().toISOString();
+
+  // 1. Check existing profile
+  const { data: profile } = await admin
+    .from('user_profiles')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle();
+
+  let userId: string;
+  let isNewUser: boolean;
+
+  if (profile) {
+    // 2. Check si compte finalisé (≥1 membership ACTIVE) → anti enumeration
+    const { count: activeMemberships } = await admin
+      .from('memberships')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', profile.id)
+      .eq('status', 'ACTIVE');
+
+    if ((activeMemberships ?? 0) > 0) {
+      // Compte finalisé → fake success. Le client va appeler signInWithOtp
+      // qui enverra un magic link login standard (le user verra "email
+      // envoyé" comme s'il s'inscrivait, mais il sera reconnecté).
+      await logAuditEvent({
+        eventType: 'auth.signup_attempted_existing',
+        resourceType: 'USER',
+        resourceId: profile.id,
+        userEmail: email,
+        metadata: { tos_version: tosVersion },
+      });
+      return { ok: true, isNewUser: false };
+    }
+    // Compte partiel : update ToS, on relance la confirmation par magic link
+    userId = profile.id;
+    isNewUser = true;
+  } else {
+    // 3. User totalement nouveau : crée auth.users + user_profile
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
+      email,
+      email_confirm: false,
+    });
+    if (createError || !created.user) {
+      // Race ou erreur Supabase Auth → fake success pour anti enumeration.
+      // Le user a déjà reçu un signal "email envoyé" si on retourne ok ;
+      // ici on retourne false pour qu'il recommence (rate-limit côté
+      // Supabase Auth nous protège du replay).
+      console.error('[auth] signup createUser failed', createError);
+      return {
+        ok: false,
+        error: createError?.message ?? 'Création du compte impossible. Réessayez dans un instant.',
+      };
+    }
+    userId = created.user.id;
+    isNewUser = true;
+    await ensureUserProfileExists(userId, email);
+  }
+
+  // 4. Persiste ToS dans user_profiles
+  await admin
+    .from('user_profiles')
+    .update({
+      tos_accepted_at: nowIso,
+      tos_version_accepted: tosVersion,
+    })
+    .eq('id', userId);
+
+  // 5. Audit
+  await logAuditEvent({
+    eventType: 'auth.signup_initiated',
+    resourceType: 'USER',
+    resourceId: userId,
+    userId,
+    userEmail: email,
+    metadata: { tos_version: tosVersion },
+  });
+
+  return { ok: true, isNewUser };
 }
 
 // ===========================================================================

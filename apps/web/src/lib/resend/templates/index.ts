@@ -43,6 +43,10 @@ import {
   ExerciseRequestSubmitted,
   type ExerciseRequestSubmittedProps,
 } from './ExerciseRequestSubmitted';
+import {
+  InvitationExpiredRenotify,
+  type InvitationExpiredRenotifyProps,
+} from './InvitationExpiredRenotify';
 import { InvitationRevoked, type InvitationRevokedProps } from './InvitationRevoked';
 import { MagicLinkLogin, type MagicLinkLoginProps } from './MagicLinkLogin';
 import { OrgRoleChanged, type OrgRoleChangedProps } from './OrgRoleChanged';
@@ -54,6 +58,7 @@ export type TemplateMap = {
   team_member_invite: TeamMemberInviteProps;
   beneficiary_first_invite: BeneficiaryFirstInviteProps;
   invitation_revoked: InvitationRevokedProps;
+  invitation_expired_renotify: InvitationExpiredRenotifyProps;
   org_role_changed: OrgRoleChangedProps;
   // Module 7 B2
   approval_pending: ApprovalPendingProps;
@@ -91,6 +96,10 @@ export const TEMPLATES: { [K in TemplateCode]: TemplateEntry<K> } = {
   invitation_revoked: {
     Component: InvitationRevoked,
     subject: InvitationRevoked.subject,
+  },
+  invitation_expired_renotify: {
+    Component: InvitationExpiredRenotify,
+    subject: InvitationExpiredRenotify.subject,
   },
   org_role_changed: {
     Component: OrgRoleChanged,

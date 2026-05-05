@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Fraunces, Inter, JetBrains_Mono } from 'next/font/google';
+import { CookieConsent } from '@/components/legal/CookieConsent';
 import { QueryProvider } from '@/components/providers/query-provider';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
@@ -58,6 +59,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           disableTransitionOnChange
         >
           <QueryProvider>{children}</QueryProvider>
+          <CookieConsent />
           <Toaster richColors closeButton position="top-right" />
         </ThemeProvider>
       </body>
