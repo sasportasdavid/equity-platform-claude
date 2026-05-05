@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { VestingTimeline, type VestingTimelineTranche } from '@/components/awards/vesting-timeline';
+import { formatVestingDateLong } from '@/lib/vesting-helpers';
 import { StatusBadge, type StatusBadgeTone } from '@/components/ui/status-badge';
 import type { AwardListRow } from '@/server/queries/awards';
 import type { PlanDetail } from '@/server/queries/plans';
@@ -149,11 +150,18 @@ export function EditorialSynthesisTab({ detail, planAwards = [] }: EditorialSynt
       <section className="bg-card border-border/50 rounded-lg border p-6">
         <header className="mb-4">
           <p className="text-overline text-brass-500">CHRONOLOGIE · VESTING</p>
-          <h2 className="text-h3 text-ink-900 mt-1">
-            {tranches.length === 0
-              ? 'Aucune tranche définie'
-              : `${tranches.length} tranche${tranches.length > 1 ? 's' : ''} programmée${tranches.length > 1 ? 's' : ''}`}
-          </h2>
+          <h2 className="text-h3 text-ink-900 mt-1">Chronologie de vesting</h2>
+          {tranches.length > 0 ? (
+            <p className="text-ink-500 mt-1 font-mono text-xs tracking-wide">
+              {formatVestingDateLong(vestingStart)} → {formatVestingDateLong(vestingEnd)}
+              {detail.vestingSchedule?.cliff_months
+                ? ` · cliff ${detail.vestingSchedule.cliff_months} mois`
+                : ''}
+              {detail.vestingSchedule?.linear_after_cliff ? ' + linéaire mensuel' : ''}
+            </p>
+          ) : (
+            <p className="text-ink-500 mt-1 text-sm">Aucune tranche définie</p>
+          )}
         </header>
 
         {tranches.length > 0 ? (
@@ -163,6 +171,15 @@ export function EditorialSynthesisTab({ detail, planAwards = [] }: EditorialSynt
             vestingEnd={vestingEnd}
             unitsGranted={detail.plan.pool_size}
             theoreticalMode
+            cliffDate={cliffDate ? cliffDate.toISOString().slice(0, 10) : undefined}
+            cliffPct={cliffPct ?? undefined}
+            conditionalPercentage={hasConditions ? 20 : undefined}
+            conditionalLabel={
+              detail.conditions[0]?.name
+                ? `Conditionnel · ${detail.conditions[0].name}`
+                : 'Conditionnel · perf.'
+            }
+            bare
           />
         ) : (
           <p className="text-ink-500 serif-italic text-sm">
