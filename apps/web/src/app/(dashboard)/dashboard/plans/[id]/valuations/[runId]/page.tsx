@@ -50,6 +50,17 @@ export default async function ValuationDetailPage({
     redirect(`/dashboard/plans/${detail.run.planId}/valuations/${detail.run.id}`);
   }
 
+  // B0.5 — Si le run dispose d'une visualisation Monte Carlo (paths_sample +
+  // metadata color-coded + convergence + histogram), on route vers la page
+  // Module 11 B5 qui utilise le composant `MonteCarloViewer` (Editorial
+  // Finance, replay cinématique). Cette page legacy reste utilisée pour les
+  // runs sans viz (KPIs + Greeks + sample paths bruts Recharts).
+  // Symétrie avec /dashboard/valuations/runs/[runId]/page.tsx:52 qui renvoie
+  // ici quand `!includesVisualization`.
+  if (detail.run.includesVisualization === true) {
+    redirect(`/dashboard/valuations/runs/${detail.run.id}`);
+  }
+
   const planName = detail.plan?.name ?? 'Plan';
   const completedDate = detail.run.completedAt ? new Date(detail.run.completedAt) : null;
   const titleSuffix = completedDate

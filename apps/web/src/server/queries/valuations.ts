@@ -26,6 +26,8 @@ export type ValuationDetail = {
     createdAt: string;
     errorMessage: string | null;
     triggeredBy: string | null;
+    /** B0.5 — utilisé par la page legacy pour rediriger vers /dashboard/valuations/runs/[runId] (MonteCarloViewer Module 11) si le run inclut le bloc visualization. */
+    includesVisualization: boolean;
   };
   /** Résultat associé — null si run pas encore DONE ou ERROR. */
   result: {
@@ -67,6 +69,7 @@ export async function getValuationDetail(runId: string): Promise<ValuationDetail
       `
       id, plan_id, status, pricer_used, engine_version,
       started_at, completed_at, created_at, error_message, triggered_by,
+      includes_visualization,
       plan:plans!valuation_runs_plan_id_fkey ( id, name, plan_type, deleted_at ),
       valuation_results ( id, fair_value_per_instrument, fair_value_total, std_error, ci95_low, ci95_high, sensitivities, market_data_snapshot, distribution_stats, audit_data, computed_at )
     `,
@@ -97,6 +100,7 @@ export async function getValuationDetail(runId: string): Promise<ValuationDetail
       createdAt: run.created_at,
       errorMessage: run.error_message,
       triggeredBy: run.triggered_by,
+      includesVisualization: run.includes_visualization === true,
     },
     result: resultRow
       ? {
