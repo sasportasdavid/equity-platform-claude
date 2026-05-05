@@ -86,15 +86,16 @@ export async function runValuation(
     };
   }
 
-  // INSERT valuation_run en QUEUED (status default défini par migration 00016)
-  // B0.5 — flip default `includes_visualization` à TRUE pour le call site
-  // legacy `RunValuationButton` (Module 3a B5). Sans ce flag, l'UI atterrit
-  // sur la page legacy SamplePathsCard (Recharts brut). Avec le flag, la
-  // page Module 11 `MonteCarloViewer` (Editorial Finance, color-coded paths
-  // + barrière + KPIs + convergence + histogram) prend la main via le
-  // redirect symétrique côté `/dashboard/plans/[id]/valuations/[runId]`.
-  // Note dette #94 : numPaths utilisé ici = default `simulation_configs.num_paths`
-  // (typiquement 50k) — sous le seuil de timeout EF Supabase 150s.
+  // INSERT valuation_run en QUEUED.
+  // B0.5 — flip default `includes_visualization` à TRUE → la page Module 11
+  // `MonteCarloViewer` (Editorial Finance) prend la main via le redirect
+  // symétrique sur `/dashboard/plans/[id]/valuations/[runId]`.
+  // B0.6 (dette #94 résolue) — l'EF compute-valuation V3 utilise
+  // `EdgeRuntime.waitUntil()` : ack 202 immédiat puis processing en
+  // background. Plus de cap de fait sur num_paths côté legacy — le moteur
+  // Python peut tourner > 150s sans timeout EF Supabase. La SA n'attend pas
+  // la fin du run (status passera de QUEUED → RUNNING → DONE/ERROR par
+  // l'EF en background, le frontend poll).
   const { data: run, error: insertError } = await supabase
     .from('valuation_runs')
     .insert({
