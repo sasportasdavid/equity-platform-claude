@@ -4,26 +4,34 @@
 //
 // V2 — 2026-05-01 — Persist payload_sent + response_received pour audit IFRS 2.46
 // V2.1 — 2026-05-03 — Bloc LIVE_AT_VALUATION (re-fetch market data avant build)
+// V3 — 2026-05-05 — Pattern EdgeRuntime.waitUntil() (B0.6, dette #94)
+//   ack 202 Accepted immédiat puis processing en background. Permet aux
+//   runs Python > 150s (cap timeout EF Supabase) d'aller au bout. Pattern
+//   identique au webhook yousign V6 (cf supabase/functions/yousign-webhook/
+//   index.ts:319-324). Le frontend poll valuation_runs.status pour passer
+//   QUEUED → RUNNING → DONE.
 //
 // Pipeline asynchrone (déclenché par la Server Action runValuation B5.3) qui :
-//   1. Charge le contexte du run depuis Supabase (plan + hypothesis_set
+//   0. (V3) Validation rapide : run existe + status='QUEUED' (idempotency)
+//      → return 202 Accepted immédiat
+//   1. [BG] Charge le contexte du run depuis Supabase (plan + hypothesis_set
 //      + volatility_scheme + simulation_config + conditions + vesting_tranches
 //      + companyTicker pour TSR_REL_PEERS LIVE)
-//   1.bis. NEW V2.1 — Pour les conditions configurées en market_data_fetch_mode
+//   1.bis. [BG] NEW V2.1 — Pour les conditions configurées en market_data_fetch_mode
 //      = LIVE_AT_VALUATION, re-fetch les paramètres marché depuis EODHD/Yahoo
 //      via les EF market-data-fetch (TSR_REL_INDEX) et market-data-peer-group
 //      (TSR_REL_PEERS). Patch in-place les valeurs sur context.python.conditions
 //      avant le buildPythonPayload. Si fetch fail → throw (mark ERROR), pas de
 //      fallback DB stale (cohérence mode LIVE).
-//   2. Construit le payload Python via buildPythonPayload (helper B5.1)
-//   3. Update valuation_runs.status = 'RUNNING' + started_at = now
+//   2. [BG] Construit le payload Python via buildPythonPayload (helper B5.1)
+//   3. [BG] Update valuation_runs.status = 'RUNNING' + started_at = now
 //      + payload_sent = JSON snapshot (NEW V2 — audit IFRS 2.46)
 //      + live_fetch_metadata si applicable (V2.1)
-//   4. POST vers QUANT_ENGINE_URL/compute/multi-tranche (avec API key si fournie)
-//   5. Insert valuation_results avec fair_value + sensitivities + audit_trail
-//   6. Update valuation_runs.status = 'DONE' / 'ERROR' + finished_at + pricer_used
+//   4. [BG] POST vers QUANT_ENGINE_URL/compute/multi-tranche (avec API key si fournie)
+//   5. [BG] Insert valuation_results avec fair_value + sensitivities + audit_trail
+//   6. [BG] Update valuation_runs.status = 'DONE' / 'ERROR' + finished_at + pricer_used
 //      + response_received = JSON brut (NEW V2)
-//   7. Trigger compute-ifrs2-expense (Edge Function future, non bloquant)
+//   7. [BG] Trigger compute-ifrs2-expense (Edge Function future, non bloquant)
 //
 // Sécurité : appelle Supabase via SUPABASE_SERVICE_ROLE_KEY (bypass RLS)
 // car l'utilisateur a déjà été authentifié + la permission validée par
@@ -43,6 +51,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
 import { buildPythonPayload } from '../_shared/buildPythonPayload.ts';
 import type { PythonValuationContext } from '../_shared/buildPythonPayload.ts';
+
+// Supabase EF runtime expose `EdgeRuntime.waitUntil(promise)` pour exécuter
+// du travail après l'envoi de la réponse HTTP — pattern requis pour les
+// computations longues (Python Monte Carlo > 150s avec viz). Pattern aligné
+// supabase/functions/yousign-webhook/index.ts:43.
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void } | undefined;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -105,163 +119,193 @@ Deno.serve(async (req: Request) => {
       { auth: { persistSession: false } },
     );
 
-    // 1. Charger le contexte
-    const context = await loadValuationContext(supabase, runId);
-    if (!context) {
-      return jsonError(404, `Run ${runId} introuvable ou contexte incomplet`);
+    // V3 (B0.6) — Idempotency check : ne pas re-processer un run déjà
+    // RUNNING/DONE/ERROR. Le frontend invoke peut être déclenché plusieurs
+    // fois (router.refresh, click bouton x2) — on protège contre le double
+    // processing qui causerait des INSERT valuation_results doublons.
+    const { data: runCheck, error: runCheckErr } = await supabase
+      .from('valuation_runs')
+      .select('id, status')
+      .eq('id', runId)
+      .maybeSingle();
+    if (runCheckErr || !runCheck) {
+      return jsonError(404, `Run ${runId} introuvable`);
     }
-
-    // 1.bis (V2.1) — LIVE_AT_VALUATION : re-fetch market data pour les conditions
-    // configurées avec ce mode. Les autres modes (SNAPSHOT_AT_GRANT, MANUAL)
-    // utilisent les valeurs déjà figées en DB par loadValuationContext.
-    //
-    // Mode "déconseillé IFRS 2" — la reproductibilité des résultats est
-    // dégradée (ré-évaluation à chaque run avec données du jour). L'audit reste
-    // possible via valuation_runs.payload_sent qui contient le payload final
-    // post-merge + live_fetch_metadata.
-    const liveFetchResult = await refreshLiveMarketData(supabase, context);
-    if (!liveFetchResult.ok) {
-      // Fail-fast — NE PAS retomber sur valeurs DB stale (contradiction mode LIVE)
-      throw new Error(
-        `LIVE_AT_VALUATION fetch failed for ${liveFetchResult.failedConditionId}: ` +
-          liveFetchResult.error,
+    if (runCheck.status !== 'QUEUED') {
+      console.log(`[compute-valuation] Run ${runId} already ${runCheck.status}, skipping`);
+      return new Response(
+        JSON.stringify({ ok: true, skipped: 'already_processing', status: runCheck.status }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
     }
-    const liveFetchMetadata = liveFetchResult.data;
 
-    // 2. Build payload (utilise context.python avec valeurs LIVE patchées si applicable)
-    const payload = buildPythonPayload(context.python, {
-      includeVisualization: context.includeVisualization,
-    });
+    // V3 (B0.6) — Pattern EdgeRuntime.waitUntil() : ack 202 Accepted
+    // immédiat puis processing en background pour éviter le timeout EF
+    // Supabase 150s sur les runs lourds (100k paths + viz). Cf
+    // yousign-webhook/index.ts:319-324 pour pattern identique.
+    const capturedRunId = runId; // closure capture pour le BG (HTTP context destroyed après return)
 
-    // Module 11 B5 — input_hash déterministe pour dédup + replay reproductible.
-    // Hash SHA-256 hex du JSON canonicalisé du payload (post-LIVE patches).
-    const inputHash = await computeInputHash(payload);
-
-    // 3. Mark RUNNING + persist payload_sent + input_hash (Module 11 B5)
-    await supabase
-      .from('valuation_runs')
-      .update({
-        status: 'RUNNING',
-        started_at: new Date().toISOString(),
-        input_hash: inputHash,
-        payload_sent: {
-          ...payload,
-          // V2.1 — trace les conditions re-fetched live pour audit
-          ...(liveFetchMetadata.conditions_refetched.length > 0
-            ? { live_fetch_metadata: liveFetchMetadata }
-            : {}),
-        },
-      })
-      .eq('id', runId);
-
-    // 4. Appel Python (ou mock)
-    const result = await callPythonEngine(payload);
-
-    // 5. Save results
-    //
-    // IFRS 2 §16-22 : la juste-valeur d'un instrument equity-settled est
-    // celle du sous-jacent SANS prise en compte des conditions de service
-    // (rétention salarié) ni des conditions non-marché (perf interne).
-    // Celles-ci ajustent la CHARGE comptable, pas la juste-valeur unitaire.
-    //
-    // Le moteur Python expose les deux niveaux :
-    //   - `fair_value_market_only` = juste-valeur option pure (= ce qu'on
-    //     veut stocker en `fair_value_per_instrument` IFRS 2)
-    //   - `fair_value` = filtrée par vesting_probability × payout_multiplier
-    //     (= valeur cash-flow attendue, utile pour reporting interne mais
-    //     pas pour IFRS 2)
-    //
-    // Conditions MARKET (TSR/SHARE_PRICE) : elles SONT incluses dans la
-    // juste-valeur IFRS 2 → elles font partie du Monte Carlo et impactent
-    // déjà `fair_value_market_only` côté moteur (cf. HANDOVER_PACK §3).
-    const fairValuePerUnit =
-      result.fair_value_market_only ?? result.fair_value_per_unit ?? result.fair_value ?? null;
-
-    await supabase.from('valuation_results').insert({
-      valuation_run_id: runId,
-      org_id: context.orgId,
-      fair_value_per_instrument: fairValuePerUnit,
-      fair_value_total: fairValuePerUnit, // = par_unit pour 1 instrument ; à pondérer par allocations Module 3b
-      std_error: result.std_error ?? null,
-      ci95_low: result.ci95_low ?? null,
-      ci95_high: result.ci95_high ?? null,
-      distribution_stats: {
-        debug_paths: result.debug_paths,
-        vesting_probability: result.vesting_probability,
-        vesting_probability_real: result.vesting_probability_real,
-        avg_market_multiplier: result.avg_market_multiplier,
-        fair_value_filtered: result.fair_value, // = market × proba — utile reporting interne
-        audit_trail: result.audit_trail,
-        tranche_details: result.tranche_details,
-        condition_breakdown: result.condition_breakdown,
-      },
-      sensitivities: result.greeks ?? result.sensitivities ?? null,
-      market_data_snapshot: context.marketDataSnapshot,
-      // Champs legacy 00001 (gardés pour compat) :
-      fair_value: fairValuePerUnit,
-      audit_data: { source: 'compute-valuation', engine_version: result.engine_version },
-    });
-
-    // 6. Mark DONE + persist response_received (V2 — audit IFRS 2.46)
-    // Module 11 B5 — includes_visualization = TRUE si on a demandé le bloc
-    // ET que la response Python contient bien `visualization` (paths_sample
-    // au minimum). Sinon le viewer ne pourra rien rendre — autant flagger
-    // FALSE pour router vers l'affichage simple FV.
-    const responseObj = result as PythonResponse & { visualization?: { paths_sample?: unknown } };
-    const visualizationPresent =
-      payload.include_visualization === true &&
-      responseObj.visualization != null &&
-      Array.isArray((responseObj.visualization as { paths_sample?: unknown }).paths_sample);
-
-    await supabase
-      .from('valuation_runs')
-      .update({
-        status: 'DONE',
-        completed_at: new Date().toISOString(),
-        pricer_used: payload.config.use_monte_carlo ? 'MONTE_CARLO_MULTI_TRANCHE' : 'BLACK_SCHOLES',
-        engine_version: result.engine_version ?? 'V8',
-        includes_visualization: visualizationPresent,
-        response_received: result, // ← NEW V2 — snapshot brut moteur
-      })
-      .eq('id', runId);
-
-    // 7. Trigger IFRS 2 (best-effort — fail silent si la fonction n'existe pas encore)
-    supabase.functions.invoke('compute-ifrs2-expense', { body: { run_id: runId } }).catch(() => {
-      // Edge Function compute-ifrs2-expense pas encore livrée (B5.6) — OK
-    });
-
-    return new Response(JSON.stringify({ success: true, run_id: runId }), {
-      headers: { 'Content-Type': 'application/json' },
-    });
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error('[compute-valuation]', errorMessage);
-
-    // Update run en ERROR si possible (best effort)
-    if (runId) {
+    const processValuation = async () => {
       try {
-        const supabase = createClient(
-          Deno.env.get('SUPABASE_URL')!,
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-          { auth: { persistSession: false } },
-        );
+        await runValuationPipeline(capturedRunId, supabase);
+      } catch (bgErr) {
+        const msg = bgErr instanceof Error ? bgErr.message : String(bgErr);
+        console.error(`[compute-valuation][bg] Run ${capturedRunId} failed: ${msg}`);
+        // Mark ERROR best-effort
         await supabase
           .from('valuation_runs')
           .update({
             status: 'ERROR',
-            error_message: errorMessage,
+            error_message: msg,
             completed_at: new Date().toISOString(),
           })
-          .eq('id', runId);
-      } catch {
-        /* ignore — log seul */
+          .eq('id', capturedRunId)
+          .catch((e: unknown) => {
+            console.error(`[compute-valuation][bg] Failed to mark ERROR: ${String(e)}`);
+          });
       }
+    };
+
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+      EdgeRuntime.waitUntil(processValuation());
+    } else {
+      // Local dev fallback (deno run / pnpm supabase functions serve) — pas
+      // d'EdgeRuntime → on process inline (le caller attendra). En prod,
+      // EdgeRuntime est toujours présent.
+      await processValuation();
     }
 
+    return new Response(
+      JSON.stringify({ accepted: true, run_id: runId, processing: 'background' }),
+      { status: 202, headers: { 'Content-Type': 'application/json' } },
+    );
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error('[compute-valuation] handler error:', errorMessage);
     return jsonError(500, errorMessage);
   }
 });
+
+// =============================================================================
+// V3 (B0.6) — Pipeline de valuation extrait pour exécution en background
+// =============================================================================
+
+async function runValuationPipeline(
+  runId: string,
+  supabase: ReturnType<typeof createClient>,
+): Promise<void> {
+  // 1. Charger le contexte
+  const context = await loadValuationContext(supabase, runId);
+  if (!context) {
+    throw new Error(`Run ${runId} introuvable ou contexte incomplet`);
+  }
+
+  // 1.bis (V2.1) — LIVE_AT_VALUATION : re-fetch market data pour les conditions
+  // configurées avec ce mode. Les autres modes (SNAPSHOT_AT_GRANT, MANUAL)
+  // utilisent les valeurs déjà figées en DB par loadValuationContext.
+  //
+  // Mode "déconseillé IFRS 2" — la reproductibilité des résultats est
+  // dégradée (ré-évaluation à chaque run avec données du jour). L'audit reste
+  // possible via valuation_runs.payload_sent qui contient le payload final
+  // post-merge + live_fetch_metadata.
+  const liveFetchResult = await refreshLiveMarketData(supabase, context);
+  if (!liveFetchResult.ok) {
+    // Fail-fast — NE PAS retomber sur valeurs DB stale (contradiction mode LIVE)
+    throw new Error(
+      `LIVE_AT_VALUATION fetch failed for ${liveFetchResult.failedConditionId}: ` +
+        liveFetchResult.error,
+    );
+  }
+  const liveFetchMetadata = liveFetchResult.data;
+
+  // 2. Build payload (utilise context.python avec valeurs LIVE patchées si applicable)
+  const payload = buildPythonPayload(context.python, {
+    includeVisualization: context.includeVisualization,
+  });
+
+  // Module 11 B5 — input_hash déterministe pour dédup + replay reproductible.
+  const inputHash = await computeInputHash(payload);
+
+  // 3. Mark RUNNING + persist payload_sent + input_hash (Module 11 B5)
+  await supabase
+    .from('valuation_runs')
+    .update({
+      status: 'RUNNING',
+      started_at: new Date().toISOString(),
+      input_hash: inputHash,
+      payload_sent: {
+        ...payload,
+        // V2.1 — trace les conditions re-fetched live pour audit
+        ...(liveFetchMetadata.conditions_refetched.length > 0
+          ? { live_fetch_metadata: liveFetchMetadata }
+          : {}),
+      },
+    })
+    .eq('id', runId);
+
+  // 4. Appel Python (ou mock) — peut prendre > 150s pour 100k paths + viz
+  // mais EdgeRuntime.waitUntil() permet ce dépassement.
+  const result = await callPythonEngine(payload);
+
+  // 5. Save results
+  //
+  // IFRS 2 §16-22 : la juste-valeur d'un instrument equity-settled est
+  // celle du sous-jacent SANS prise en compte des conditions de service
+  // (rétention salarié) ni des conditions non-marché (perf interne).
+  // Celles-ci ajustent la CHARGE comptable, pas la juste-valeur unitaire.
+  const fairValuePerUnit =
+    result.fair_value_market_only ?? result.fair_value_per_unit ?? result.fair_value ?? null;
+
+  await supabase.from('valuation_results').insert({
+    valuation_run_id: runId,
+    org_id: context.orgId,
+    fair_value_per_instrument: fairValuePerUnit,
+    fair_value_total: fairValuePerUnit,
+    std_error: result.std_error ?? null,
+    ci95_low: result.ci95_low ?? null,
+    ci95_high: result.ci95_high ?? null,
+    distribution_stats: {
+      debug_paths: result.debug_paths,
+      vesting_probability: result.vesting_probability,
+      vesting_probability_real: result.vesting_probability_real,
+      avg_market_multiplier: result.avg_market_multiplier,
+      fair_value_filtered: result.fair_value,
+      audit_trail: result.audit_trail,
+      tranche_details: result.tranche_details,
+      condition_breakdown: result.condition_breakdown,
+    },
+    sensitivities: result.greeks ?? result.sensitivities ?? null,
+    market_data_snapshot: context.marketDataSnapshot,
+    fair_value: fairValuePerUnit,
+    audit_data: { source: 'compute-valuation', engine_version: result.engine_version },
+  });
+
+  // 6. Mark DONE + persist response_received
+  const responseObj = result as PythonResponse & { visualization?: { paths_sample?: unknown } };
+  const visualizationPresent =
+    payload.include_visualization === true &&
+    responseObj.visualization != null &&
+    Array.isArray((responseObj.visualization as { paths_sample?: unknown }).paths_sample);
+
+  await supabase
+    .from('valuation_runs')
+    .update({
+      status: 'DONE',
+      completed_at: new Date().toISOString(),
+      pricer_used: payload.config.use_monte_carlo ? 'MONTE_CARLO_MULTI_TRANCHE' : 'BLACK_SCHOLES',
+      engine_version: result.engine_version ?? 'V8',
+      includes_visualization: visualizationPresent,
+      response_received: result,
+    })
+    .eq('id', runId);
+
+  // 7. Trigger IFRS 2 (best-effort)
+  supabase.functions.invoke('compute-ifrs2-expense', { body: { run_id: runId } }).catch(() => {
+    /* compute-ifrs2-expense optionnel — ignore failure */
+  });
+
+  console.log(`[compute-valuation][bg] Run ${runId} completed successfully`);
+}
 
 // =============================================================================
 // Helpers
