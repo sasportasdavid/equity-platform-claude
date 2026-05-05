@@ -96,7 +96,14 @@ resource_type, resource_id, metadata })`.
 - Vitest pour la logique pure (state machines, helpers, schémas)
 - Cible : 100% lignes/fonctions sur la state machine
 - Tests Server Actions avec mocks Supabase (subset critique)
-- Tests E2E manuels en attendant Playwright (TODO transverse)
+- **Playwright E2E foundation livrée PR #44** (`apps/web/e2e/`) avec :
+  bypass auth via `/api/test/login` (5 couches sécurité), helper
+  `loginAs(page, role)`, Mailpit catcher local. Cf `docs/QA_SETUP.md`.
+- **Règle d'or à partir de Module 14 : NO MERGE sans ≥ 1 test E2E**
+  pour les flows critiques de la feature. Patterns : signup-flow,
+  invitation-accept, onboarding-wizard pour M14 ; cap-table-totals,
+  vesting-forecast pour M15 ; etc. Cible fin Module 16 = 25-30
+  scénarios E2E (pas 250). Cf brief PR #44 §"Suite après merge".
 
 ### UI
 
