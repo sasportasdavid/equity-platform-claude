@@ -87,6 +87,14 @@ export async function runValuation(
   }
 
   // INSERT valuation_run en QUEUED (status default défini par migration 00016)
+  // B0.5 — flip default `includes_visualization` à TRUE pour le call site
+  // legacy `RunValuationButton` (Module 3a B5). Sans ce flag, l'UI atterrit
+  // sur la page legacy SamplePathsCard (Recharts brut). Avec le flag, la
+  // page Module 11 `MonteCarloViewer` (Editorial Finance, color-coded paths
+  // + barrière + KPIs + convergence + histogram) prend la main via le
+  // redirect symétrique côté `/dashboard/plans/[id]/valuations/[runId]`.
+  // Note dette #94 : numPaths utilisé ici = default `simulation_configs.num_paths`
+  // (typiquement 50k) — sous le seuil de timeout EF Supabase 150s.
   const { data: run, error: insertError } = await supabase
     .from('valuation_runs')
     .insert({
@@ -95,6 +103,7 @@ export async function runValuation(
       simulation_config_id: simConfig.id,
       triggered_by: user.id,
       status: 'QUEUED',
+      includes_visualization: true,
     })
     .select('id')
     .single();
