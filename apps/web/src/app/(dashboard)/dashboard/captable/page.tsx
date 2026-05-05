@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { CapTableTabs } from '@/components/captable/cap-table-tabs';
 import type { CapTableEvolutionProps, EvolutionPoint } from '@/components/captable/evolution-chart';
+import { StakeholderGroupingCards } from '@/components/captable/stakeholder-grouping-cards';
 import { ValuationToggle } from '@/components/captable/valuation-toggle';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ScalesIllustration } from '@/components/shared/illustrations';
@@ -153,17 +154,25 @@ export default async function CapTablePage(props: { searchParams: Promise<{ view
       </PageShell.Header>
 
       <PageShell.Content>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <ValuationToggle current={viewMode} />
+          {hasPositions ? (
+            <p className="serif-italic text-ink-500 max-w-xl text-sm leading-relaxed">
+              La photographie du capital, à l&apos;instant.
+            </p>
+          ) : null}
         </div>
 
         {hasPositions ? (
-          <CapTableTabs
-            positions={positions}
-            totalsByClass={totals_by_class}
-            grandTotal={grand_total_units}
-            evolution={evolution}
-          />
+          <>
+            <StakeholderGroupingCards positions={positions} grandTotal={grand_total_units} />
+            <CapTableTabs
+              positions={positions}
+              totalsByClass={totals_by_class}
+              grandTotal={grand_total_units}
+              evolution={evolution}
+            />
+          </>
         ) : (
           <EmptyState
             variant="list"

@@ -373,7 +373,7 @@ function Ifrs2Tab({ detail }: { detail: PlanDetail }) {
                   <Line
                     type="monotone"
                     dataKey="cumul"
-                    stroke="hsl(var(--primary))"
+                    stroke="rgba(184, 134, 91, 0.9)"
                     strokeWidth={2}
                     dot={false}
                   />

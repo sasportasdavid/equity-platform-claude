@@ -50,11 +50,16 @@ export function ComplianceSettingsClient({
 
   return (
     <div className="space-y-6" data-testid="compliance-settings">
+      {/* DS V2 B1b — header éditorial avec NarrativeTitle italic + TitleRule */}
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Compliance</h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Personnalisez les règles de validation pour votre organisation. Les seuils par défaut
+        <div className="space-y-2">
+          <p className="text-overline text-brass-500">PARAMÈTRES · CONFORMITÉ</p>
+          <h2 className="text-h1 text-ink-900">
+            Conformité — <span className="serif-italic">gardez la main.</span>
+          </h2>
+          <div className="bg-brass-500 mt-3 h-[2px] w-16" aria-hidden="true" />
+          <p className="serif-italic text-ink-500 max-w-2xl text-sm leading-relaxed">
+            Personnalisez les seuils de validation de votre organisation. Les valeurs par défaut
             reflètent les bonnes pratiques marché et la conformité légale française.
           </p>
           <div className="mt-2 flex items-center gap-2 text-xs">
