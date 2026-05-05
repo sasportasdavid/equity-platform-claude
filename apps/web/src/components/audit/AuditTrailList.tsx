@@ -1,6 +1,7 @@
 import { verbalizeEvent } from '@/lib/audit/format';
 import { computeAuditEventHash, shortHash } from '@/lib/audit/hash';
 import type { AuditEventRow } from '@/server/queries/audit';
+import { AuditEventRowClient } from './AuditEventRowClient';
 
 /**
  * PR #39 B4 — Liste chronologique des audit_events groupée par jour.
@@ -105,35 +106,42 @@ function AuditEventRowView({ event }: { event: AuditEventRow }) {
   const verbalization = verbalizeEvent(event);
   const hash = shortHash(computeAuditEventHash(event));
   const actor = event.user_email ?? 'Système';
+  // a11y label complet pour le bouton click — verbalize + actor lisible
+  // par screen reader avant l'ouverture du drawer.
+  const ariaLabel = `Voir le détail de l'événement : ${verbalization.verb}${
+    verbalization.object ? ' ' + verbalization.object : ''
+  } — ${actor}`;
 
   return (
-    <article className="cw-audit-event" role="listitem" data-testid="audit-trail-event">
-      <time className="cw-audit-time" dateTime={event.occurred_at}>
-        {timeLabel(event.occurred_at)}
-      </time>
-      <div className="cw-audit-body">
-        <span className="cw-audit-actor" title={actor}>
-          {actor}
-        </span>
-        <p className="cw-audit-verb">
-          {verbalization.verb}
-          {verbalization.object ? (
-            <>
-              {' '}
-              <span className="cw-audit-object">{verbalization.object}</span>
-            </>
-          ) : null}
-          {verbalization.context ? (
-            <span className="cw-audit-context">{verbalization.context}</span>
-          ) : null}
-        </p>
-      </div>
-      <code
-        className="cw-audit-hash"
-        aria-label={`Empreinte cryptographique de l'événement (tronquée) : ${hash}`}
-      >
-        #{hash}
-      </code>
-    </article>
+    <AuditEventRowClient eventId={event.id} ariaLabel={ariaLabel}>
+      <article className="cw-audit-event" role="listitem" data-testid="audit-trail-event">
+        <time className="cw-audit-time" dateTime={event.occurred_at}>
+          {timeLabel(event.occurred_at)}
+        </time>
+        <div className="cw-audit-body">
+          <span className="cw-audit-actor" title={actor}>
+            {actor}
+          </span>
+          <p className="cw-audit-verb">
+            {verbalization.verb}
+            {verbalization.object ? (
+              <>
+                {' '}
+                <span className="cw-audit-object">{verbalization.object}</span>
+              </>
+            ) : null}
+            {verbalization.context ? (
+              <span className="cw-audit-context">{verbalization.context}</span>
+            ) : null}
+          </p>
+        </div>
+        <code
+          className="cw-audit-hash"
+          aria-label={`Empreinte cryptographique de l'événement (tronquée) : ${hash}`}
+        >
+          #{hash}
+        </code>
+      </article>
+    </AuditEventRowClient>
   );
 }
