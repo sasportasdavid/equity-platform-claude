@@ -23,6 +23,7 @@ import {
   getOrgFairValueSummary,
   getOrgVestingNext30Days,
 } from '@/server/queries/dashboard';
+import { getActiveOrgInfo } from '@/server/queries/active-org';
 import { getOrgNextVestingDate } from '@/server/queries/next-vesting';
 import { listPlans } from '@/server/queries/plans';
 
@@ -61,6 +62,7 @@ export default async function DashboardPage() {
     awaitingApproval,
     activePlans,
     nextVestingDate,
+    orgInfo,
   ] = await Promise.all([
     getOrgFairValueSummary(),
     getOrgComplianceAlertsSummary(),
@@ -69,6 +71,7 @@ export default async function DashboardPage() {
     getOrgAwardsAwaitingApproval(),
     listPlans({ status: ['ACTIVE'] }),
     user.activeOrgId ? getOrgNextVestingDate(user.activeOrgId) : Promise.resolve(null),
+    user.activeOrgId ? getActiveOrgInfo(user.activeOrgId) : Promise.resolve(null),
   ]);
 
   const greeting = getAdaptiveDashboardGreeting({ name: user.fullName });
@@ -106,7 +109,12 @@ export default async function DashboardPage() {
 
   return (
     <PageShell>
-      <PageShell.Breadcrumb items={[{ label: 'Capiwise' }, { label: 'Dashboard CFO' }]} />
+      <PageShell.Breadcrumb
+        items={[
+          { label: orgInfo?.displayName ?? 'Capiwise', href: '/dashboard' },
+          { label: 'Dashboard' },
+        ]}
+      />
 
       <PageShell.Header>
         <PageShell.Overline>EQUITY MANAGEMENT · {quarter}</PageShell.Overline>
