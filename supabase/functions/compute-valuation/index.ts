@@ -4,58 +4,42 @@
 //
 // V2 — 2026-05-01 — Persist payload_sent + response_received pour audit IFRS 2.46
 // V2.1 — 2026-05-03 — Bloc LIVE_AT_VALUATION (re-fetch market data avant build)
-// V3 — 2026-05-05 — Pattern EdgeRuntime.waitUntil() (B0.6, dette #94)
-//   ack 202 Accepted immédiat puis processing en background. Permet aux
-//   runs Python > 150s (cap timeout EF Supabase) d'aller au bout. Pattern
-//   identique au webhook yousign V6 (cf supabase/functions/yousign-webhook/
-//   index.ts:319-324). Le frontend poll valuation_runs.status pour passer
-//   QUEUED → RUNNING → DONE.
+// V3 — 2026-05-05 — Pattern EdgeRuntime.waitUntil() (B0.6, dette #94 partial fix)
+// V4 — 2026-05-05 — Pattern callback async Python → Capiwise (B0.7, dette #94 vrai fix)
+//   au lieu de attendre `await fetch()` sur Python (qui pouvait bloquer même <300s),
+//   on génère un callback_secret per-run, on POST Python en mode async (Python ack 202
+//   en ~100ms et fait son calcul en BackgroundTask FastAPI), et on laisse l'EF
+//   python-callback (NEW B0.7.4) gérer le UPDATE DONE quand Python POST le callback
+//   signé HMAC SHA-256.
+//
+//   Le pipeline EF compute-valuation FINIT après ack Python (~30s max via timeout).
+//   Aucune dépendance à EdgeRuntime.waitUntil long ou à grosse response Python parsing.
 //
 // Pipeline asynchrone (déclenché par la Server Action runValuation B5.3) qui :
 //   0. (V3) Validation rapide : run existe + status='QUEUED' (idempotency)
 //      → return 202 Accepted immédiat
-//   1. [BG] Charge le contexte du run depuis Supabase (plan + hypothesis_set
-//      + volatility_scheme + simulation_config + conditions + vesting_tranches
-//      + companyTicker pour TSR_REL_PEERS LIVE)
-//   1.bis. [BG] NEW V2.1 — Pour les conditions configurées en market_data_fetch_mode
-//      = LIVE_AT_VALUATION, re-fetch les paramètres marché depuis EODHD/Yahoo
-//      via les EF market-data-fetch (TSR_REL_INDEX) et market-data-peer-group
-//      (TSR_REL_PEERS). Patch in-place les valeurs sur context.python.conditions
-//      avant le buildPythonPayload. Si fetch fail → throw (mark ERROR), pas de
-//      fallback DB stale (cohérence mode LIVE).
-//   2. [BG] Construit le payload Python via buildPythonPayload (helper B5.1)
-//   3. [BG] Update valuation_runs.status = 'RUNNING' + started_at = now
-//      + payload_sent = JSON snapshot (NEW V2 — audit IFRS 2.46)
-//      + live_fetch_metadata si applicable (V2.1)
-//   4. [BG] POST vers QUANT_ENGINE_URL/compute/multi-tranche (avec API key si fournie)
-//   5. [BG] Insert valuation_results avec fair_value + sensitivities + audit_trail
-//   6. [BG] Update valuation_runs.status = 'DONE' / 'ERROR' + finished_at + pricer_used
-//      + response_received = JSON brut (NEW V2)
-//   7. [BG] Trigger compute-ifrs2-expense (Edge Function future, non bloquant)
+//   1. [BG] Charge le contexte du run depuis Supabase
+//   1.bis. [BG] V2.1 — LIVE_AT_VALUATION re-fetch market data (inchangé)
+//   2. [BG] Construit le payload Python via buildPythonPayload
+//   3. [BG] V4 NEW — Génère callback_secret + Update RUNNING + payload_sent + callback_secret
+//   4. [BG] V4 NEW — POST Python avec callback_url + callback_secret + run_id
+//      → fire-and-forget (timeout 30s pour ack 202, pas pour calcul complet)
+//   5. [BG] V4 NEW — Pipeline FINIT ICI (le callback fera UPDATE DONE + INSERT results).
+//      Mode mock (MOCK_PYTHON_ENGINE=true) garde le path direct via applyMockResult.
 //
-// Sécurité : appelle Supabase via SUPABASE_SERVICE_ROLE_KEY (bypass RLS)
-// car l'utilisateur a déjà été authentifié + la permission validée par
-// runValuation au moment de l'insertion du run QUEUED.
+// Sécurité : appelle Supabase via SUPABASE_SERVICE_ROLE_KEY (bypass RLS).
 //
 // Variables d'env requises :
 //   - SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (auto-injectées par Supabase)
-//   - QUANT_ENGINE_URL                        (https://equity-gem-quant.fly.dev)
+//   - QUANT_ENGINE_URL                        (https://equity-gem-quant-tonnom.fly.dev)
 //   - QUANT_ENGINE_API_KEY                    (optionnel — sk_live_xxx)
 //   - EODHD_API_KEY                           (V2.1 — utilisé indirect via market-data-fetch EF)
-//
-// Fallback mock : si MOCK_PYTHON_ENGINE='true', l'Edge Function génère un
-// résultat synthétique sans appeler le vrai moteur. Utile pour dev/test
-// quand le moteur n'est pas réachable depuis Supabase Edge runtime.
 // =============================================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
 import { buildPythonPayload } from '../_shared/buildPythonPayload.ts';
 import type { PythonValuationContext } from '../_shared/buildPythonPayload.ts';
 
-// Supabase EF runtime expose `EdgeRuntime.waitUntil(promise)` pour exécuter
-// du travail après l'envoi de la réponse HTTP — pattern requis pour les
-// computations longues (Python Monte Carlo > 150s avec viz). Pattern aligné
-// supabase/functions/yousign-webhook/index.ts:43.
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void } | undefined;
 
 // ---------------------------------------------------------------------------
@@ -92,11 +76,9 @@ type LiveFetchMetadata = {
 type LoadedContext = {
   orgId: string;
   planId: string;
-  /** Ticker du sous-jacent pour TSR_REL_PEERS LIVE (via plans.company_id → companies.ticker). */
   companyTicker: string | null;
   python: PythonValuationContext;
   marketDataSnapshot: Record<string, unknown>;
-  /** Module 11 B5 — flag lu sur valuation_runs.includes_visualization. */
   includeVisualization: boolean;
 };
 
@@ -119,10 +101,7 @@ Deno.serve(async (req: Request) => {
       { auth: { persistSession: false } },
     );
 
-    // V3 (B0.6) — Idempotency check : ne pas re-processer un run déjà
-    // RUNNING/DONE/ERROR. Le frontend invoke peut être déclenché plusieurs
-    // fois (router.refresh, click bouton x2) — on protège contre le double
-    // processing qui causerait des INSERT valuation_results doublons.
+    // V3 (B0.6) — Idempotency check
     const { data: runCheck, error: runCheckErr } = await supabase
       .from('valuation_runs')
       .select('id, status')
@@ -139,11 +118,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // V3 (B0.6) — Pattern EdgeRuntime.waitUntil() : ack 202 Accepted
-    // immédiat puis processing en background pour éviter le timeout EF
-    // Supabase 150s sur les runs lourds (100k paths + viz). Cf
-    // yousign-webhook/index.ts:319-324 pour pattern identique.
-    const capturedRunId = runId; // closure capture pour le BG (HTTP context destroyed après return)
+    // V3 (B0.6) — Pattern EdgeRuntime.waitUntil() : ack 202 immédiat puis BG processing
+    const capturedRunId = runId;
 
     const processValuation = async () => {
       try {
@@ -151,7 +127,6 @@ Deno.serve(async (req: Request) => {
       } catch (bgErr) {
         const msg = bgErr instanceof Error ? bgErr.message : String(bgErr);
         console.error(`[compute-valuation][bg] Run ${capturedRunId} failed: ${msg}`);
-        // Mark ERROR best-effort
         await supabase
           .from('valuation_runs')
           .update({
@@ -160,6 +135,9 @@ Deno.serve(async (req: Request) => {
             completed_at: new Date().toISOString(),
           })
           .eq('id', capturedRunId)
+          .then(() => {
+            /* noop */
+          })
           .catch((e: unknown) => {
             console.error(`[compute-valuation][bg] Failed to mark ERROR: ${String(e)}`);
           });
@@ -169,9 +147,6 @@ Deno.serve(async (req: Request) => {
     if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
       EdgeRuntime.waitUntil(processValuation());
     } else {
-      // Local dev fallback (deno run / pnpm supabase functions serve) — pas
-      // d'EdgeRuntime → on process inline (le caller attendra). En prod,
-      // EdgeRuntime est toujours présent.
       await processValuation();
     }
 
@@ -187,7 +162,7 @@ Deno.serve(async (req: Request) => {
 });
 
 // =============================================================================
-// V3 (B0.6) — Pipeline de valuation extrait pour exécution en background
+// V4 (B0.7) — Pipeline avec pattern callback Python → Capiwise
 // =============================================================================
 
 async function runValuationPipeline(
@@ -200,17 +175,9 @@ async function runValuationPipeline(
     throw new Error(`Run ${runId} introuvable ou contexte incomplet`);
   }
 
-  // 1.bis (V2.1) — LIVE_AT_VALUATION : re-fetch market data pour les conditions
-  // configurées avec ce mode. Les autres modes (SNAPSHOT_AT_GRANT, MANUAL)
-  // utilisent les valeurs déjà figées en DB par loadValuationContext.
-  //
-  // Mode "déconseillé IFRS 2" — la reproductibilité des résultats est
-  // dégradée (ré-évaluation à chaque run avec données du jour). L'audit reste
-  // possible via valuation_runs.payload_sent qui contient le payload final
-  // post-merge + live_fetch_metadata.
+  // 1.bis (V2.1) — LIVE_AT_VALUATION re-fetch market data (inchangé)
   const liveFetchResult = await refreshLiveMarketData(supabase, context);
   if (!liveFetchResult.ok) {
-    // Fail-fast — NE PAS retomber sur valeurs DB stale (contradiction mode LIVE)
     throw new Error(
       `LIVE_AT_VALUATION fetch failed for ${liveFetchResult.failedConditionId}: ` +
         liveFetchResult.error,
@@ -218,24 +185,26 @@ async function runValuationPipeline(
   }
   const liveFetchMetadata = liveFetchResult.data;
 
-  // 2. Build payload (utilise context.python avec valeurs LIVE patchées si applicable)
+  // 2. Build payload
   const payload = buildPythonPayload(context.python, {
     includeVisualization: context.includeVisualization,
   });
 
-  // Module 11 B5 — input_hash déterministe pour dédup + replay reproductible.
   const inputHash = await computeInputHash(payload);
 
-  // 3. Mark RUNNING + persist payload_sent + input_hash (Module 11 B5)
+  // 3. V4 (B0.7) NEW — Génère callback_secret per-run (64 hex chars = 256 bits entropy)
+  const callbackSecret = generateCallbackSecret();
+
+  // V4 (B0.7) NEW — Mark RUNNING + payload_sent + input_hash + callback_secret
   await supabase
     .from('valuation_runs')
     .update({
       status: 'RUNNING',
       started_at: new Date().toISOString(),
       input_hash: inputHash,
+      callback_secret: callbackSecret,
       payload_sent: {
         ...payload,
-        // V2.1 — trace les conditions re-fetched live pour audit
         ...(liveFetchMetadata.conditions_refetched.length > 0
           ? { live_fetch_metadata: liveFetchMetadata }
           : {}),
@@ -243,16 +212,120 @@ async function runValuationPipeline(
     })
     .eq('id', runId);
 
-  // 4. Appel Python (ou mock) — peut prendre > 150s pour 100k paths + viz
-  // mais EdgeRuntime.waitUntil() permet ce dépassement.
-  const result = await callPythonEngine(payload);
+  // 4. V4 (B0.7) NEW — Mock path conservé pour dev local sans Python
+  if (Deno.env.get('MOCK_PYTHON_ENGINE') === 'true') {
+    const mockResult = generateMockResponse(payload);
+    await applyMockResult(runId, context, payload, mockResult, supabase);
+    return;
+  }
 
-  // 5. Save results
-  //
-  // IFRS 2 §16-22 : la juste-valeur d'un instrument equity-settled est
-  // celle du sous-jacent SANS prise en compte des conditions de service
-  // (rétention salarié) ni des conditions non-marché (perf interne).
-  // Celles-ci ajustent la CHARGE comptable, pas la juste-valeur unitaire.
+  // 5. V4 (B0.7) NEW — POST Python en mode async (fire-and-forget)
+  await triggerPythonAsync(payload, runId, callbackSecret);
+
+  // 6. V4 (B0.7) NEW — Pipeline FINIT ICI. Le callback fera UPDATE DONE + INSERT results.
+  console.log(`[compute-valuation][bg] Run ${runId} dispatched to Python, awaiting callback`);
+}
+
+// =============================================================================
+// V4 (B0.7) NEW — Helpers
+// =============================================================================
+
+/**
+ * Génère un callback_secret per-run (64 hex chars = 256 bits entropy).
+ * Stocké dans valuation_runs.callback_secret, envoyé au moteur Python qui le
+ * réutilise pour signer le callback. EF python-callback vérifie la signature
+ * avant UPDATE.
+ */
+function generateCallbackSecret(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * V4 (B0.7) NEW — POST au moteur Python en mode async.
+ *
+ * Le payload est enrichi avec callback_url + callback_secret + run_id (top-level,
+ * cohérent avec include_visualization existant).
+ *
+ * Python doit retourner 202 Accepted en ~100ms, puis faire le calcul en
+ * BackgroundTask FastAPI, et finir par POSTer le callback signé à Capiwise.
+ *
+ * Timeout 30s : couvre l'ack 202 initial. Pas le calcul (qui peut prendre 5min+).
+ *
+ * Si Python ack non-2xx → throw → caller mark ERROR direct.
+ * Si Python ack 200 OK avec body legacy (pas {status:'accepted'}) → throw
+ * (Python n'a pas le mode callback). Cela ne doit pas arriver en prod V1.
+ */
+async function triggerPythonAsync(
+  payload: ReturnType<typeof buildPythonPayload>,
+  runId: string,
+  callbackSecret: string,
+): Promise<void> {
+  const url = Deno.env.get('QUANT_ENGINE_URL');
+  if (!url) {
+    throw new Error(
+      'QUANT_ENGINE_URL non configuré (set Supabase secret ou MOCK_PYTHON_ENGINE=true)',
+    );
+  }
+  const apiKey = Deno.env.get('QUANT_ENGINE_API_KEY');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const callbackUrl = `${supabaseUrl}/functions/v1/python-callback`;
+
+  // Enrich payload top-level (cohérent include_visualization)
+  const enrichedPayload = {
+    ...payload,
+    callback_url: callbackUrl,
+    callback_secret: callbackSecret,
+    run_id: runId,
+  };
+
+  // Timeout 30s pour ack 202 (pas pour le calcul complet — Python continue en BG)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
+  try {
+    const response = await fetch(`${url}/compute/multi-tranche`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { 'x-api-key': apiKey } : {}),
+      },
+      body: JSON.stringify(enrichedPayload),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`Python ack non-2xx ${response.status}: ${text.slice(0, 500)}`);
+    }
+
+    const ack = (await response.json().catch(() => ({}))) as { status?: string; run_id?: string };
+    if (ack.status !== 'accepted') {
+      throw new Error(
+        `Python returned unexpected ack (mode callback non supporté?): ${JSON.stringify(ack).slice(0, 500)}`,
+      );
+    }
+
+    console.log(`[compute-valuation][bg] Python accepted run ${runId}, awaiting callback`);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * V4 (B0.7) NEW — Mock path : applique le résultat directement sans appel Python.
+ * Garde le mock dev fonctionnel sans nécessiter le pattern callback.
+ */
+async function applyMockResult(
+  runId: string,
+  context: LoadedContext,
+  payload: ReturnType<typeof buildPythonPayload>,
+  result: PythonResponse,
+  supabase: ReturnType<typeof createClient>,
+): Promise<void> {
   const fairValuePerUnit =
     result.fair_value_market_only ?? result.fair_value_per_unit ?? result.fair_value ?? null;
 
@@ -277,38 +350,33 @@ async function runValuationPipeline(
     sensitivities: result.greeks ?? result.sensitivities ?? null,
     market_data_snapshot: context.marketDataSnapshot,
     fair_value: fairValuePerUnit,
-    audit_data: { source: 'compute-valuation', engine_version: result.engine_version },
+    audit_data: { source: 'compute-valuation-mock', engine_version: result.engine_version },
   });
-
-  // 6. Mark DONE + persist response_received
-  const responseObj = result as PythonResponse & { visualization?: { paths_sample?: unknown } };
-  const visualizationPresent =
-    payload.include_visualization === true &&
-    responseObj.visualization != null &&
-    Array.isArray((responseObj.visualization as { paths_sample?: unknown }).paths_sample);
 
   await supabase
     .from('valuation_runs')
     .update({
       status: 'DONE',
       completed_at: new Date().toISOString(),
-      pricer_used: payload.config.use_monte_carlo ? 'MONTE_CARLO_MULTI_TRANCHE' : 'BLACK_SCHOLES',
-      engine_version: result.engine_version ?? 'V8',
-      includes_visualization: visualizationPresent,
+      pricer_used: 'MOCK',
+      engine_version: result.engine_version ?? 'MOCK_V1',
+      includes_visualization: false,
       response_received: result,
     })
     .eq('id', runId);
 
-  // 7. Trigger IFRS 2 (best-effort)
-  supabase.functions.invoke('compute-ifrs2-expense', { body: { run_id: runId } }).catch(() => {
-    /* compute-ifrs2-expense optionnel — ignore failure */
-  });
-
-  console.log(`[compute-valuation][bg] Run ${runId} completed successfully`);
+  supabase.functions
+    .invoke('compute-ifrs2-expense', { body: { run_id: runId } })
+    .then(() => {
+      /* noop */
+    })
+    .catch(() => {
+      /* ignore */
+    });
 }
 
 // =============================================================================
-// Helpers
+// Existing helpers (unchanged from V3)
 // =============================================================================
 
 function jsonError(status: number, message: string): Response {
@@ -318,23 +386,6 @@ function jsonError(status: number, message: string): Response {
   });
 }
 
-/**
- * Module 11 B5 — Hash SHA-256 hex du payload normalisé.
- *
- * Permet :
- *   - Dédup runs identiques (même payload → même hash)
- *   - Replay reproductible : si un user re-clic "Relancer" sans changer
- *     les inputs, on peut détecter qu'il s'agit du même calcul (audit
- *     IFRS 2.46 — "même hypothèse → même fair value attendue").
- *
- * Canonicalisation : `JSON.stringify(payload, Object.keys(payload).sort())`
- * suffit V1 — les payloads sont des objets POJO stables produits par
- * `buildPythonPayload`. Si une régression introduit un ordre instable
- * (ex: Map → Object), le hash variera mais ce n'est pas critique
- * (juste moins efficace pour la dédup).
- *
- * Web Crypto SubtleCrypto : disponible en Deno EF runtime.
- */
 async function computeInputHash(payload: unknown): Promise<string> {
   const canonical = canonicalJsonStringify(payload);
   const bytes = new TextEncoder().encode(canonical);
@@ -344,7 +395,6 @@ async function computeInputHash(payload: unknown): Promise<string> {
     .join('');
 }
 
-/** Sort object keys recursively for stable JSON stringification. */
 function canonicalJsonStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return '[' + value.map(canonicalJsonStringify).join(',') + ']';
@@ -368,21 +418,6 @@ function emptyLiveFetchMetadata(): LiveFetchMetadata {
   };
 }
 
-/**
- * V2.1 — Pour chaque condition `market_data_fetch_mode = 'LIVE_AT_VALUATION'` :
- *   - TSR_REL_INDEX : invoke EF `market-data-fetch` avec ticker + as_of_date=today.
- *     Patch in-place reference_index_s0/sigma/dividend_yield sur la condition.
- *     `correlation` NON re-fetched ici (calcul vs main asset → délégué au moteur).
- *   - TSR_REL_PEERS : invoke EF `market-data-peer-group` avec company_ticker du plan.
- *     Patch in-place s0/volatility/correlationWithMain sur chaque peer (flat ou
- *     dans weighted_peer_groups) via assetStats + correlationMatrix.
- *
- * Fail-fast : si une condition LIVE foire le fetch, retourne ok:false (le caller
- * throw → status='ERROR' avec message clair). On NE retombe PAS sur valeurs DB
- * stale (contradiction mode LIVE).
- *
- * Si aucune condition LIVE : return ok:true avec metadata vide, no-op.
- */
 async function refreshLiveMarketData(
   supabase: ReturnType<typeof createClient>,
   context: LoadedContext,
@@ -403,9 +438,6 @@ async function refreshLiveMarketData(
     const condKey =
       c.id ?? c.reference_index ?? `${c.market_metric_type}-${liveConditions.indexOf(c)}`;
 
-    // -------------------------------------------------------------------------
-    // TSR_REL_INDEX
-    // -------------------------------------------------------------------------
     if (c.market_metric_type === 'TSR_REL_INDEX' && c.reference_index) {
       const lookbackDays = c.measurement_period_years
         ? Math.round(c.measurement_period_years * 252)
@@ -428,7 +460,7 @@ async function refreshLiveMarketData(
           ticker: c.reference_index,
           as_of_date: today,
           lookback_days: lookbackDays,
-          preview_only: true, // ne pas écrire en DB performance_conditions
+          preview_only: true,
         },
       });
 
@@ -440,11 +472,9 @@ async function refreshLiveMarketData(
         };
       }
 
-      // Patch in-place les valeurs sur la condition
       c.reference_index_s0 = data.data.spot_price;
       c.reference_index_sigma = data.data.annualized_volatility;
       c.reference_index_dividend_yield = data.data.dividend_yield;
-      // correlation : conservée telle quelle (calcul vs main asset délégué au moteur)
 
       metadata.conditions_refetched.push(condKey);
       metadata.fetch_timestamps[condKey] = new Date().toISOString();
@@ -454,11 +484,7 @@ async function refreshLiveMarketData(
       continue;
     }
 
-    // -------------------------------------------------------------------------
-    // TSR_REL_PEERS
-    // -------------------------------------------------------------------------
     if (c.market_metric_type === 'TSR_REL_PEERS') {
-      // Construit la liste des peers à partir de weighted_peer_groups OU peer_group flat
       const wpgPeers = (c.weighted_peer_groups ?? []).flatMap((g) => g.peers ?? []);
       const flatPeers = c.peer_group ?? [];
       const peersList = wpgPeers.length > 0 ? wpgPeers : flatPeers;
@@ -518,10 +544,6 @@ async function refreshLiveMarketData(
         };
       }
 
-      // Patch in-place chaque peer avec assetStats + correlation vs target.
-      // Convention market-data-peer-group : data.tickers[0] = company_ticker,
-      // data.tickers[1..] = peers. Donc correlation_matrix[targetIdx][peerIdx]
-      // est la corrélation peer ↔ target.
       const tickers = data.data.tickers;
       const assets = data.data.assets;
       const matrix = data.data.correlation_matrix;
@@ -548,28 +570,11 @@ async function refreshLiveMarketData(
       }
       continue;
     }
-
-    // Type non géré (NON_MARKET, etc.) → skip silencieux
-    // (LIVE_AT_VALUATION sur condition non-marché est une mauvaise config —
-    // mais pas bloquant pour V1).
   }
 
   return { ok: true, data: metadata };
 }
 
-/**
- * Charge tout le contexte nécessaire à la valorisation à partir du run_id.
- * 6 queries parallèles via Promise.all. Retourne null si le plan ou le
- * hypothesis_set/simulation_config/volatility_scheme manquent.
- *
- * V2 : étend la query performance_conditions avec les nouvelles colonnes
- * reference_index_s0/sigma/correlation/dividend_yield (migration 00050 → 00070).
- *
- * V2.1 : étend la query performance_conditions avec id + market_data_fetch_mode
- * (migration 00073) pour permettre le dispatch LIVE_AT_VALUATION. Ajoute aussi
- * la query companies pour récupérer le ticker du sous-jacent (companyTicker
- * pour TSR_REL_PEERS LIVE).
- */
 async function loadValuationContext(
   supabase: ReturnType<typeof createClient>,
   runId: string,
@@ -590,8 +595,6 @@ async function loadValuationContext(
     supabase
       .from('performance_conditions')
       .select(
-        // V2 : ajout reference_index_s0/sigma/correlation/dividend_yield
-        // V2.1 : ajout id + market_data_fetch_mode (migration 00073)
         'id, condition_type, market_metric_type, weight, measurement_period_years, comparison_method, ' +
           'reference_index, reference_index_display_name, ' +
           'reference_index_s0, reference_index_sigma, reference_index_correlation, reference_index_dividend_yield, ' +
@@ -625,8 +628,6 @@ async function loadValuationContext(
     company_id: string | null;
   };
 
-  // Volatility + simulation : chaînés depuis hypothesis_set
-  // V2.1 : + companies pour récupérer le ticker du sous-jacent
   const [volRes, simRes, companyRes] = await Promise.all([
     supabase
       .from('volatility_schemes')
@@ -669,61 +670,10 @@ async function loadValuationContext(
     marketDataSnapshot: {
       captured_at: new Date().toISOString(),
       hypothesis_set_id: hypoRes.data.id,
-      // En B5 : on capture juste les inputs hypothesis. La snapshot complète
-      // (peers + index live data depuis EODHD/Yahoo) arrive maintenant via
-      // payload_sent.live_fetch_metadata pour les conditions LIVE_AT_VALUATION.
     },
   };
 }
 
-/**
- * Appelle le moteur Python OU retourne un résultat mock si MOCK_PYTHON_ENGINE='true'.
- *
- * Le mock permet de tester le wire complet (queue → run → save) sans dépendre
- * du moteur Python — utile pour le dev local + l'E2E CI tant que le moteur
- * n'est pas accessible depuis le runtime Edge Function (probe externe bloquée
- * dans certains environnements sandbox).
- */
-async function callPythonEngine(
-  payload: ReturnType<typeof buildPythonPayload>,
-): Promise<PythonResponse> {
-  if (Deno.env.get('MOCK_PYTHON_ENGINE') === 'true') {
-    return generateMockResponse(payload);
-  }
-
-  const url = Deno.env.get('QUANT_ENGINE_URL');
-  if (!url) {
-    throw new Error(
-      'QUANT_ENGINE_URL non configuré (set Supabase secret ou MOCK_PYTHON_ENGINE=true)',
-    );
-  }
-  const apiKey = Deno.env.get('QUANT_ENGINE_API_KEY');
-
-  const response = await fetch(`${url}/compute/multi-tranche`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(apiKey ? { 'x-api-key': apiKey } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Python engine ${response.status} : ${text.slice(0, 500)}`);
-  }
-  return (await response.json()) as PythonResponse;
-}
-
-/**
- * Mock résultat — formules Black-Scholes très simplifiées (pas de
- * multi-tranches, pas de conditions perf). Suffisant pour valider le wire.
- *
- * fair_value ≈ S0 × exp(-q × T) × N(d1) - K × exp(-r × T) × N(d2)
- * avec d1 = (ln(S0/K) + (r-q+σ²/2)×T) / (σ×√T), d2 = d1 - σ×√T
- *
- * Pour les stocks (pas d'option), on retourne S0 × exp(-q × T) × vesting_prob.
- */
 function generateMockResponse(payload: ReturnType<typeof buildPythonPayload>): PythonResponse {
   const { S0, r, q, sigma } = payload.market;
   const { strike, T, type } = payload.instrument;
@@ -759,7 +709,6 @@ function generateMockResponse(payload: ReturnType<typeof buildPythonPayload>): P
   };
 }
 
-/** CDF normale standardisée — approximation Abramowitz & Stegun (1965). */
 function normCdf(x: number): number {
   const a1 = 0.254829592;
   const a2 = -0.284496736;
