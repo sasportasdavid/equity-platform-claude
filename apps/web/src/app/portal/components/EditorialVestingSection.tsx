@@ -1,4 +1,5 @@
 import { VestingTimeline, type VestingTimelineTranche } from '@/components/awards/vesting-timeline';
+import { formatVestingDateShort } from '@/lib/vesting-helpers';
 import type { VestingTimelineEntry } from '@/lib/portal/vesting';
 
 /**
@@ -59,11 +60,14 @@ export function EditorialVestingSection({
     <section className="space-y-4">
       <header>
         <p className="text-overline text-brass-500">CALENDRIER · D&apos;ACQUISITION</p>
-        <h2 className="text-h3 text-ink-900 mt-1">
-          {tranches.length === 0
-            ? 'Aucune tranche définie'
-            : `${tranches.length} tranche${tranches.length > 1 ? 's' : ''} programmée${tranches.length > 1 ? 's' : ''}`}
-        </h2>
+        <h2 className="text-h3 text-ink-900 mt-1">Chronologie de vesting</h2>
+        {tranches.length > 0 ? (
+          <p className="text-ink-500 mt-1 font-mono text-xs tracking-wide">
+            {formatVestingDateShort(vestingStart)} → {formatVestingDateShort(vestingEnd)}
+          </p>
+        ) : (
+          <p className="text-ink-500 mt-1 text-sm">Aucune tranche définie</p>
+        )}
       </header>
 
       <div className="bg-paper-50 border-paper-300 rounded-lg border p-6">
