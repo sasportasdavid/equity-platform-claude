@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { AuditEventDetailContent } from '@/components/audit/AuditEventDetailContent';
 import { AuditEventDetailDrawer } from '@/components/audit/AuditEventDetailDrawer';
+import { AuditExportButton } from '@/components/audit/AuditExportButton';
 import { AuditTrailFilters } from '@/components/audit/AuditTrailFilters';
 import { AuditTrailList } from '@/components/audit/AuditTrailList';
+import { ChainIntegrityBadge } from '@/components/audit/ChainIntegrityBadge';
 import { PageShell } from '@/components/shared/PageShell';
 import { hasPermission, requireUser } from '@/lib/auth/rbac';
 import { buildAuditHeroPhrase, buildAuditSubtitle } from '@/lib/audit/hero-phrase';
@@ -102,6 +104,18 @@ export default async function AuditTrailPage({
           </p>
         ) : (
           <>
+            {user.activeOrgId ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <ChainIntegrityBadge orgId={user.activeOrgId} />
+                <AuditExportButton
+                  filters={{
+                    eventTypePrefix:
+                      eventTypePrefix && eventTypePrefix !== 'all' ? eventTypePrefix : undefined,
+                  }}
+                />
+              </div>
+            ) : null}
+
             <AuditTrailFilters currentType={eventTypePrefix} />
 
             <AuditTrailList events={eventsResult.items} />

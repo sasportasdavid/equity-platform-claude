@@ -1028,6 +1028,147 @@
     outline: 2px solid var(--brass-500);
     outline-offset: 2px;
   }
+
+  /* === ChainIntegrityBadge + AuditExportButton (PR #42 B5) ============= */
+
+  .cw-chain-badge {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    border: 1px solid var(--paper-300);
+    background: var(--paper-100);
+  }
+
+  .cw-chain-badge--intact {
+    color: var(--bond-700);
+    border-color: var(--bond-300);
+    background: var(--bond-50);
+  }
+
+  .cw-chain-badge--broken {
+    color: var(--title-700);
+    border-color: var(--title-500);
+    background: var(--title-50);
+  }
+
+  .cw-chain-badge--neutral {
+    color: var(--ink-500);
+  }
+
+  .cw-chain-badge-dot {
+    font-size: 10px;
+    line-height: 1;
+  }
+
+  .cw-chain-badge-label {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10.5px;
+  }
+
+  .cw-chain-badge-detail {
+    color: var(--ink-500);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* === Export dropdown === */
+
+  .cw-audit-export {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+
+  .cw-audit-export-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 4px;
+    background: var(--ink-900);
+    color: var(--paper-50);
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    transition:
+      background 120ms ease,
+      opacity 120ms ease;
+  }
+
+  .cw-audit-export-trigger:hover:not(:disabled) {
+    background: var(--ink-800);
+  }
+
+  .cw-audit-export-trigger:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .cw-audit-export-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 280px;
+    background: var(--paper-50);
+    border: 1px solid var(--paper-300);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(28, 25, 23, 0.08);
+    z-index: 10;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cw-audit-export-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 10px 12px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    border-radius: 4px;
+    transition: background 100ms ease;
+  }
+
+  .cw-audit-export-item:hover {
+    background: var(--paper-200);
+  }
+
+  .cw-audit-export-item-label {
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--ink-900);
+  }
+
+  .cw-audit-export-item-hint {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--ink-500);
+  }
+
+  .cw-audit-export-error {
+    color: var(--title-700);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    margin: 0;
+    max-width: 280px;
+    text-align: right;
+  }
 }
 
 /* === Animations Editorial Finance V1 (Étape 4 + 7) === */
