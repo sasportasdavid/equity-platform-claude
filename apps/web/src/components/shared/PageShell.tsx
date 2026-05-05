@@ -100,7 +100,8 @@ function PageShellOverline({ children, className }: { children: ReactNode; class
 }
 
 function PageShellTitle({ children, className }: { children: ReactNode; className?: string }) {
-  return <h1 className={cn('text-h1 text-ink-900', className)}>{children}</h1>;
+  // PR #36 — max-width 36ch pour text-wrap balance équilibré.
+  return <h1 className={cn('text-h1 text-ink-900 max-w-[36ch]', className)}>{children}</h1>;
 }
 
 function PageShellTitleAccent({
@@ -110,7 +111,9 @@ function PageShellTitleAccent({
   children: ReactNode;
   className?: string;
 }) {
-  return <span className={cn('serif-italic text-brass-500', className)}>{children}</span>;
+  // PR #36 — italic Fraunces avec stylistic alternates ss01 (glyph riche).
+  // Cf. utility CSS `text-h1-accent` dans globals.css.
+  return <em className={cn('text-h1-accent text-brass-500', className)}>{children}</em>;
 }
 
 function PageShellTitleRule({ width }: { width?: string }) {
@@ -118,7 +121,8 @@ function PageShellTitleRule({ width }: { width?: string }) {
 }
 
 function PageShellSubtitle({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={cn('text-ink-700 text-sm', className)}>{children}</p>;
+  // PR #36 — ink-500 + max-width 64ch pour la lisibilité éditoriale.
+  return <p className={cn('text-ink-500 max-w-[64ch] text-sm', className)}>{children}</p>;
 }
 
 function PageShellActions({ children, className }: { children: ReactNode; className?: string }) {

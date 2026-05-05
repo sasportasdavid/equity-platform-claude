@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Plus } from 'lucide-react';
 import { ActivePlansTable } from '@/components/dashboard/ActivePlansTable';
 import { ComplianceAlertsBlock } from '@/components/dashboard/ComplianceAlertsBlock';
 import { HeroFairValueCard } from '@/components/dashboard/HeroFairValueCard';
@@ -14,6 +13,7 @@ import { PageShell } from '@/components/shared/PageShell';
 import { buttonVariants } from '@/components/ui/button';
 import { requireUser } from '@/lib/auth/rbac';
 import { getAdaptiveDashboardGreeting } from '@/lib/utils/adaptive-greeting';
+import { buildHeroGreetingPhrase } from '@/lib/utils/dashboard-hero-phrase';
 import { cn } from '@/lib/utils';
 import {
   getOrgActiveBeneficiaries,
@@ -62,16 +62,24 @@ export default async function DashboardPage() {
 
   const greeting = getAdaptiveDashboardGreeting({ name: user.fullName });
 
+  // PR #36 B1 — phrase éditoriale 3 fragments avec italic dynamique selon le
+  // contexte org (alertes critiques + approbations en attente).
+  const heroPhrase = buildHeroGreetingPhrase({
+    greetingPrefix: greeting,
+    criticalAlertsCount: alerts.errorCount,
+    pendingApprovalsCount: awaitingApproval.count,
+  });
+
   // Subtitle agrégé : "X bénéficiaires · Y plans actifs · Z € fair value"
   const subtitleParts: string[] = [];
   if (beneficiaries.count > 0) {
     subtitleParts.push(
-      `${beneficiaries.count} ${beneficiaries.count > 1 ? 'bénéficiaires' : 'bénéficiaire'}`,
+      `${beneficiaries.count} ${beneficiaries.count > 1 ? 'bénéficiaires actifs' : 'bénéficiaire actif'}`,
     );
   }
   if (activePlans.length > 0) {
     subtitleParts.push(
-      `${activePlans.length} ${activePlans.length > 1 ? 'plans actifs' : 'plan actif'}`,
+      `${activePlans.length} ${activePlans.length > 1 ? 'plans en cours' : 'plan en cours'}`,
     );
   }
   if (awaitingApproval.count > 0) {
@@ -87,7 +95,9 @@ export default async function DashboardPage() {
       <PageShell.Header>
         <PageShell.Overline>EQUITY MANAGEMENT · {quarter}</PageShell.Overline>
         <PageShell.Title>
-          {greeting} <PageShell.TitleAccent>voici votre vue {quarter}</PageShell.TitleAccent>
+          {heroPhrase.prefix}
+          <PageShell.TitleAccent>{heroPhrase.accent}</PageShell.TitleAccent>
+          {heroPhrase.suffix}
         </PageShell.Title>
         <PageShell.TitleRule />
         {subtitleParts.length > 0 ? (
@@ -95,11 +105,17 @@ export default async function DashboardPage() {
         ) : null}
         <PageShell.Actions>
           <Link
-            href="/dashboard/plans/new"
-            className={cn(buttonVariants({ variant: 'default' }), 'gap-2')}
+            href="/dashboard/captable/import"
+            className={buttonVariants({ variant: 'outline' })}
           >
-            <Plus className="size-4" strokeWidth={1.75} />
+            Importer cap table
+          </Link>
+          <Link
+            href="/dashboard/plans/new"
+            className={cn(buttonVariants({ variant: 'default' }), 'gap-1.5')}
+          >
             Nouveau plan
+            <span aria-hidden="true">→</span>
           </Link>
         </PageShell.Actions>
       </PageShell.Header>
