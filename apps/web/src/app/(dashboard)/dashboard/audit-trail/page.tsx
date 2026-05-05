@@ -1,4 +1,7 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { AuditEventDetailContent } from '@/components/audit/AuditEventDetailContent';
+import { AuditEventDetailDrawer } from '@/components/audit/AuditEventDetailDrawer';
 import { AuditTrailFilters } from '@/components/audit/AuditTrailFilters';
 import { AuditTrailList } from '@/components/audit/AuditTrailList';
 import { PageShell } from '@/components/shared/PageShell';
@@ -32,7 +35,7 @@ const PAGE_SIZE = 50;
 export default async function AuditTrailPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string; page?: string }>;
+  searchParams: Promise<{ type?: string; page?: string; event?: string }>;
 }) {
   const sp = await searchParams;
   const user = await requireUser();
@@ -40,6 +43,7 @@ export default async function AuditTrailPage({
 
   const eventTypePrefix = sp.type;
   const pageNumber = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
+  const detailEventId = canRead ? (sp.event ?? null) : null;
 
   const [stats, eventsResult, orgInfo] = await Promise.all([
     canRead
@@ -118,7 +122,24 @@ export default async function AuditTrailPage({
           </>
         )}
       </main>
+
+      {/* PR #41 V1.5 — Drawer détail event (open via ?event=<id>) */}
+      <AuditEventDetailDrawer eventId={detailEventId}>
+        {detailEventId ? (
+          <Suspense fallback={<DrawerSkeleton />}>
+            <AuditEventDetailContent eventId={detailEventId} />
+          </Suspense>
+        ) : null}
+      </AuditEventDetailDrawer>
     </PageShell>
+  );
+}
+
+function DrawerSkeleton() {
+  return (
+    <div className="cw-audit-drawer-body" data-testid="audit-drawer-skeleton">
+      <p className="cw-audit-empty-detail">Chargement…</p>
+    </div>
   );
 }
 
