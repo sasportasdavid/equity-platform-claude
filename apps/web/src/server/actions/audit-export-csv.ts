@@ -11,6 +11,9 @@ import {
 import { buildAuditCsv } from '@/lib/audit/export-csv-builder';
 
 /**
+ * @deprecated PR #45 — UI appelle désormais `/api/audit/export?format=csv`.
+ * Server Action gardée pour tests Vitest. V1.X = helpers partagés.
+ *
  * PR #42 B4 — Export CSV pour comptables / Excel.
  *
  * Bonus complémentaire au JSON signé (PRIMAIRE) — pas de signature

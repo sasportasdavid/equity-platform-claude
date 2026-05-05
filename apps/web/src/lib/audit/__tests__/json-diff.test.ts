@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { computeJsonDiff, formatDiffValue, type DiffEntry } from '../json-diff';
+import {
+  computeJsonDiff,
+  formatDiffValue,
+  shouldRenderAsBlock,
+  type DiffEntry,
+} from '../json-diff';
 
 describe('computeJsonDiff (PR #41 B2)', () => {
   it('both null/undefined → empty array', () => {
@@ -174,5 +179,63 @@ describe('formatDiffValue (PR #41 B2)', () => {
 
   it('array → JSON pretty', () => {
     expect(formatDiffValue([1, 2, 3])).toContain('1,');
+  });
+});
+
+describe('formatDiffValue — PR #45 B4 extensions (Bug #6 fix)', () => {
+  it('empty object {} → "—"', () => {
+    expect(formatDiffValue({})).toBe('—');
+  });
+
+  it('empty array [] → "—"', () => {
+    expect(formatDiffValue([])).toBe('—');
+  });
+
+  it('array de primitives → join virgule (lisible inline)', () => {
+    expect(formatDiffValue(['plan', 'award', 'beneficiary'])).toBe('plan, award, beneficiary');
+    expect(formatDiffValue([1, 2, 3])).toBe('1, 2, 3');
+    expect(formatDiffValue([true, false])).toBe('Oui, Non');
+    expect(formatDiffValue(['a', 1, true, null])).toBe('a, 1, Oui, (vide)');
+  });
+
+  it('array de objects → JSON pretty (multi-line)', () => {
+    const result = formatDiffValue([{ a: 1 }, { b: 2 }]);
+    expect(result).toContain('"a"');
+    expect(result.split('\n').length).toBeGreaterThan(1);
+  });
+
+  it('object non-vide → JSON pretty (préservé pour <pre>)', () => {
+    const result = formatDiffValue({ from: '2026-01-01', count: 47 });
+    expect(result).toContain('"from"');
+    expect(result.split('\n').length).toBeGreaterThan(1);
+  });
+});
+
+describe('shouldRenderAsBlock — PR #45 B4', () => {
+  it('primitives → false', () => {
+    expect(shouldRenderAsBlock('hello')).toBe(false);
+    expect(shouldRenderAsBlock(42)).toBe(false);
+    expect(shouldRenderAsBlock(true)).toBe(false);
+    expect(shouldRenderAsBlock(null)).toBe(false);
+    expect(shouldRenderAsBlock(undefined)).toBe(false);
+  });
+
+  it('empty object/array → false (rendu inline "—")', () => {
+    expect(shouldRenderAsBlock({})).toBe(false);
+    expect(shouldRenderAsBlock([])).toBe(false);
+  });
+
+  it('array de primitives → false (rendu inline join)', () => {
+    expect(shouldRenderAsBlock(['a', 'b'])).toBe(false);
+    expect(shouldRenderAsBlock([1, 2, 3])).toBe(false);
+  });
+
+  it("array d'objects → true (rendu block <pre>)", () => {
+    expect(shouldRenderAsBlock([{ a: 1 }])).toBe(true);
+  });
+
+  it('object non-vide → true (rendu block <pre>)', () => {
+    expect(shouldRenderAsBlock({ key: 'value' })).toBe(true);
+    expect(shouldRenderAsBlock({ from: '2026-01-01', to: '2026-04-30' })).toBe(true);
   });
 });

@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { AuditDrawerErrorBoundary } from './AuditDrawerErrorBoundary';
 
 /**
  * PR #41 B5 — Drawer slide-in droite 480px pour le détail d'un audit_event.
@@ -68,7 +69,7 @@ export function AuditEventDetailDrawer({ eventId, children }: AuditEventDetailDr
           >
             ×
           </DialogPrimitive.Close>
-          {children}
+          <AuditDrawerErrorBoundary>{children}</AuditDrawerErrorBoundary>
         </DialogPrimitive.Popup>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
