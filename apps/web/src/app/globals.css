@@ -557,13 +557,12 @@
     border: 1px solid transparent;
     flex-shrink: 0;
   }
-}
 
-/* === Audit Trail (cw-audit) — PR #39 V1 ================================ */
-/* Wrapped en @layer components (Tailwind 4 purge les classes top-level non
- * référencées comme utilities — cf doc cw-vt PR #38). */
+  /* === Audit Trail (cw-audit) — PR #39 V1 ============================== */
+  /* Mergé dans le même @layer components que cw-vt : Tailwind 4 / Lightning
+   * CSS conserve uniquement le 1er @layer components par fichier — un 2e
+   * bloc séparé est silencieusement dropped (cf bug audit-trail livré). */
 
-@layer components {
   .cw-audit-list {
     display: flex;
     flex-direction: column;
@@ -726,6 +725,308 @@
     font-size: 12.5px;
     color: var(--ink-500);
     margin-top: 16px;
+  }
+
+  /* === Audit Event Detail Drawer (cw-audit-drawer) — PR #41 V1.5 ======= */
+  /* Drawer slide-in droite 480px, branché sur DialogPrimitive.Root (Base UI)
+   * pour le focus trap + ESC + aria-modal. */
+
+  .cw-audit-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(28, 25, 23, 0.16);
+    backdrop-filter: blur(2px);
+    z-index: 49;
+  }
+
+  .cw-audit-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(480px, 100vw);
+    background: var(--paper-50);
+    border-left: 1px solid var(--paper-300);
+    box-shadow: -8px 0 32px rgba(28, 25, 23, 0.08);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    outline: none;
+    animation: cw-audit-slide-in 240ms ease-out;
+  }
+
+  @keyframes cw-audit-slide-in {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cw-audit-drawer {
+      animation: none;
+    }
+  }
+
+  .cw-audit-drawer-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: transparent;
+    border: 1px solid var(--paper-300);
+    color: var(--ink-500);
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+      background 120ms ease,
+      color 120ms ease;
+    z-index: 1;
+  }
+
+  .cw-audit-drawer-close:hover {
+    background: var(--paper-200);
+    color: var(--ink-900);
+  }
+
+  .cw-audit-drawer-header {
+    padding: 24px 28px 16px;
+    border-bottom: 1px solid var(--paper-300);
+    padding-right: 56px;
+  }
+
+  .cw-audit-drawer-overline {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--brass-700);
+    margin-bottom: 4px;
+  }
+
+  .cw-audit-drawer-title {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--ink-900);
+    line-height: 1.35;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .cw-audit-drawer-meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-500);
+    margin-top: 12px;
+    line-height: 1.5;
+  }
+
+  .cw-audit-drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .cw-audit-section-title {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-500);
+    margin: 0 0 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+  }
+
+  .cw-audit-section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--paper-300);
+  }
+
+  .cw-audit-kv {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 8px 16px;
+    font-size: 13px;
+    align-items: baseline;
+    margin: 0;
+  }
+
+  .cw-audit-kv dt {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-500);
+    text-transform: lowercase;
+  }
+
+  .cw-audit-kv dd {
+    color: var(--ink-900);
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+    word-break: break-word;
+  }
+
+  .cw-audit-kv dd code {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    background: var(--paper-100);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .cw-audit-diff {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .cw-audit-diff-entry {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .cw-audit-diff-key {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-500);
+  }
+
+  .cw-audit-diff-before {
+    color: var(--ink-500);
+    text-decoration: line-through;
+    font-size: 13px;
+    word-break: break-word;
+  }
+
+  .cw-audit-diff-after {
+    color: var(--bond-700);
+    font-weight: 500;
+    font-size: 13px;
+    word-break: break-word;
+  }
+
+  .cw-audit-diff-after::before {
+    content: '→ ';
+    color: var(--brass-500);
+    margin-right: 4px;
+  }
+
+  .cw-audit-diff-entry[data-diff-type='added'] .cw-audit-diff-after::before {
+    content: '+ ';
+  }
+
+  .cw-audit-diff-entry[data-diff-type='removed'] .cw-audit-diff-before {
+    color: var(--title-500);
+  }
+
+  .cw-audit-hash-status {
+    color: var(--bond-700);
+    font-weight: 600;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+
+  .cw-audit-hash-block {
+    background: var(--paper-100);
+    border: 1px solid var(--paper-300);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-700);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .cw-audit-hash-full {
+    word-break: break-all;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cw-audit-hash-copy {
+    background: transparent;
+    border: 1px solid var(--paper-300);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-700);
+    cursor: pointer;
+    transition: all 120ms;
+    flex-shrink: 0;
+  }
+
+  .cw-audit-hash-copy:hover {
+    background: var(--paper-200);
+    color: var(--ink-900);
+  }
+
+  .cw-audit-resource-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--brass-700);
+    font-style: italic;
+    font-family: var(--font-serif);
+    font-size: 14px;
+    text-decoration: none;
+    transition: color 120ms;
+  }
+
+  .cw-audit-resource-link:hover {
+    color: var(--brass-900);
+    text-decoration: underline;
+  }
+
+  .cw-audit-resource-static {
+    color: var(--ink-700);
+    font-size: 13px;
+    font-family: var(--font-sans);
+  }
+
+  .cw-audit-empty-detail {
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: var(--ink-500);
+    font-size: 14px;
+    margin: 0;
+  }
+
+  /* === Click affordance sur les rows audit (PR #41) ==================== */
+
+  .cw-audit-event-clickable {
+    cursor: pointer;
+    outline: none;
+    border-radius: 4px;
+  }
+
+  .cw-audit-event-clickable:focus-visible {
+    outline: 2px solid var(--brass-500);
+    outline-offset: 2px;
   }
 }
 
