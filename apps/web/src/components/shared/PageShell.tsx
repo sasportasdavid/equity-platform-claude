@@ -96,12 +96,17 @@ function PageShellHeader({ children, className }: { children: ReactNode; classNa
 }
 
 function PageShellOverline({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={cn('text-overline text-brass-500', className)}>{children}</p>;
+  // ⚠️ Idem PageShellTitle — twMerge drop `text-overline` à cause du
+  // préfixe `text-` partagé avec `text-brass-500`. Concat manuelle.
+  return <p className={`text-overline text-brass-500 ${cn(className)}`}>{children}</p>;
 }
 
 function PageShellTitle({ children, className }: { children: ReactNode; className?: string }) {
   // PR #36 — max-width 36ch pour text-wrap balance équilibré.
-  return <h1 className={cn('text-h1 text-ink-900 max-w-[36ch]', className)}>{children}</h1>;
+  // ⚠️ tailwind-merge déduit que `text-h1` et `text-ink-900` sont conflict
+  // (préfixe `text-`) et drop le premier. On concatène manuellement les 2
+  // classes typo et color, et applique cn() sur le reste + override.
+  return <h1 className={`text-h1 text-ink-900 ${cn('max-w-[36ch]', className)}`}>{children}</h1>;
 }
 
 function PageShellTitleAccent({
@@ -112,8 +117,9 @@ function PageShellTitleAccent({
   className?: string;
 }) {
   // PR #36 — italic Fraunces avec stylistic alternates ss01 (glyph riche).
-  // Cf. utility CSS `text-h1-accent` dans globals.css.
-  return <em className={cn('text-h1-accent text-brass-500', className)}>{children}</em>;
+  // Cf. utility CSS `text-h1-accent` dans globals.css. Idem twMerge —
+  // `text-h1-accent` + `text-brass-500` conflict, on concatène en string.
+  return <em className={`text-h1-accent text-brass-500 ${cn(className)}`}>{children}</em>;
 }
 
 function PageShellTitleRule({ width }: { width?: string }) {
@@ -122,7 +128,10 @@ function PageShellTitleRule({ width }: { width?: string }) {
 
 function PageShellSubtitle({ children, className }: { children: ReactNode; className?: string }) {
   // PR #36 — ink-500 + max-width 64ch pour la lisibilité éditoriale.
-  return <p className={cn('text-ink-500 max-w-[64ch] text-sm', className)}>{children}</p>;
+  // text-sm + text-ink-500 sont 2 utility groups différents (font-size +
+  // text-color) — pas de conflit twMerge mais on garde la même structure
+  // de string pour cohérence.
+  return <p className={`text-ink-500 max-w-[64ch] text-sm ${cn(className)}`}>{children}</p>;
 }
 
 function PageShellActions({ children, className }: { children: ReactNode; className?: string }) {
