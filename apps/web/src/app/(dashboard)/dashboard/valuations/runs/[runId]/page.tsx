@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { requirePermission } from '@/lib/auth/rbac';
 import { getValuationRunById } from '@/server/actions/valuations';
 import { MonteCarloViewer } from '@/components/valuation/MonteCarloViewer';
+import { ValuationRunStatusPoller } from '@/components/valuation/ValuationRunStatusPoller';
 
 export const metadata: Metadata = {
   title: 'Valorisation Monte Carlo · Capiwise',
@@ -88,8 +89,11 @@ export default async function ValuationRunReplayPage({
               <p className="text-destructive max-w-xl font-mono text-xs">{run.errorMessage}</p>
             ) : null}
             <p className="text-muted-foreground text-xs">
-              Rechargez la page pour voir l&apos;état le plus récent.
+              La page se rafraîchira automatiquement à la fin du calcul.
             </p>
+            {run.status === 'QUEUED' || run.status === 'RUNNING' ? (
+              <ValuationRunStatusPoller runId={run.id} initialStatus={run.status} />
+            ) : null}
           </CardContent>
         </Card>
       </PageShell>
