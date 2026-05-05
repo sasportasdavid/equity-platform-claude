@@ -8,6 +8,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { hasPermission, requireUser } from '@/lib/auth/rbac';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getMyPendingApprovalsCount } from '@/server/queries/approvals';
+import { getSidebarCounts, type SidebarCounts } from '@/server/queries/sidebar-counts';
 import { logout } from '@/server/actions/auth';
 import { cn } from '@/lib/utils';
 
@@ -33,6 +34,13 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   let pendingApprovalsCount = 0;
   if (user.id && (await hasPermission('approvals.act'))) {
     pendingApprovalsCount = await getMyPendingApprovalsCount(user.id);
+  }
+
+  // PR #35 B2 — counters dynamiques sidebar (Plans / Bénéficiaires / Attributions).
+  // Cache 60s par org via unstable_cache. Skip si pre-onboarding (pas d'orgId).
+  let sidebarCounts: SidebarCounts | null = null;
+  if (user.activeOrgId) {
+    sidebarCounts = await getSidebarCounts(user.activeOrgId);
   }
 
   return (
@@ -69,7 +77,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
         </nav>
       </header>
       <div className="flex flex-1">
-        <DashboardSidebar pendingApprovalsCount={pendingApprovalsCount} />
+        <DashboardSidebar pendingApprovalsCount={pendingApprovalsCount} counts={sidebarCounts} />
         <main className="min-w-0 flex-1 px-6 py-10 lg:px-8">{children}</main>
       </div>
     </div>
