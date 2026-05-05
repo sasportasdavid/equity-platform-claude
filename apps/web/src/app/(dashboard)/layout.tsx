@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { LogOut, Settings } from 'lucide-react';
 import { DashboardSidebar } from '@/components/shared/dashboard-sidebar';
-import { OrgSwitcher } from '@/components/shared/org-switcher';
+import { OrgSwitcherCard } from '@/components/shared/org-switcher-card';
 import { ThemeToggle } from '@/components/shared/theme-toggle';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { hasPermission, requireUser } from '@/lib/auth/rbac';
@@ -53,8 +53,17 @@ export default async function DashboardLayout({ children }: { children: ReactNod
             </span>
             <span className="font-semibold tracking-tight">Capiwise</span>
           </Link>
-          <span className="text-muted-foreground/40 hidden sm:inline">/</span>
-          <OrgSwitcher activeOrgId={user.activeOrgId} activeOrgName={activeOrgName} />
+          {activeOrgName ? (
+            <>
+              <span className="text-muted-foreground/40 hidden sm:inline">/</span>
+              <span
+                className="text-muted-foreground hidden text-sm sm:inline"
+                data-testid="org-name-static"
+              >
+                {activeOrgName}
+              </span>
+            </>
+          ) : null}
         </div>
         <nav className="flex items-center gap-3">
           <span className="text-muted-foreground hidden text-sm sm:inline" data-testid="user-email">
@@ -77,7 +86,17 @@ export default async function DashboardLayout({ children }: { children: ReactNod
         </nav>
       </header>
       <div className="flex flex-1">
-        <DashboardSidebar pendingApprovalsCount={pendingApprovalsCount} counts={sidebarCounts} />
+        <DashboardSidebar
+          pendingApprovalsCount={pendingApprovalsCount}
+          counts={sidebarCounts}
+          footerSlot={
+            <OrgSwitcherCard
+              activeOrgId={user.activeOrgId}
+              activeOrgName={activeOrgName}
+              beneficiariesCount={sidebarCounts?.beneficiaries ?? null}
+            />
+          }
+        />
         <main className="min-w-0 flex-1 px-6 py-10 lg:px-8">{children}</main>
       </div>
     </div>
