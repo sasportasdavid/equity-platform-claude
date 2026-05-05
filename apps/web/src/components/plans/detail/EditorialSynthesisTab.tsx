@@ -163,6 +163,15 @@ export function EditorialSynthesisTab({ detail, planAwards = [] }: EditorialSynt
             vestingEnd={vestingEnd}
             unitsGranted={detail.plan.pool_size}
             theoreticalMode
+            cliffDate={cliffDate ? cliffDate.toISOString().slice(0, 10) : undefined}
+            cliffPct={cliffPct ?? undefined}
+            conditionalPercentage={hasConditions ? 20 : undefined}
+            conditionalLabel={
+              detail.conditions[0]?.name
+                ? `Conditionnel · ${detail.conditions[0].name}`
+                : 'Conditionnel · perf.'
+            }
+            bare
           />
         ) : (
           <p className="text-ink-500 serif-italic text-sm">
