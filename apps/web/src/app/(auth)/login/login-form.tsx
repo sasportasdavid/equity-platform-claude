@@ -169,7 +169,7 @@ export function LoginForm() {
 
   if (sentTo) {
     return (
-      <Card>
+      <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Mail className="size-5" /> Email envoyé
@@ -195,7 +195,7 @@ export function LoginForm() {
   }
 
   return (
-    <Card>
+    <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle>Se connecter</CardTitle>
         <CardDescription>

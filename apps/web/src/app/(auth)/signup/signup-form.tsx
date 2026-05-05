@@ -87,7 +87,7 @@ export function SignupForm({ tosVersion }: { tosVersion: string }) {
 
   if (sentTo) {
     return (
-      <Card>
+      <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Mail className="size-5" /> Email envoyé
@@ -123,7 +123,7 @@ export function SignupForm({ tosVersion }: { tosVersion: string }) {
   }
 
   return (
-    <Card>
+    <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle>Créer votre compte</CardTitle>
         <CardDescription>

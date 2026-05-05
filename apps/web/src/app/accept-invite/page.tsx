@@ -44,7 +44,7 @@ export default async function AcceptInvitePage({ searchParams }: { searchParams:
   }).format(expiresAt);
 
   return (
-    <Card>
+    <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>
           {isBeneficiary
@@ -93,7 +93,7 @@ export default async function AcceptInvitePage({ searchParams }: { searchParams:
 
 function InvalidInvitationCard({ reason }: { reason: string }) {
   return (
-    <Card>
+    <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <AlertCircle className="text-destructive size-5" />

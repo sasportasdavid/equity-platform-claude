@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default async function OrganizationPage() {
   const user = await requireUser();
-  if (!user.activeOrgId) redirect('/onboarding/create-org');
+  if (!user.activeOrgId) redirect('/onboarding/company');
 
   // Lecture autorisée à tous les membres ; édition ensuite gardée par perm.
   const canEdit = await hasPermission('org.update');

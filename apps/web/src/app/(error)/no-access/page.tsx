@@ -20,7 +20,7 @@ export default function NoAccessPage() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        <Link href="/onboarding/create-org" className={cn(buttonVariants({ variant: 'default' }))}>
+        <Link href="/onboarding/company" className={cn(buttonVariants({ variant: 'default' }))}>
           Créer une organisation
         </Link>
         <Link href="/login" className={cn(buttonVariants({ variant: 'outline' }))}>

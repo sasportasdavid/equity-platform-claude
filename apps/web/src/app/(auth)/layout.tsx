@@ -10,7 +10,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         </span>
         <span className="text-xl font-semibold tracking-tight">Capiwise</span>
       </Link>
-      <main className="w-full max-w-sm">{children}</main>
+      <main className="flex w-full justify-center">{children}</main>
       <p className="text-muted-foreground mt-8 text-center text-xs">
         © {new Date().getFullYear()} Capiwise · plateforme française d’actionnariat salarié
       </p>

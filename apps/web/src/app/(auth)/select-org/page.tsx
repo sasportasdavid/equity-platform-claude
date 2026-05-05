@@ -26,7 +26,9 @@ export default async function SelectOrgPage() {
     .order('created_at', { ascending: true });
 
   if (!memberships || memberships.length === 0) {
-    redirect('/onboarding/create-org');
+    // Module 14 B2 : on passe par le routeur /onboarding (page.tsx) qui
+    // décide entre /profile, /company ou /welcome selon l'état du user.
+    redirect('/onboarding');
   }
 
   // Si une seule org ET qu'elle est DÉJÀ l'active du JWT → redirect /dashboard.
@@ -76,7 +78,7 @@ export default async function SelectOrgPage() {
         </CardHeader>
         <CardContent>
           <Link
-            href="/onboarding/create-org"
+            href="/onboarding/company"
             className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-2')}
           >
             Créer une organisation
