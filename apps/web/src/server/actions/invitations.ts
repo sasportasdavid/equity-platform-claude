@@ -14,6 +14,7 @@ import {
 import { logAuditEvent } from '@/lib/audit';
 import { requirePermission } from '@/lib/auth/rbac';
 import { getServerEnv } from '@/lib/env';
+import { checkRateLimitForCurrentRequest } from '@/lib/rate-limit/server';
 import { sendEmail } from '@/lib/resend/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 
@@ -183,6 +184,12 @@ export type AcceptInvitationResult =
 export async function acceptInvitation(
   input: AcceptInvitationInput,
 ): Promise<AcceptInvitationResult> {
+  // Module 14 B5 — rate limit 5/15min/IP (anti brute-force token)
+  const rl = await checkRateLimitForCurrentRequest('accept_invite');
+  if (!rl.allowed) {
+    return { success: false, error: 'Trop de tentatives. Réessayez dans quelques minutes.' };
+  }
+
   const parsed = acceptInvitationSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: 'Token invalide.' };
@@ -326,6 +333,14 @@ export type RequestInvitationResendResult = { ok: true };
 export async function requestInvitationResendByToken(
   input: RequestInvitationResendInput,
 ): Promise<RequestInvitationResendResult> {
+  // Module 14 B5 — rate limit 5/15min/IP (anti spam de l'inviteur)
+  const rl = await checkRateLimitForCurrentRequest('invitation_resend');
+  if (!rl.allowed) {
+    // Anti enum : on retourne ok: true même si rate-limited (le fallback
+    // côté UI affiche le même message confirmation peu importe).
+    return { ok: true };
+  }
+
   const parsed = RequestInvitationResendSchema.safeParse(input);
   if (!parsed.success) {
     // Anti enum : silently OK

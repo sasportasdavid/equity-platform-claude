@@ -8,6 +8,7 @@ import { uuidSchema, emailSchema, signupWithMagicLinkSchema } from '@equity/shar
 import { logAuditEvent } from '@/lib/audit';
 import { ensureUserProfileExists } from '@/lib/auth/ensure-user-profile';
 import { getServerEnv } from '@/lib/env';
+import { checkRateLimitForCurrentRequest, formatRateLimitedMessage } from '@/lib/rate-limit/server';
 import { sendEmail } from '@/lib/resend/client';
 import { requireUser } from '@/lib/auth/rbac';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -89,6 +90,12 @@ export type SignupWithMagicLinkResult =
 export async function signupWithMagicLink(
   input: SignupWithMagicLinkInput,
 ): Promise<SignupWithMagicLinkResult> {
+  // Module 14 B5 — rate limit 5/15min/IP
+  const rl = await checkRateLimitForCurrentRequest('signup');
+  if (!rl.allowed) {
+    return { ok: false, error: formatRateLimitedMessage(rl.retryAfterMs) };
+  }
+
   const parsed = signupWithMagicLinkSchema.safeParse(input);
   if (!parsed.success) {
     return {
