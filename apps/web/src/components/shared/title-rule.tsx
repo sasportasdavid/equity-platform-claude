@@ -28,7 +28,7 @@ export function TitleRule({
 }) {
   return (
     <div
-      className={cn('bg-brass-500 animate-draw-line mt-3 h-[2px]', className)}
+      className={cn('bg-brass-500 animate-draw-line mb-2 mt-3 h-px', className)}
       style={{ width }}
       aria-hidden="true"
       data-testid="title-rule"

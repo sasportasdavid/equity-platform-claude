@@ -335,9 +335,21 @@
 @utility text-h1 {
   font-family: var(--font-serif);
   font-size: 32px;
-  line-height: 1.15;
+  line-height: 1.2;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+/* PR #36 — italic stylé Fraunces avec stylistic alternates ss01 (glyph riche).
+   Si Fraunces n'inclut pas ss01 dans le subset Google Fonts, le fallback est
+   l'italic standard — pas de régression. À utiliser dans <PageShell.TitleAccent>
+   pour les mots éditoriaux mid-sentence du H1 (ex `*deux points*`). */
+@utility text-h1-accent {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 600;
+  font-feature-settings: 'ss01', 'tnum';
 }
 
 @utility text-h2 {

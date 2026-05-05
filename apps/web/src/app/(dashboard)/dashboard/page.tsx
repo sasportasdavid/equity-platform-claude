@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Plus } from 'lucide-react';
 import { ActivePlansTable } from '@/components/dashboard/ActivePlansTable';
 import { ComplianceAlertsBlock } from '@/components/dashboard/ComplianceAlertsBlock';
 import { HeroFairValueCard } from '@/components/dashboard/HeroFairValueCard';
@@ -14,6 +13,8 @@ import { PageShell } from '@/components/shared/PageShell';
 import { buttonVariants } from '@/components/ui/button';
 import { requireUser } from '@/lib/auth/rbac';
 import { getAdaptiveDashboardGreeting } from '@/lib/utils/adaptive-greeting';
+import { buildHeroGreetingPhrase } from '@/lib/utils/dashboard-hero-phrase';
+import { formatDateOrdinalFr } from '@/lib/utils/format-date-fr';
 import { cn } from '@/lib/utils';
 import {
   getOrgActiveBeneficiaries,
@@ -22,6 +23,8 @@ import {
   getOrgFairValueSummary,
   getOrgVestingNext30Days,
 } from '@/server/queries/dashboard';
+import { getActiveOrgInfo } from '@/server/queries/active-org';
+import { getOrgNextVestingDate } from '@/server/queries/next-vesting';
 import { listPlans } from '@/server/queries/plans';
 
 export const metadata: Metadata = {
@@ -49,30 +52,54 @@ export const metadata: Metadata = {
 export default async function DashboardPage() {
   const user = await requireUser();
 
-  // Charge en parallèle les 6 sources de données (5 KPIs + plans actifs)
-  const [fairValue, alerts, vesting30, beneficiaries, awaitingApproval, activePlans] =
-    await Promise.all([
-      getOrgFairValueSummary(),
-      getOrgComplianceAlertsSummary(),
-      getOrgVestingNext30Days(),
-      getOrgActiveBeneficiaries(),
-      getOrgAwardsAwaitingApproval(),
-      listPlans({ status: ['ACTIVE'] }),
-    ]);
+  // Charge en parallèle les sources (5 KPIs + plans actifs + next vesting).
+  // PR #36 : `nextVestingDate` rejoint le Promise.all pour le subtitle.
+  const [
+    fairValue,
+    alerts,
+    vesting30,
+    beneficiaries,
+    awaitingApproval,
+    activePlans,
+    nextVestingDate,
+    orgInfo,
+  ] = await Promise.all([
+    getOrgFairValueSummary(),
+    getOrgComplianceAlertsSummary(),
+    getOrgVestingNext30Days(),
+    getOrgActiveBeneficiaries(),
+    getOrgAwardsAwaitingApproval(),
+    listPlans({ status: ['ACTIVE'] }),
+    user.activeOrgId ? getOrgNextVestingDate(user.activeOrgId) : Promise.resolve(null),
+    user.activeOrgId ? getActiveOrgInfo(user.activeOrgId) : Promise.resolve(null),
+  ]);
 
   const greeting = getAdaptiveDashboardGreeting({ name: user.fullName });
 
-  // Subtitle agrégé : "X bénéficiaires · Y plans actifs · Z € fair value"
+  // PR #36 B1 — phrase éditoriale 3 fragments avec italic dynamique selon le
+  // contexte org (alertes critiques + approbations en attente).
+  const heroPhrase = buildHeroGreetingPhrase({
+    greetingPrefix: greeting,
+    criticalAlertsCount: alerts.errorCount,
+    pendingApprovalsCount: awaitingApproval.count,
+  });
+
+  // PR #36 B2 — Subtitle 3 fragments : `N bénéficiaires actifs · M plans en
+  // cours · prochaine échéance vesting le 1ᵉʳ juin`. Fragment 3 masqué si
+  // pas d'échéance future, fragment approbation conservé en queue si > 0.
   const subtitleParts: string[] = [];
   if (beneficiaries.count > 0) {
     subtitleParts.push(
-      `${beneficiaries.count} ${beneficiaries.count > 1 ? 'bénéficiaires' : 'bénéficiaire'}`,
+      `${beneficiaries.count} ${beneficiaries.count > 1 ? 'bénéficiaires actifs' : 'bénéficiaire actif'}`,
     );
   }
   if (activePlans.length > 0) {
     subtitleParts.push(
-      `${activePlans.length} ${activePlans.length > 1 ? 'plans actifs' : 'plan actif'}`,
+      `${activePlans.length} ${activePlans.length > 1 ? 'plans en cours' : 'plan en cours'}`,
     );
+  }
+  if (nextVestingDate) {
+    subtitleParts.push(`prochaine échéance vesting le ${formatDateOrdinalFr(nextVestingDate)}`);
   }
   if (awaitingApproval.count > 0) {
     subtitleParts.push(`${awaitingApproval.count} en attente d'approbation`);
@@ -82,12 +109,19 @@ export default async function DashboardPage() {
 
   return (
     <PageShell>
-      <PageShell.Breadcrumb items={[{ label: 'Capiwise' }, { label: 'Dashboard CFO' }]} />
+      <PageShell.Breadcrumb
+        items={[
+          { label: orgInfo?.displayName ?? 'Capiwise', href: '/dashboard' },
+          { label: 'Dashboard' },
+        ]}
+      />
 
       <PageShell.Header>
         <PageShell.Overline>EQUITY MANAGEMENT · {quarter}</PageShell.Overline>
         <PageShell.Title>
-          {greeting} <PageShell.TitleAccent>voici votre vue {quarter}</PageShell.TitleAccent>
+          {heroPhrase.prefix}
+          <PageShell.TitleAccent>{heroPhrase.accent}</PageShell.TitleAccent>
+          {heroPhrase.suffix}
         </PageShell.Title>
         <PageShell.TitleRule />
         {subtitleParts.length > 0 ? (
@@ -95,11 +129,17 @@ export default async function DashboardPage() {
         ) : null}
         <PageShell.Actions>
           <Link
-            href="/dashboard/plans/new"
-            className={cn(buttonVariants({ variant: 'default' }), 'gap-2')}
+            href="/dashboard/captable/import"
+            className={buttonVariants({ variant: 'outline' })}
           >
-            <Plus className="size-4" strokeWidth={1.75} />
+            Importer cap table
+          </Link>
+          <Link
+            href="/dashboard/plans/new"
+            className={cn(buttonVariants({ variant: 'default' }), 'gap-1.5')}
+          >
             Nouveau plan
+            <span aria-hidden="true">→</span>
           </Link>
         </PageShell.Actions>
       </PageShell.Header>
