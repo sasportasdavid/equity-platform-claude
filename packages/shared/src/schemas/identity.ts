@@ -77,3 +77,30 @@ export const updateProfileSchema = z.object({
   preferences: z.record(z.string(), z.unknown()).optional(),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+// ---------------------------------------------------------------------------
+// Module 14 — Signup public (magic-link flow, Option C)
+// ---------------------------------------------------------------------------
+
+/**
+ * Module 14 PR #43 §B1 — Signup public via magic-link.
+ *
+ * - `email` : adresse RFC-5322 normalisée (trim + toLowerCase via emailSchema).
+ * - `tosAccepted` : DOIT être `true` (checkbox UI). Le `z.literal(true)`
+ *   bloque la soumission côté serveur si désactivée par DOM tampering.
+ * - `tosVersion` : version ToS acceptée (ex `v1.0-2026-05-05`). Stockée dans
+ *   `user_profiles.tos_version_accepted` pour gating re-accept V1.X.
+ *
+ * **Pas de password** : aligné spec MODULE_02 §1.1 (magic-link only en V1).
+ * **Pas de full_name au signup** : capturé à l'étape 1 du wizard onboarding
+ * (B2). Garde le formulaire signup minimal (1 input + 1 checkbox) et évite
+ * le fingerprinting d'un user déjà inscrit (anti email enumeration).
+ */
+export const signupWithMagicLinkSchema = z.object({
+  email: emailSchema,
+  tosAccepted: z.literal(true, {
+    message: 'Vous devez accepter les conditions d’utilisation pour continuer.',
+  }),
+  tosVersion: z.string().trim().min(1).max(50),
+});
+export type SignupWithMagicLinkInput = z.infer<typeof signupWithMagicLinkSchema>;
