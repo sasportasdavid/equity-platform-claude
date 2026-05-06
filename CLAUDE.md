@@ -234,6 +234,150 @@ Côté Next.js (`.env.local`) :
 Côté Edge Function `notifications-consumer` (Supabase secrets, B3) :
 identiques + service_role injecté automatiquement.
 
+### Variables env Sentry (V1.0 pre-beta, sprint 7 mai 2026)
+
+Côté Next.js (`.env.local` + Vercel Production/Preview) :
+
+- `NEXT_PUBLIC_SENTRY_DSN` — DSN public du projet `capiwise-web`
+  (Sentry Dashboard → Settings → Client Keys). Utilisé client + server.
+- `SENTRY_DSN` — fallback côté server runtime (souvent identique au
+  PUBLIC). Garder les deux pour ceintures+bretelles.
+- `SENTRY_ORG`, `SENTRY_PROJECT` — slugs pour upload source maps build
+  (org `capiwise`, project `capiwise-web`).
+- `SENTRY_AUTH_TOKEN` — token scope `project:write` (Sentry Dashboard →
+  Settings → Auth Tokens). Vercel Production+Preview, **jamais**
+  Development.
+
+Si DSN absent, `withSentryConfig` est skippé dans `next.config.ts` (le
+build local marche sans Sentry). Source maps uploadées automatiquement
+via le wrapper, supprimées du `.next/static` après upload (pas
+publiquement exposées).
+
+## Status V1.0 (post sprint 6-7 mai 2026)
+
+- 14 modules livrés en prod sur https://www.capiwise.fr (Vercel +
+  Supabase eu-west-1 `ytlfnxcrclugrsbvqdkb`).
+- 8 bugs P0 résolus le 6 mai (PR #45 + #46) — voir
+  `BILAN_SPRINT_6_MAI.md`.
+- pg_cron + job `valuation-monthly-refresh` actifs (`0 3 1 * *`).
+  10 plans actuellement éligibles à la prochaine exécution.
+- Beta privée prévue le 18 mai 2026.
+- Sentry + healthcheck quant engine + page Help/Contact + canary
+  endpoint livrés sur PR #47 (sprint pré-beta 7 mai).
+
+## Monitoring & Ops
+
+### Sentry (V1.0)
+
+- Dashboard : https://sentry.io/organizations/capiwise/projects/capiwise-web/
+  (créé pendant le sprint pré-beta).
+- Tags par défaut sur les events : `environment` (production / preview /
+  development), `release` (7 chars du SHA git Vercel).
+- Tags contextuels (Server Actions) : `server_action`, `org_id`,
+  `user_id`, `route`. Helper `withSentryServerAction(name, fn, ctx)`
+  dans `apps/web/src/lib/monitoring/sentry.ts`.
+- Sample rates : `tracesSampleRate=0.1` en prod, `1.0` en dev.
+  `replaysSessionSampleRate=0.1` (10% des sessions enregistrées),
+  `replaysOnErrorSampleRate=1.0` (100% des sessions où une erreur
+  remonte).
+- Filtres `beforeSend` (cf `sentry-filters.ts`) : ignore
+  `NEXT_REDIRECT`, `NEXT_NOT_FOUND`, `AuthSessionMissingError` —
+  bruit attendu de Next.js et Supabase Auth.
+- Canary curl-able sans auth :
+  `curl https://www.capiwise.fr/api/sentry-test` → HTTP 500 + JSON,
+  l'erreur `SentryCanaryError` apparaît dans le dashboard avec tag
+  `sentry_canary=true`.
+
+### Vercel logs
+
+- Console : https://vercel.com/sasportasdavids-projects/capiwise/logs
+- Tags utilisés dans le code (Server Actions et EFs) : `[auth]`,
+  `[invitations]`, `[compliance]`, `[yousign]`, `[valuation]`,
+  `[notifications]`, `[exercise]`.
+
+### Quant engine Fly.io
+
+- URL : `https://equity-gem-quant-tonnom.fly.dev`
+- Engine version actuelle : 2.6.1 (vérifié 2026-05-07).
+- Healthcheck CLI :
+  ```bash
+  pnpm --filter web exec tsx scripts/quant-engine-healthcheck.ts
+  ```
+  Vérifie liveness (`/openapi.json`) + compute (`POST /compute/multi-tranche`
+  payload minimal). Exit 0 si tout est vert, 1 sinon.
+- Pas d'endpoint `/health` dédié côté Python (V1) — le healthcheck
+  utilise `/openapi.json` pour la liveness.
+
+### Forcer une simulation
+
+- Via UI : Login → Plans → BSPCE test → Valorisation → "Lancer une
+  simulation". État `QUEUED → RUNNING → DONE` en ~30-60s, callback
+  via EF `python-callback`.
+- Via SQL (admin one-shot, debug uniquement) :
+  ```sql
+  SELECT public.refresh_stale_valuations_all_orgs();
+  ```
+- L'EF `compute-valuation` fait POST à Fly.io avec `callback_url`
+  vers EF `python-callback` qui UPDATE `valuation_runs.status='DONE'`
+  une fois la réponse reçue (pattern B0.7, fix dette #94 timeout EF).
+
+## Limitations V1.0 connues (V1.1)
+
+- **PR #47** — pre-beta sprint (Sentry + healthcheck + Help page +
+  canary), à merger avant le 18 mai.
+- **PR #48** — Templates V1 manquants (avenants, lettre exercise,
+  attestation sortie). Travail manuel via Server Action en attendant.
+- **PR #49** — BSPCE M&A workflow (cession globale, traitement
+  liquidatif, événements de sortie collectifs).
+- **V1.X #34** — Pricer router auto (BSPCE/SO/AGA → bon pricer
+  Python) ; V1 = `MONTE_CARLO_MULTI_TRANCHE` partout.
+- **V1.X #38, #39, #40** — voir `BILAN_SPRINT_6_MAI.md`.
+
+## Procédures (runbook V1.0)
+
+### Magic-link en prod ne part pas
+
+Symptôme : user clique "Envoyer le lien", reçoit un toast OK mais
+l'email n'arrive jamais. Cause connue (dette #40) : auth users
+sans row `user_profiles` → silent return.
+
+Workaround manuel :
+
+```sql
+INSERT INTO public.user_profiles (id, full_name)
+SELECT id, raw_user_meta_data->>'full_name'
+FROM auth.users
+WHERE email = '<email>'
+ON CONFLICT DO NOTHING;
+```
+
+Fix V1.X = trigger AFTER INSERT auth.users → INSERT user_profiles.
+
+### Révoquer une invitation orpheline
+
+```sql
+DELETE FROM public.invitations
+WHERE email = '<email>' AND status = 'PENDING';
+```
+
+### Lancer le cron valuation manuellement
+
+```sql
+SELECT public.refresh_stale_valuations_all_orgs();
+```
+
+Insère un `valuation_run` QUEUED par plan éligible (last DONE > 30j
+OU absent). Le cron normal est mensuel (`0 3 1 * *`).
+
+### Vérifier la chaîne Sentry
+
+```bash
+curl https://www.capiwise.fr/api/sentry-test
+# → HTTP 500 + {"ok":false,"sent_to_sentry":true,"message":"..."}
+```
+
+Puis dashboard Sentry → filtrer par tag `sentry_canary=true`.
+
 ## État actuel
 
 ### Modules livrés

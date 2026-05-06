@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
 import path from 'node:path';
+import { withSentryConfig } from '@sentry/nextjs';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -16,4 +17,21 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
 };
 
-export default nextConfig;
+// Sentry — wrap pour upload automatique des source maps (release tracking).
+// Skip si pas de DSN configuré (build local sans Sentry, CI sans secrets).
+const sentryEnabled = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN);
+
+export default sentryEnabled
+  ? withSentryConfig(nextConfig, {
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      silent: !process.env.CI,
+      widenClientFileUpload: true,
+      // Sentry v10 supprime les source maps du build après upload (default true)
+      // → pas exposées publiquement sous .next/static/**.
+      disableLogger: true,
+      tunnelRoute: '/monitoring/tunnel',
+      automaticVercelMonitors: false,
+    })
+  : nextConfig;
