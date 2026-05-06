@@ -37,6 +37,9 @@ const PUBLIC_ROUTES = new Set([
   '/auth/callback',
   '/unauthorized',
   '/no-access',
+  // Sentry canary — doit être curl-able depuis n'importe où en prod pour
+  // vérifier la chaîne SDK → dashboard. Pas de DB, pas de PII, juste un throw.
+  '/api/sentry-test',
 ]);
 
 const PUBLIC_PREFIXES = ['/api/webhooks/', '/_next/', '/favicon', '/static/', '/dev/', '/legal/'];
