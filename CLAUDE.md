@@ -269,8 +269,8 @@ publiquement exposées).
 
 ### Sentry (V1.0)
 
-- Dashboard : https://sentry.io/organizations/capiwise/projects/capiwise-web/
-  (créé pendant le sprint pré-beta).
+- Dashboard : https://adyeen.sentry.io/projects/capiwise-web/
+  (org `adyeen`, projet `capiwise-web`).
 - Tags par défaut sur les events : `environment` (production / preview /
   development), `release` (7 chars du SHA git Vercel).
 - Tags contextuels (Server Actions) : `server_action`, `org_id`,
@@ -288,12 +288,24 @@ publiquement exposées).
   l'erreur `SentryCanaryError` apparaît dans le dashboard avec tag
   `sentry_canary=true`.
 
+> **Piège connu (V1.X #43, fix 8 mai 2026)** : `instrumentation.ts`
+> doit vivre dans **`apps/web/src/instrumentation.ts`**, pas à la
+> racine `apps/web/`. Avec un dossier `src/`, Next.js 16 ne regarde
+> QUE `src/instrumentation.ts` — le fichier à la racine est
+> silencieusement ignoré, `Sentry.init` n'est jamais exécuté, et
+> `captureException` devient no-op (pas d'erreur, juste un dashboard
+> vide). Symptôme : l'API canary retourne `sent_to_sentry: true` mais
+> Sentry reste sur "Waiting for first error". Garde-fou : log
+> `[sentry] server SDK init OK, env=...` au boot dans `sentry.server.config.ts`,
+> grep-able dans Vercel logs (`[sentry]`) pour vérifier que l'init
+> a bien lieu.
+
 ### Vercel logs
 
 - Console : https://vercel.com/sasportasdavids-projects/capiwise/logs
 - Tags utilisés dans le code (Server Actions et EFs) : `[auth]`,
   `[invitations]`, `[compliance]`, `[yousign]`, `[valuation]`,
-  `[notifications]`, `[exercise]`.
+  `[notifications]`, `[exercise]`, `[sentry]` (init lifecycle).
 
 ### Quant engine Fly.io
 

@@ -26,4 +26,7 @@ if (dsn) {
       return event;
     },
   });
+  console.log('[sentry] edge SDK init OK, env =', process.env.VERCEL_ENV ?? process.env.NODE_ENV);
+} else {
+  console.warn('[sentry] edge SDK skipped — no DSN set');
 }

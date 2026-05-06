@@ -33,4 +33,7 @@ if (dsn) {
       return event;
     },
   });
+  console.log('[sentry] server SDK init OK, env =', process.env.VERCEL_ENV ?? process.env.NODE_ENV);
+} else {
+  console.warn('[sentry] server SDK skipped — no DSN set (SENTRY_DSN or NEXT_PUBLIC_SENTRY_DSN)');
 }

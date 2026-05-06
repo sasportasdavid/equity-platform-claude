@@ -42,4 +42,10 @@ if (dsn) {
       return event;
     },
   });
+  console.log(
+    '[sentry] client SDK init OK, env =',
+    process.env.NEXT_PUBLIC_VERCEL_ENV ?? process.env.NODE_ENV,
+  );
+} else if (typeof window !== 'undefined') {
+  console.warn('[sentry] client SDK skipped — NEXT_PUBLIC_SENTRY_DSN not set');
 }
