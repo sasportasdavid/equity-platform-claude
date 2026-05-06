@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { ChevronsUpDown, Check } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ROLE_LABELS, type Role } from '@equity/shared';
 import {
@@ -56,6 +56,7 @@ export function OrgSwitcherCard({
   beneficiariesCount: number | null;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [pending, startTransition] = useTransition();
 
   const { data: orgs } = useQuery<OrgEntry[]>({
@@ -87,6 +88,12 @@ export function OrgSwitcherCard({
       }
       const supabase = createSupabaseBrowserClient();
       await supabase.auth.refreshSession();
+
+      // Bug #6 — couche 3 defense-in-depth : invalider TOUS les caches
+      // React Query au switch d'org. Sans ça, un combobox/dropdown déjà
+      // hydraté peut continuer à afficher des résultats de l'ancienne
+      // org (cause vraisemblable du bug AWD-2026-0012).
+      await queryClient.invalidateQueries();
       router.refresh();
     });
   }

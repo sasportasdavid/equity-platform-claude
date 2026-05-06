@@ -79,6 +79,63 @@ function validationError<T>(err: z.ZodError): ActionError {
 }
 
 // ---------------------------------------------------------------------------
+// Bug #6 — Tenant guard helper (defense-in-depth, couche 2)
+// ---------------------------------------------------------------------------
+
+type SupabaseServerClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+
+/**
+ * Vérifie que les FK passées à un award (plan_id, beneficiary_id) appartiennent
+ * bien à l'org active. Lecture directe des colonnes org_id sans dépendre de
+ * RLS (les RPCs SECURITY DEFINER bypass RLS, ce check côté Server Action
+ * arrive AVANT le RPC pour produire un message d'erreur lisible).
+ *
+ * La source de vérité reste la migration 00101 côté DB — ce helper évite
+ * juste un round-trip Postgres et donne un meilleur retour UI.
+ */
+async function assertAwardTenant(input: {
+  supabase: SupabaseServerClient;
+  activeOrgId: string;
+  planId: string | null;
+  beneficiaryId: string | null;
+}): Promise<{ ok: true } | ActionError> {
+  const { supabase, activeOrgId, planId, beneficiaryId } = input;
+
+  if (planId) {
+    const { data: plan, error } = await supabase
+      .from('plans')
+      .select('id, org_id')
+      .eq('id', planId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!plan) return { ok: false, error: 'Plan introuvable' };
+    if (plan.org_id !== activeOrgId) {
+      return { ok: false, error: 'TENANT_VIOLATION: plan appartient à une autre organisation' };
+    }
+  }
+
+  if (beneficiaryId) {
+    const { data: beneficiary, error } = await supabase
+      .from('beneficiaries')
+      .select('id, org_id')
+      .eq('id', beneficiaryId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    if (!beneficiary) return { ok: false, error: 'Bénéficiaire introuvable' };
+    if (beneficiary.org_id !== activeOrgId) {
+      return {
+        ok: false,
+        error: 'TENANT_VIOLATION: bénéficiaire appartient à une autre organisation',
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
 // 1. createAwardDraft — appelle RPC create_award_full
 // ---------------------------------------------------------------------------
 
@@ -94,6 +151,19 @@ export async function createAwardDraft(input: unknown): Promise<CreateAwardResul
   if (!user.activeOrgId) return { ok: false, error: 'Organisation active manquante' };
 
   const supabase = await createSupabaseServerClient();
+
+  // Bug #6 — couche 2 defense-in-depth : valider que plan ET beneficiary
+  // appartiennent à l'org active AVANT d'appeler le RPC. Le RPC valide
+  // aussi côté DB (migration 00101), mais ce check côté Server Action
+  // produit un message d'erreur plus parlant pour l'UI et évite un round
+  // trip Postgres si l'UI envoie un payload corrompu (cache stale, race).
+  const tenantCheck = await assertAwardTenant({
+    supabase,
+    activeOrgId: user.activeOrgId,
+    planId: data.planId,
+    beneficiaryId: data.beneficiaryId ?? null,
+  });
+  if (!tenantCheck.ok) return tenantCheck;
 
   const { data: rpcResult, error: rpcError } = await supabase.rpc('create_award_full', {
     p_data: {
@@ -145,10 +215,16 @@ export async function updateAwardDraft(
   const supabase = await createSupabaseServerClient();
   const { data: existing } = await supabase
     .from('awards')
-    .select('id, status, plan_id')
+    .select('id, status, plan_id, org_id')
     .eq('id', idCheck.data)
     .maybeSingle();
   if (!existing) return { ok: false, error: 'Award introuvable' };
+  if (existing.org_id !== user.activeOrgId) {
+    // Bug #6 — defense-in-depth : un award visible via RLS doit forcément
+    // matcher activeOrgId, mais on ferme la porte au cas où une route
+    // d'édition serait appelée avec un id cross-org via cache stale.
+    return { ok: false, error: 'TENANT_VIOLATION: award appartient à une autre organisation' };
+  }
   if (existing.status !== 'DRAFT') {
     return {
       ok: false,
@@ -161,7 +237,20 @@ export async function updateAwardDraft(
     updated_at: new Date().toISOString(),
   };
   const p = patchCheck.data;
-  if (p.beneficiaryId !== undefined) updateData.beneficiary_id = p.beneficiaryId;
+  if (p.beneficiaryId !== undefined) {
+    // Bug #6 — couche 2 : si on remplace le bénéficiaire, valider l'org
+    // du nouveau bénéficiaire. RLS sur beneficiaries.update bloquerait
+    // déjà mais ici c'est un UPDATE awards.beneficiary_id (FK) qui ne
+    // déclenche pas de check côté table beneficiaries.
+    const tenantCheck = await assertAwardTenant({
+      supabase,
+      activeOrgId: user.activeOrgId,
+      planId: null,
+      beneficiaryId: p.beneficiaryId,
+    });
+    if (!tenantCheck.ok) return tenantCheck;
+    updateData.beneficiary_id = p.beneficiaryId;
+  }
   if (p.unitsGranted !== undefined) updateData.units_granted = p.unitsGranted;
   if (p.exercisePrice !== undefined) updateData.exercise_price = p.exercisePrice;
   if (p.grantDate !== undefined) updateData.grant_date = p.grantDate;
