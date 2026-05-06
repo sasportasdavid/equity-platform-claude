@@ -56,6 +56,7 @@ export async function createInvitation(
 
   const admin = getSupabaseAdminClient();
   const env = getServerEnv();
+  console.log('[invitations] start', { email: data.email, roles: data.roles });
 
   // 1. Reject duplicate PENDING invitation for same (org, email)
   const { data: existing } = await admin
@@ -90,8 +91,10 @@ export async function createInvitation(
     .single();
 
   if (insertError || !invite) {
+    console.error('[invitations] insert failed', { email: data.email, err: insertError?.message });
     return { success: false, error: insertError?.message ?? 'Création de l’invitation impossible' };
   }
+  console.log('[invitations] insert ok', { invitationId: invite.id, email: data.email });
 
   // 3. Send email via Resend (template selon flow bénéficiaire vs team)
   const { data: org } = await admin
@@ -136,10 +139,57 @@ export async function createInvitation(
         },
       });
 
+  // Bug #7 fix sprint 6 mai 2026 PM — atomicité : si Resend fail, on
+  // ROLLBACK l'INSERT pour éviter l'état cassé (row PENDING orpheline qui
+  // bloque toute ré-invitation via le check duplicate ligne ~67). Avant ce
+  // fix, on retournait success: true en absorbant l'erreur silencieusement
+  // → l'UI affichait "Invitation envoyée" à tort. V1.X = bouton "Renvoyer"
+  // exposé pour reprendre proprement les rows PENDING orphelines.
   if (!sendResult.ok) {
-    console.error('[invitations] sendEmail failed', sendResult.error);
-    // L'invitation reste valide en DB ; le user peut être relancé via "Renvoyer".
+    console.error('[invitations] Resend failed, rolling back insert', {
+      invitationId: invite.id,
+      email: data.email,
+      err: sendResult.error,
+    });
+
+    // Best-effort audit AVANT le rollback (post-rollback le resourceId
+    // n'existerait plus côté FK)
+    await logAuditEvent({
+      eventType: 'invitation.send_failed',
+      orgId: user.activeOrgId,
+      userId: user.id,
+      userEmail: user.email,
+      resourceType: 'INVITATION',
+      resourceId: invite.id,
+      metadata: {
+        email: data.email,
+        roles: data.roles,
+        resend_error: sendResult.error,
+      },
+    });
+
+    // Rollback DELETE
+    const { error: rollbackError } = await admin.from('invitations').delete().eq('id', invite.id);
+    if (rollbackError) {
+      // Ne bloque pas le retour utilisateur — l'admin pourra revoke
+      // manuellement la row. Log explicite pour Vercel.
+      console.error('[invitations] rollback DELETE failed', {
+        invitationId: invite.id,
+        err: rollbackError.message,
+      });
+    } else {
+      console.log('[invitations] rollback ok', { invitationId: invite.id });
+    }
+
+    return {
+      success: false,
+      error: `Email d'invitation non envoyé : ${sendResult.error}. L'invitation a été annulée, vous pouvez réessayer.`,
+    };
   }
+  console.log('[invitations] Resend sent', {
+    invitationId: invite.id,
+    providerMessageId: sendResult.providerMessageId,
+  });
 
   // 4. Audit
   await logAuditEvent({
