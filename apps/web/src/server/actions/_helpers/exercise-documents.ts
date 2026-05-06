@@ -1,6 +1,7 @@
 import 'server-only';
 import { logAuditEvent } from '@/lib/audit';
 import { renderPdfFromTemplate } from '@/lib/pdf/render';
+import { resolveDocumentTemplate } from '@/lib/pdf/template-resolver';
 import type { DocumentContextExercise } from '@/lib/pdf/types';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 
@@ -77,13 +78,13 @@ async function persistDocument(params: {
 
   // INSERT document_instance directement (pas de RPC create_document_for_exercise
   // dédié V1 — le RPC M6 create_document_for_award est award-specific).
-  const { data: tpl } = await admin
-    .from('document_templates')
-    .select('id, version')
-    .eq('org_id', params.orgId)
-    .eq('code', params.templateCode)
-    .is('deleted_at', null)
-    .maybeSingle();
+  // V1.1 PR #49 : lookup avec fallback GLOBAL (org-specific d'abord, puis
+  // org_id IS NULL en repli). Si rien trouvé, on continue avec template_id NULL
+  // (le document_instance est créé sans FK template — best-effort historique).
+  const tpl = await resolveDocumentTemplate(admin, {
+    orgId: params.orgId,
+    code: params.templateCode,
+  });
 
   const { data: doc, error: insErr } = await admin
     .from('document_instances')

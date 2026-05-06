@@ -40,6 +40,12 @@ const AWARD_TEMPLATE_MAP = {
   BSPCE_GRANT_LETTER: BspceGrantLetterTemplate,
   AGA_GRANT_LETTER: AgaGrantLetterTemplate,
   SO_GRANT_LETTER: StockOptionGrantLetterTemplate,
+  // V1.1 PR #49 : RSU et BSA réutilisent les composants existants côté React
+  // PDF (mécanique métier identique : RSU≈AGA, BSA≈SO). Métadonnées DB
+  // distinctes via templates GLOBAL (migration 00103). À splitter en
+  // composants dédiés si la lettre légale doit diverger.
+  RSU_GRANT_LETTER: AgaGrantLetterTemplate,
+  BSA_GRANT_LETTER: StockOptionGrantLetterTemplate,
 } as const;
 
 const EXERCISE_TEMPLATE_MAP = {

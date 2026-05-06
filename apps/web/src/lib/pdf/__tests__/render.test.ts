@@ -10,17 +10,19 @@ import { resolveTemplateCodeFromPlanType, SUPPORTED_TEMPLATE_CODES } from '../te
  */
 
 describe('SUPPORTED_TEMPLATE_CODES', () => {
-  it('expose les 5 templates V1 (3 award Module 6 + 2 exercise Module 9 B5)', () => {
+  it('expose les 7 templates V1.1 (5 award + 2 exercise)', () => {
     expect(SUPPORTED_TEMPLATE_CODES).toEqual(
       expect.arrayContaining([
         'BSPCE_GRANT_LETTER',
         'AGA_GRANT_LETTER',
         'SO_GRANT_LETTER',
+        'RSU_GRANT_LETTER',
+        'BSA_GRANT_LETTER',
         'EXERCISE_NOTIFICATION',
         'SUBSCRIPTION_BULLETIN',
       ]),
     );
-    expect(SUPPORTED_TEMPLATE_CODES).toHaveLength(5);
+    expect(SUPPORTED_TEMPLATE_CODES).toHaveLength(7);
   });
 });
 
@@ -41,10 +43,16 @@ describe('resolveTemplateCodeFromPlanType', () => {
     expect(resolveTemplateCodeFromPlanType('STOCK_OPTION')).toBe('SO_GRANT_LETTER');
   });
 
-  it('plan_type sans template V1 → null', () => {
-    expect(resolveTemplateCodeFromPlanType('BSA')).toBeNull();
-    expect(resolveTemplateCodeFromPlanType('RSU')).toBeNull();
+  it('V1.1 : RSU → RSU_GRANT_LETTER, BSA → BSA_GRANT_LETTER', () => {
+    expect(resolveTemplateCodeFromPlanType('RSU')).toBe('RSU_GRANT_LETTER');
+    expect(resolveTemplateCodeFromPlanType('BSA')).toBe('BSA_GRANT_LETTER');
+  });
+
+  it('plan_type sans template V1 → null (PHANTOM, ESOP, SAR, PERFORMANCE_SHARE, UNKNOWN)', () => {
     expect(resolveTemplateCodeFromPlanType('PHANTOM')).toBeNull();
+    expect(resolveTemplateCodeFromPlanType('ESOP')).toBeNull();
+    expect(resolveTemplateCodeFromPlanType('SAR')).toBeNull();
+    expect(resolveTemplateCodeFromPlanType('PERFORMANCE_SHARE')).toBeNull();
     expect(resolveTemplateCodeFromPlanType('UNKNOWN')).toBeNull();
   });
 });

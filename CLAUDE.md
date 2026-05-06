@@ -190,6 +190,59 @@ code (`requirePermission(...)`, `hasPermission(...)`) :
 | `documents.cancel_signature` | `documents.void`               |
 | `documents.download`         | `documents.read`               |
 
+### Templates GLOBAL fallback (Module 6, V1.1 PR #49)
+
+`document_templates.org_id` est NULLABLE depuis la migration 00103.
+Les rows avec `org_id IS NULL` sont des **templates GLOBAL** servant
+de fallback inter-orgs. Comportement :
+
+- **Lecture** : toutes les orgs voient les templates GLOBAL en plus
+  de leurs templates org-specific. La RLS policy `document_templates_select`
+  autorise `(org_id = current_org_id() OR org_id IS NULL)`.
+- **Écriture** (INSERT/UPDATE/DELETE) : les utilisateurs `authenticated`
+  ne peuvent toucher QUE leurs templates org-specific
+  (`org_id IS NOT NULL AND org_id = current_org_id()`). Les GLOBAL
+  sont gérés exclusivement via service_role / migrations.
+- **Lookup** (RPC `create_document_for_award` + helper TS
+  `resolveDocumentTemplate`) : org-specific d'abord
+  (`ORDER BY (org_id IS NULL) ASC LIMIT 1`), GLOBAL en repli si rien
+  trouvé. La RPC throw `TEMPLATE_NOT_FOUND: code=...` si aucun
+  match.
+
+Côté TS (`apps/web/src/lib/pdf/template-resolver.ts`) :
+
+```ts
+import {
+  resolveDocumentTemplate,
+  resolveDocumentTemplateOrThrow,
+} from '@/lib/pdf/template-resolver';
+
+const tpl = await resolveDocumentTemplate(supabase, {
+  orgId,
+  code: 'BSPCE_GRANT_LETTER',
+});
+// tpl est null si rien trouvé, sinon { id, code, version, name,
+// category, isGlobal: boolean }
+```
+
+Pour ajouter un nouveau template GLOBAL : passer par une migration SQL
+(pattern 00103) avec `INSERT INTO document_templates (org_id, ...) SELECT
+NULL, ...` + guard `WHERE NOT EXISTS`. **Ne jamais** créer un GLOBAL
+depuis une Server Action authenticated — la RLS le bloquera de toute
+façon.
+
+V1.1 expose 5 templates GLOBAL `AWARD_LETTER` : BSPCE/SO/AGA + RSU/BSA
+(NOUVEAU). Côté React PDF, RSU réutilise `AgaGrantLetterTemplate` et
+BSA réutilise `StockOptionGrantLetterTemplate` (mécanique métier
+identique). À splitter en composants dédiés si la lettre légale doit
+diverger.
+
+> Note : la spec mentionnait "variables Mustache" dans le CR PR #49,
+> mais V1 utilise React PDF (composants TSX, props typées via
+> `DocumentContext`). Pas de moteur Mustache séparé. Les variables
+> stockées dans `available_variables` JSONB sont purement
+> documentaires côté UI (preview).
+
 ### Variables env Yousign (Module 6 B3)
 
 Côté Next.js (`.env.local`) :
