@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Module 14 PR #43 §B6 — E2E signup-flow.
+ * Module 14 PR #43 §B6 — E2E signup-flow (smoke UI).
  *
  * Couvre :
  *   - rendu page /signup avec form email + checkbox ToS (DS V1)
@@ -9,22 +9,18 @@ import { expect, test } from '@playwright/test';
  *   - submit avec ToS coché → message "Email envoyé" (anti enumeration)
  *   - lien retour /login depuis le signup
  *
- * **Pas de Mailpit catch** : `signInWithOtp` côté browser passe par
- * Supabase Auth (template par défaut Supabase), pas par Resend custom
- * — donc le mail n'apparaît pas dans Mailpit local en V1.
- * Vérification end-to-end du magic-link déférée à V1.5 quand on aura un
- * Auth Hook "Send Email" Resend custom (cf. memo B0 §Q3).
+ * Bug #1 fix sprint 6 mai 2026 PM : `signupWithMagicLink` envoie maintenant
+ * via Resend serverside (`admin.generateLink` + Resend `magic_link_login`),
+ * plus via Supabase SMTP par défaut. Le mail apparaît donc dans Mailpit
+ * local. La vérification DB + Mailpit complète est dans
+ * `signup-public-creates-user.spec.ts` ; ici on garde un smoke UI.
  *
- * Les emails Mailpit catchables en V1 : invitations (`team_member_invite`,
- * `beneficiary_first_invite`), notifications Module 7 — cf.
- * invitation-accept.spec.ts.
- *
- * Email use case : on génère `signup-${ts}@capiwise-qa.test` à chaque
- * run pour ne pas polluer la DB avec des conflits.
+ * Email use case : `signup-${ts}@capiwise-e2e.test` (TLD .test RFC 6761) ;
+ * cleanup périodique via `scripts/cleanup-e2e-users.ts`.
  */
 
 const TIMESTAMP = Date.now();
-const FRESH_EMAIL = `signup-${TIMESTAMP}@capiwise-qa.test`;
+const FRESH_EMAIL = `signup-${TIMESTAMP}@capiwise-e2e.test`;
 
 test.describe('Module 14 §B6 — signup-flow', () => {
   test('renders signup form with email + ToS checkbox + link to /login', async ({ page }) => {
