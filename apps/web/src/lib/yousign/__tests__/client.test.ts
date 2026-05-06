@@ -162,4 +162,70 @@ describe('yousign client', () => {
       /YOUSIGN_API_BASE_URL manquant/,
     );
   });
+
+  // Bug #4 fix sprint 6 mai 2026 PM — normalisation URL base Yousign
+  describe('Bug #4 — normalisation /vN base URL', () => {
+    it('append /v3 si BASE_URL ne contient pas /vN', async () => {
+      vi.unstubAllEnvs();
+      vi.stubEnv('YOUSIGN_API_BASE_URL', 'https://api-sandbox.yousign.app');
+      vi.stubEnv('YOUSIGN_API_KEY', KEY);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        fetchSpy.mockResolvedValueOnce(okJson({ id: 'sigreq_norm', status: 'draft' }));
+        await createSignatureRequest({ name: 'Test' });
+        const [url] = fetchSpy.mock.calls[0]!;
+        expect(url).toBe('https://api-sandbox.yousign.app/v3/signature_requests');
+        expect(warnSpy).toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('strip trailing slash + append /v3', async () => {
+      vi.unstubAllEnvs();
+      vi.stubEnv('YOUSIGN_API_BASE_URL', 'https://api-sandbox.yousign.app//');
+      vi.stubEnv('YOUSIGN_API_KEY', KEY);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        fetchSpy.mockResolvedValueOnce(okJson({ id: 'sigreq_slash', status: 'draft' }));
+        await createSignatureRequest({ name: 'Test' });
+        const [url] = fetchSpy.mock.calls[0]!;
+        expect(url).toBe('https://api-sandbox.yousign.app/v3/signature_requests');
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('préserve /v3 quand déjà présent (pas de double append)', async () => {
+      vi.unstubAllEnvs();
+      vi.stubEnv('YOUSIGN_API_BASE_URL', 'https://api-sandbox.yousign.app/v3');
+      vi.stubEnv('YOUSIGN_API_KEY', KEY);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        fetchSpy.mockResolvedValueOnce(okJson({ id: 'sigreq_keep', status: 'draft' }));
+        await createSignatureRequest({ name: 'Test' });
+        const [url] = fetchSpy.mock.calls[0]!;
+        expect(url).toBe('https://api-sandbox.yousign.app/v3/signature_requests');
+        expect(warnSpy).not.toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('préserve /v4 (forward-compat futures versions Yousign)', async () => {
+      vi.unstubAllEnvs();
+      vi.stubEnv('YOUSIGN_API_BASE_URL', 'https://api.yousign.app/v4');
+      vi.stubEnv('YOUSIGN_API_KEY', KEY);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        fetchSpy.mockResolvedValueOnce(okJson({ id: 'sigreq_v4', status: 'draft' }));
+        await createSignatureRequest({ name: 'Test' });
+        const [url] = fetchSpy.mock.calls[0]!;
+        expect(url).toBe('https://api.yousign.app/v4/signature_requests');
+        expect(warnSpy).not.toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+  });
 });

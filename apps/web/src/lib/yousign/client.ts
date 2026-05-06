@@ -52,10 +52,33 @@ export type YousignDocument = {
   id: string;
 };
 
+/**
+ * Bug #4 fix sprint 6 mai 2026 PM — normaliser l'URL base Yousign.
+ *
+ * Yousign V3 attend `/vN` dans le path (ex: `/v3/signature_requests`). En
+ * Vercel prod, `YOUSIGN_API_BASE_URL` était configuré à
+ * `https://api-sandbox.yousign.app` (sans `/v3`) → tous les calls retournaient
+ * 404 "no Route matched".
+ *
+ * Plutôt que d'imposer la bonne config (fragile au moindre re-deploy), on
+ * normalise côté code :
+ *   - strip trailing slash
+ *   - si pas de `/vN` détecté en fin → append `/v3` (default V3) + warn
+ *   - si `/vN` présent → on garde tel quel (forward-compat /v4, etc.)
+ *
+ * Le warn aide l'opérateur à fixer la config Vercel pour propreté, mais le
+ * système fonctionne quand même.
+ */
 function yousignBaseUrl(): string {
-  const url = process.env.YOUSIGN_API_BASE_URL;
-  if (!url) throw new Error('YOUSIGN_API_BASE_URL manquant');
-  return url;
+  const raw = process.env.YOUSIGN_API_BASE_URL;
+  if (!raw) throw new Error('YOUSIGN_API_BASE_URL manquant');
+  const stripped = raw.replace(/\/+$/, '');
+  if (/\/v\d+$/.test(stripped)) return stripped;
+  console.warn(
+    `[yousign] YOUSIGN_API_BASE_URL "${stripped}" ne contient pas de /vN — fallback /v3 appliqué. ` +
+      `Pour supprimer ce warning, configurer en Vercel : ${stripped}/v3`,
+  );
+  return `${stripped}/v3`;
 }
 
 function yousignApiKey(): string {
