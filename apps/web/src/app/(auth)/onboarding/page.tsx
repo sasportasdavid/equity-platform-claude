@@ -18,7 +18,12 @@ import { resolveOnboardingState } from '@/server/actions/onboarding';
  */
 export default async function OnboardingRouterPage() {
   const state = await resolveOnboardingState();
-  if (state.completed) redirect('/dashboard');
+  // `completed` seul ne suffit pas : si la membership a été nettoyée en DB
+  // alors que `onboarding_completed_at` est resté set, on tombait en boucle
+  // /dashboard ↔ /select-org ↔ /onboarding (proxy refuse /dashboard sans
+  // active_org_id). On exige donc l'invariant complet (profil + org) avant
+  // de déclarer l'onboarding terminé — sinon on rejoue les étapes manquantes.
+  if (state.completed && state.profileFilled && state.hasOrg) redirect('/dashboard');
   if (!state.profileFilled) redirect('/onboarding/profile');
   if (!state.hasOrg) redirect('/onboarding/company');
   redirect('/onboarding/welcome');

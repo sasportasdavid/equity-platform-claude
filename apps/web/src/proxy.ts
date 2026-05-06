@@ -110,9 +110,15 @@ export async function proxy(request: NextRequest) {
   const activeOrgId =
     (user?.app_metadata as { active_org_id?: string } | null)?.active_org_id ?? null;
 
-  const onboardingCompleted =
-    (user?.app_metadata as { onboarding_completed?: boolean } | null)?.onboarding_completed ===
-    true;
+  // Tristate : `true` (onboarding fait), `false` (à faire), `undefined` (claim
+  // absent — JWT pré-Module 14 ou `custom_access_token_hook` flaky, dette #33).
+  // On ne force le retour vers /onboarding que si le claim dit EXPLICITEMENT
+  // false. Si absent, on fait confiance au page-level routing (DB lookup) —
+  // sinon un user qui a complété l'onboarding mais dont le JWT n'a pas refresh
+  // tombe en boucle /dashboard ↔ /onboarding.
+  const onboardingCompletedClaim = (user?.app_metadata as { onboarding_completed?: boolean } | null)
+    ?.onboarding_completed;
+  const onboardingExplicitlyIncomplete = onboardingCompletedClaim === false;
 
   // Authed user qui visite /login ou /signup → /dashboard, /onboarding ou
   // /select-org selon contexte (la page /select-org décidera : redirect
@@ -121,7 +127,7 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     if (!activeOrgId) {
       url.pathname = '/select-org';
-    } else if (!onboardingCompleted) {
+    } else if (onboardingExplicitlyIncomplete) {
       url.pathname = '/onboarding';
     } else {
       url.pathname = '/dashboard';
@@ -160,7 +166,7 @@ export async function proxy(request: NextRequest) {
   if (
     isAuthed &&
     activeOrgId &&
-    !onboardingCompleted &&
+    onboardingExplicitlyIncomplete &&
     !isPublic &&
     !pathname.startsWith('/onboarding') &&
     !pathname.startsWith('/portal') &&
