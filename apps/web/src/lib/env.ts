@@ -42,6 +42,10 @@ const serverEnvSchema = z.object({
   RESEND_WEBHOOK_SECRET: optionalString,
   EODHD_API_KEY: optionalString,
   SENTRY_DSN: optionalUrl,
+  NEXT_PUBLIC_SENTRY_DSN: optionalUrl,
+  SENTRY_ORG: optionalString,
+  SENTRY_PROJECT: optionalString,
+  SENTRY_AUTH_TOKEN: optionalString,
 });
 
 const clientEnvSchema = z.object({
