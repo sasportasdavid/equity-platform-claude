@@ -143,7 +143,6 @@ async function checkComputeEndpoint(baseUrl: string, apiKey: string | null): Pro
 
 function printResult(result: CheckResult): void {
   const icon = result.ok ? '✅' : '❌';
-  // eslint-disable-next-line no-console
   console.log(`${icon} ${result.name.padEnd(10)} (${result.durationMs}ms) — ${result.detail}`);
 }
 
@@ -151,7 +150,6 @@ async function main(): Promise<void> {
   const baseUrl = process.env.QUANT_ENGINE_URL ?? DEFAULT_URL;
   const apiKey = process.env.QUANT_ENGINE_API_KEY ?? null;
 
-  // eslint-disable-next-line no-console
   console.log(`\n🔬 Quant engine healthcheck — ${baseUrl}\n`);
 
   const liveness = await checkLiveness(baseUrl, apiKey);
@@ -161,13 +159,11 @@ async function main(): Promise<void> {
   printResult(compute);
 
   const allOk = liveness.ok && compute.ok;
-  // eslint-disable-next-line no-console
   console.log(allOk ? '\n✅ All checks passed.\n' : '\n❌ One or more checks failed.\n');
   process.exit(allOk ? 0 : 1);
 }
 
 main().catch((error) => {
-  // eslint-disable-next-line no-console
   console.error('Healthcheck crashed:', error);
   process.exit(1);
 });
