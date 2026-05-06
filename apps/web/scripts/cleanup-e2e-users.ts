@@ -100,6 +100,39 @@ async function main() {
     }
   }
   console.log(`\n✅ Deleted ${deleted} user(s)${failed > 0 ? `, ${failed} failed` : ''}.`);
+
+  // 3. Bug #7 fix sprint 6 mai 2026 PM — purger aussi les rows
+  // `invitations` orphelines avec email E2E. Pas de FK vers auth.users
+  // avant l'accept, donc ces rows ne sont pas cleanup automatiquement par
+  // deleteUser. Exécuté que les invitations soient PENDING/EXPIRED/REVOKED.
+  const { data: invites, error: invitesError } = await supabase
+    .from('invitations')
+    .select('id, email, status')
+    .ilike('email', `%${E2E_DOMAIN}`);
+
+  if (invitesError) {
+    console.error('❌ list invitations error :', invitesError.message);
+  } else if (invites && invites.length > 0) {
+    console.log(`\nFound ${invites.length} E2E invitation(s) to delete :`);
+    for (const inv of invites) {
+      console.log(`  - ${inv.email} (${inv.id}, ${inv.status})`);
+    }
+    if (!DRY_RUN) {
+      const { error: delErr } = await supabase
+        .from('invitations')
+        .delete()
+        .ilike('email', `%${E2E_DOMAIN}`);
+      if (delErr) {
+        console.error(`❌ DELETE invitations :`, delErr.message);
+        failed += 1;
+      } else {
+        console.log(`✅ Deleted ${invites.length} invitation(s).`);
+      }
+    } else {
+      console.log('[DRY RUN] No invitation deletion performed.');
+    }
+  }
+
   if (failed > 0) process.exit(1);
 }
 
