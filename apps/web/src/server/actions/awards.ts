@@ -465,12 +465,79 @@ export async function transitionAward(input: unknown): Promise<ActionVoid | Acti
       ...approvalCompliance.warnings,
     ];
 
+    // Bug #5bis sprint 6 mai 2026 PM — observabilité serveur (Vercel logs)
+    console.log('[compliance] award.transition', {
+      awardId,
+      toStatus,
+      errors: allErrors.length,
+      warnings: allWarnings.length,
+      errorCodes: allErrors.map((e) => e.code),
+      warningCodes: allWarnings.map((w) => w.code),
+    });
+
     if (allErrors.length > 0) {
+      // Bug #5bis sprint 6 mai 2026 PM — persister les errors bloquantes
+      // dans compliance_alerts (subject_type='AWARD'). Idempotent :
+      // delete-then-insert sur OPEN pour ce subject. Migration 00102 ajoute
+      // les RLS policies INSERT + DELETE nécessaires.
+      try {
+        await supabase
+          .from('compliance_alerts')
+          .delete()
+          .eq('org_id', user.activeOrgId)
+          .eq('subject_type', 'AWARD')
+          .eq('subject_id', awardId)
+          .eq('status', 'OPEN');
+
+        const alertRows = allErrors.map((err) => ({
+          org_id: user.activeOrgId!,
+          rule_code: err.code,
+          severity: err.severity,
+          subject_type: 'AWARD',
+          subject_id: awardId,
+          message: err.message,
+          details: {
+            suggested_action: err.suggestedAction ?? null,
+            transition_target: toStatus,
+          } as never,
+          status: 'OPEN',
+        }));
+        const { error: alertErr } = await supabase.from('compliance_alerts').insert(alertRows);
+        if (alertErr) {
+          console.error('[compliance] compliance_alerts insert failed', {
+            awardId,
+            err: alertErr.message,
+          });
+        }
+      } catch (err) {
+        // Best-effort : la persistance ne doit pas casser la réponse user
+        console.error('[compliance] compliance_alerts persist threw', {
+          awardId,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }
+
       return {
         ok: false,
         error: `Compliance check failed : ${allErrors.length} erreur(s) bloquante(s)`,
         complianceIssues: allErrors,
       };
+    }
+    // Pas d'errors → resolve les alerts OPEN précédentes (le user a corrigé
+    // entre-temps, ex: lancé un valuation_run pour fixer VALUATION_STALE_BLOCKING).
+    try {
+      await supabase
+        .from('compliance_alerts')
+        .delete()
+        .eq('org_id', user.activeOrgId)
+        .eq('subject_type', 'AWARD')
+        .eq('subject_id', awardId)
+        .eq('status', 'OPEN');
+    } catch (err) {
+      console.error('[compliance] compliance_alerts cleanup threw', {
+        awardId,
+        err: err instanceof Error ? err.message : String(err),
+      });
     }
     // Soft warnings : on les stocke dans compliance_warnings de l'award
     // pour affichage UI, mais on continue la transition.

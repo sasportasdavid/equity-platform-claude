@@ -91,7 +91,14 @@ function makeBuilder(table?: string) {
       error: mockState.awardSelect.error,
     });
   };
-  builder.insert = noop;
+  // Bug #5bis sprint 6 mai 2026 PM — insert + delete sur compliance_alerts.
+  // Pour ne pas casser les chains existantes (createAwardModification fait
+  // .insert().select().single()), on garde insert chainable. await direct
+  // sur la chain résolu via `then` sur le builder lui-même.
+  builder.insert = () => builder;
+  builder.delete = () => builder;
+  builder.then = (resolve: (val: { error: unknown; data: null }) => unknown) =>
+    resolve({ error: null, data: null });
   builder.single = () => Promise.resolve({ data: { id: 'modif-uuid' }, error: null });
   builder.update = () => ({
     eq: () => Promise.resolve({ error: mockState.updateError }),
@@ -653,6 +660,58 @@ describe('Server Actions awards', () => {
       toStatus: 'PROPOSED',
     });
     expect(res.ok).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Bug #5bis — Compliance UX + persist + logs (sprint 6 mai 2026 PM)
+  // -------------------------------------------------------------------------
+  it('transitionAward DRAFT→PROPOSED ko : log [compliance] award.transition + complianceIssues', async () => {
+    mockState.awardSelect = {
+      data: {
+        id: 'a-uuid',
+        status: 'DRAFT',
+        plan_id: 'p-uuid',
+        beneficiary_id: 'b-uuid',
+        units_granted: 100,
+        units_vested: 0,
+        vesting_start_date: null,
+        grant_date: '2026-04-28',
+      },
+      error: null,
+    };
+    const runChecksMod = await import('@/lib/compliance/runChecks');
+    vi.mocked(runChecksMod.runValuationComplianceChecks).mockResolvedValueOnce({
+      errors: [
+        {
+          severity: 'ERROR',
+          code: 'VALUATION_STALE_BLOCKING',
+          message: 'Aucune valorisation IFRS 2 disponible pour ce plan.',
+        },
+      ],
+      warnings: [],
+      hasHardBlocks: true,
+    });
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const { transitionAward } = await import('../awards');
+      const res = await transitionAward({
+        awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+        toStatus: 'PROPOSED',
+      });
+
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.complianceIssues).toBeDefined();
+        expect(res.complianceIssues?.[0]?.code).toBe('VALUATION_STALE_BLOCKING');
+      }
+
+      // Bug #5bis observabilité — au moins 1 log [compliance] award.transition
+      const calls = logSpy.mock.calls.map((c) => String(c[0]));
+      expect(calls.some((c) => /\[compliance\] award\.transition/.test(c))).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 
   // -------------------------------------------------------------------------

@@ -50,14 +50,23 @@ async function runRules<TData, TCtx>(
     rules.map(async (rule) => {
       try {
         const issue = await rule.check(data, ctx);
+        // Bug #5bis sprint 6 mai 2026 PM — log per-rule pour Vercel debug.
+        // L'opérateur peut tracer "quelle règle a évalué et avec quel verdict"
+        // pour chaque appel transitionAward / submit / decision.
+        console.log(
+          `[compliance] ${rule.code} ${issue ? 'FAIL' : 'PASS'} (${rule.enforcement})`,
+          issue ? { severity: issue.severity, msg: issue.message } : '',
+        );
         return { rule, issue };
       } catch (err) {
+        const msg = err instanceof Error ? err.message : 'unknown';
+        console.error(`[compliance] ${rule.code} INTERNAL_ERROR`, msg);
         return {
           rule,
           issue: {
             severity: 'WARNING' as const,
             code: `${rule.code}_INTERNAL_ERROR`,
-            message: `Rule ${rule.code} a échoué : ${err instanceof Error ? err.message : 'unknown'}`,
+            message: `Rule ${rule.code} a échoué : ${msg}`,
           },
         };
       }
