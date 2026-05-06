@@ -27,12 +27,14 @@ import {
  *  4. LEGAL_MENTIONS — contiennent les références CGI / Code de commerce
  */
 
-describe('SUPPORTED_*_TEMPLATE_CODES — extension Module 9 B5', () => {
-  it('SUPPORTED_AWARD_TEMPLATE_CODES inchangé (3 codes Module 6)', () => {
+describe('SUPPORTED_*_TEMPLATE_CODES — extension V1.1 PR #49', () => {
+  it('SUPPORTED_AWARD_TEMPLATE_CODES = 5 codes (3 Module 6 + 2 V1.1 RSU/BSA)', () => {
     expect(SUPPORTED_AWARD_TEMPLATE_CODES).toEqual([
       'BSPCE_GRANT_LETTER',
       'AGA_GRANT_LETTER',
       'SO_GRANT_LETTER',
+      'RSU_GRANT_LETTER',
+      'BSA_GRANT_LETTER',
     ]);
   });
 
@@ -43,9 +45,11 @@ describe('SUPPORTED_*_TEMPLATE_CODES — extension Module 9 B5', () => {
     ]);
   });
 
-  it('SUPPORTED_TEMPLATE_CODES = union des 5 codes (3 + 2)', () => {
-    expect(SUPPORTED_TEMPLATE_CODES).toHaveLength(5);
+  it('SUPPORTED_TEMPLATE_CODES = union des 7 codes (5 + 2)', () => {
+    expect(SUPPORTED_TEMPLATE_CODES).toHaveLength(7);
     expect(SUPPORTED_TEMPLATE_CODES).toContain('BSPCE_GRANT_LETTER');
+    expect(SUPPORTED_TEMPLATE_CODES).toContain('RSU_GRANT_LETTER');
+    expect(SUPPORTED_TEMPLATE_CODES).toContain('BSA_GRANT_LETTER');
     expect(SUPPORTED_TEMPLATE_CODES).toContain('EXERCISE_NOTIFICATION');
     expect(SUPPORTED_TEMPLATE_CODES).toContain('SUBSCRIPTION_BULLETIN');
   });
