@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { hasPermission, requireUser } from '@/lib/auth/rbac';
 import { listComplianceRulesForUI } from '@/server/actions/complianceRules';
 import { ComplianceSettingsClient } from '@/components/compliance/ComplianceSettingsClient';
+import { BetaLimitationBanner } from '@/components/beta/BetaLimitationBanner';
 
 export const metadata: Metadata = {
   title: 'Compliance · Paramètres',
@@ -72,12 +73,26 @@ export default async function ComplianceSettingsPage() {
   }
 
   return (
-    <ComplianceSettingsClient
-      rulesByScope={result.rulesByScope}
-      totalCount={result.totalCount}
-      canEdit={canEdit}
-      scopeLabels={SCOPE_LABELS}
-      scopeOrder={SCOPE_ORDER}
-    />
+    <div className="space-y-6">
+      <BetaLimitationBanner
+        title="Configuration avancée — sur demande pendant la beta"
+        description={
+          <p>
+            En V1.0, vous pouvez activer/désactiver les règles et ajuster leur sévérité. Les
+            paramètres avancés (seuils personnalisés, règles custom, exceptions par plan) arrivent
+            en V1.1. Pour un cas d&apos;usage spécifique, contactez-nous.
+          </p>
+        }
+        ctaFeature="Configuration compliance custom"
+        ctaContext="page=/dashboard/settings/compliance"
+      />
+      <ComplianceSettingsClient
+        rulesByScope={result.rulesByScope}
+        totalCount={result.totalCount}
+        canEdit={canEdit}
+        scopeLabels={SCOPE_LABELS}
+        scopeOrder={SCOPE_ORDER}
+      />
+    </div>
   );
 }
