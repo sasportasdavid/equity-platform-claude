@@ -1,5 +1,6 @@
 import 'server-only';
 import type { Json } from '@equity/shared';
+import { requireUser } from '@/lib/auth/rbac';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 /**
@@ -131,6 +132,11 @@ export async function listAwards(filters: ListAwardsFilters = {}): Promise<Award
 // ---------------------------------------------------------------------------
 
 export async function listPlansForAwardCreation(): Promise<PlanForCreation[]> {
+  // Bug #6 — couche 3 defense-in-depth : filtrer EXPLICITEMENT par org
+  // active, pas seulement via RLS. Idem `searchBeneficiaries`.
+  const user = await requireUser();
+  if (!user.activeOrgId) return [];
+
   const supabase = await createSupabaseServerClient();
   // status ∈ {ACTIVE} suffit en V1 ; LOCKED n'existe pas dans plans.status
   // (les plans verrouillés gardent leur status fonctionnel + flag is_locked=true).
@@ -138,6 +144,7 @@ export async function listPlansForAwardCreation(): Promise<PlanForCreation[]> {
   const { data: plans } = await supabase
     .from('plans')
     .select('id, name, plan_type, pool_size, pool_allocated, exercise_price, status, is_locked')
+    .eq('org_id', user.activeOrgId)
     .is('deleted_at', null)
     .in('status', ['DRAFT', 'ACTIVE'])
     .order('name', { ascending: true });
@@ -150,6 +157,7 @@ export async function listPlansForAwardCreation(): Promise<PlanForCreation[]> {
   const { data: allocs } = await supabase
     .from('awards')
     .select('plan_id, units_granted, status')
+    .eq('org_id', user.activeOrgId)
     .in('plan_id', planIds)
     .not('status', 'in', '(CANCELLED,FORFEITED,DRAFT)')
     .is('deleted_at', null);
@@ -181,12 +189,21 @@ export async function listPlansForAwardCreation(): Promise<PlanForCreation[]> {
 
 export async function searchBeneficiaries(query: string): Promise<BeneficiarySearchRow[]> {
   if (!query || query.trim().length < 2) return [];
+
+  // Bug #6 — couche 3 defense-in-depth : filtrer EXPLICITEMENT par
+  // activeOrgId, pas seulement via RLS. Si la session est dans un état
+  // transitoire (refresh JWT en cours après switch d'org), RLS pourrait
+  // accepter l'ancien org actif. Le filtre explicite ferme cette porte.
+  const user = await requireUser();
+  if (!user.activeOrgId) return [];
+
   const supabase = await createSupabaseServerClient();
   const safe = query.trim().replace(/[%_]/g, '');
 
   const { data, error } = await supabase
     .from('beneficiaries')
     .select('id, first_name, last_name, email, beneficiary_type')
+    .eq('org_id', user.activeOrgId)
     .is('deleted_at', null)
     .or(`email.ilike.%${safe}%,first_name.ilike.%${safe}%,last_name.ilike.%${safe}%`)
     .limit(10);

@@ -210,6 +210,40 @@ describe('runComplianceChecks', () => {
     expect(res.errors).toEqual([]);
     expect(res.warnings.find((w) => w.code === 'GRANT_DATE_RECENT')).toBeDefined();
   });
+
+  // -------------------------------------------------------------------------
+  // Bug #5bis sprint 6 mai 2026 PM — observabilité serveur (Vercel logs)
+  // -------------------------------------------------------------------------
+  it('BSPCE + CONSULTANT : log [compliance] PASS/FAIL pour chaque rule', async () => {
+    mockState.planRow = {
+      data: {
+        id: 'p',
+        plan_type: 'BSPCE',
+        pool_size: 10000,
+        pool_allocated: 1000,
+        company_id: 'c',
+      },
+      error: null,
+    };
+    mockState.beneficiaryRow = {
+      data: { id: 'b', beneficiary_type: 'CONSULTANT', email: 'c@e.com' },
+      error: null,
+    };
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const { runComplianceChecks } = await import('../runChecks');
+      await runComplianceChecks('AWARD_PROPOSAL', validInput);
+
+      const calls = logSpy.mock.calls.map((c) => String(c[0]));
+      // Au moins BSPCE_BENEFICIARY_TYPE FAIL (consultant) + 2 autres PASS
+      expect(calls.some((c) => /\[compliance\] BSPCE_BENEFICIARY_TYPE FAIL/.test(c))).toBe(true);
+      expect(calls.some((c) => /\[compliance\] POOL_AVAILABLE PASS/.test(c))).toBe(true);
+      expect(calls.some((c) => /\[compliance\] GRANT_DATE_RECENT PASS/.test(c))).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
 });
 
 // ===========================================================================

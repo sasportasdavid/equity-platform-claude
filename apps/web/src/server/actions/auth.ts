@@ -55,33 +55,33 @@ export async function checkEmailExistsForLogin(rawEmail: string): Promise<boolea
 
 // ===========================================================================
 // signupWithMagicLink — Module 14 PR #43 §B1 (Option C : magic-link only)
+// + Bug #1 fix sprint 6 mai 2026 PM (envoi serverside via Resend)
 // ===========================================================================
 //
 // Spec MODULE_02 §1.2 + §2.4 + brief PR #43.
 //
 // Flow :
-//   1. Valide Zod (email + tosAccepted=true + tosVersion).
+//   1. Rate limit + Zod parse.
 //   2. Anti email enumeration : si l'email a déjà un user_profile + une
-//      membership ACTIVE (= compte finalisé), on retourne `isNewUser: false`.
-//      Le client envoie quand même un magic-link via signInWithOtp côté
-//      browser → l'utilisateur reçoit un mail de login standard. Pas de
-//      différence visible entre "email existant" et "email nouveau".
-//   3. Si profile partiel (auth.users existe sans membership ou un user
-//      orphelin pre-trigger), update juste les ToS + audit.
+//      membership ACTIVE (= compte finalisé), fake success. On envoie quand
+//      même un magic-link login pour que le user puisse se reconnecter.
+//   3. Si profile partiel (auth.users sans membership) : update ToS,
+//      isNewUser=true.
 //   4. Si totalement nouveau : `auth.admin.createUser({ email_confirm: false })`
-//      (le user devra confirmer en cliquant le magic link au callback) →
-//      `ensureUserProfileExists` (RPC) → UPDATE ToS.
-//   5. Audit `auth.signup_initiated` (best-effort, sans org_id).
-//   6. Retour `{ ok: true, isNewUser: bool }`.
+//      → `ensureUserProfileExists` (RPC) → UPDATE ToS.
+//   5. **Bug #1 fix** : on génère le magic link via
+//      `admin.auth.admin.generateLink({ type: 'magiclink' })` puis on envoie
+//      via Resend (template `magic_link_login`). Avant ce fix le client
+//      faisait `signInWithOtp` (résultat IGNORÉ → UI mentait quand le mail
+//      ne partait pas). Maintenant la Server Action est l'unique source de
+//      vérité — si l'envoi fail, on retourne ok=false.
+//   6. Audit + return.
 //
-// **Pas d'envoi de magic link côté serveur** : le client appelle
-// `supabase.auth.signInWithOtp({ shouldCreateUser: false, ... })` après
-// le retour ok. Le PKCE verifier est posé en cookie côté browser, anti
-// pre-fetching Gmail / Apple Mail (cf. dette login form).
-//
-// **`shouldCreateUser: false` côté client** : on a déjà créé le user
-// côté Server Action. Si le user existait déjà (isNewUser=false), `false`
-// est aussi correct (login flow standard).
+// Tradeoff connu (dette V1.5 #40) : `admin.generateLink({ type: 'magiclink' })`
+// génère un lien OTP legacy (`?token=&type=magiclink`) vulnérable au
+// pre-fetching Gmail/Apple Mail (le scanner consume le token avant le
+// clic → otp_expired). Acceptable beta privée — V1.5 = Auth Hook custom
+// email pour PKCE + Resend en un seul flow.
 
 export type SignupWithMagicLinkResult =
   | { ok: true; isNewUser: boolean }
@@ -105,8 +105,12 @@ export async function signupWithMagicLink(
     };
   }
   const { email, tosVersion } = parsed.data;
+  console.log('[auth] signup start', { email, tosVersion });
+
+  const env = getServerEnv();
   const admin = getSupabaseAdminClient();
   const nowIso = new Date().toISOString();
+  const callbackUrl = `${env.NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent('/onboarding/profile')}`;
 
   // 1. Check existing profile
   const { data: profile } = await admin
@@ -127,9 +131,15 @@ export async function signupWithMagicLink(
       .eq('status', 'ACTIVE');
 
     if ((activeMemberships ?? 0) > 0) {
-      // Compte finalisé → fake success. Le client va appeler signInWithOtp
-      // qui enverra un magic link login standard (le user verra "email
-      // envoyé" comme s'il s'inscrivait, mais il sera reconnecté).
+      // Compte finalisé → on déclenche un magic link de LOGIN (best-effort,
+      // pour que le user puisse se reconnecter normalement) PUIS on retourne
+      // success. La réponse est identique à un nouveau signup (anti enum).
+      console.log('[auth] signup existing-active', { email, userId: profile.id });
+      await sendMagicLinkInternal({
+        email,
+        userId: profile.id,
+        callbackUrl,
+      });
       await logAuditEvent({
         eventType: 'auth.signup_attempted_existing',
         resourceType: 'USER',
@@ -142,6 +152,7 @@ export async function signupWithMagicLink(
     // Compte partiel : update ToS, on relance la confirmation par magic link
     userId = profile.id;
     isNewUser = true;
+    console.log('[auth] signup partial-profile', { email, userId });
   } else {
     // 3. User totalement nouveau : crée auth.users + user_profile
     const { data: created, error: createError } = await admin.auth.admin.createUser({
@@ -149,11 +160,7 @@ export async function signupWithMagicLink(
       email_confirm: false,
     });
     if (createError || !created.user) {
-      // Race ou erreur Supabase Auth → fake success pour anti enumeration.
-      // Le user a déjà reçu un signal "email envoyé" si on retourne ok ;
-      // ici on retourne false pour qu'il recommence (rate-limit côté
-      // Supabase Auth nous protège du replay).
-      console.error('[auth] signup createUser failed', createError);
+      console.error('[auth] signup createUser failed', { email, error: createError?.message });
       return {
         ok: false,
         error: createError?.message ?? 'Création du compte impossible. Réessayez dans un instant.',
@@ -161,29 +168,106 @@ export async function signupWithMagicLink(
     }
     userId = created.user.id;
     isNewUser = true;
-    await ensureUserProfileExists(userId, email);
+    console.log('[auth] signup createUser ok', { email, userId });
+
+    try {
+      await ensureUserProfileExists(userId, email);
+    } catch (err) {
+      console.error('[auth] signup ensureUserProfile failed', { email, userId, err });
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'Création du profil utilisateur impossible.',
+      };
+    }
   }
 
   // 4. Persiste ToS dans user_profiles
-  await admin
+  const { error: tosError } = await admin
     .from('user_profiles')
     .update({
       tos_accepted_at: nowIso,
       tos_version_accepted: tosVersion,
     })
     .eq('id', userId);
+  if (tosError) {
+    console.error('[auth] signup tos update failed', { email, userId, err: tosError.message });
+    // Non-bloquant — le user pourra finaliser au callback. On poursuit
+    // avec l'envoi du magic link.
+  }
 
-  // 5. Audit
+  // 5. Génération + envoi du magic link via Resend (Bug #1 fix)
+  const sent = await sendMagicLinkInternal({
+    email,
+    userId,
+    callbackUrl,
+  });
+  if (!sent.ok) {
+    console.error('[auth] signup magic link send failed', { email, userId, err: sent.error });
+    return {
+      ok: false,
+      error: 'Envoi du lien de connexion impossible. Vérifiez votre adresse email et réessayez.',
+    };
+  }
+
+  // 6. Audit
   await logAuditEvent({
     eventType: 'auth.signup_initiated',
     resourceType: 'USER',
     resourceId: userId,
     userId,
     userEmail: email,
-    metadata: { tos_version: tosVersion },
+    metadata: { tos_version: tosVersion, magic_link_sent_via: 'resend' },
   });
+  console.log('[auth] signup complete', { email, userId, isNewUser });
 
   return { ok: true, isNewUser };
+}
+
+/**
+ * Helper interne — génère un magic link via service_role + envoie via Resend.
+ * Utilisé par signupWithMagicLink pour les nouveaux comptes ET les comptes
+ * existants ACTIVE (login standard). Renvoie un Result au lieu de throw,
+ * pour que le caller décide d'échouer franchement (signup nouveau) ou de
+ * fake-success (anti enumeration sur compte existant).
+ *
+ * Cf. dette #40 V1.5 (pre-fetching Gmail).
+ */
+async function sendMagicLinkInternal(params: {
+  email: string;
+  userId: string;
+  callbackUrl: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const admin = getSupabaseAdminClient();
+
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    type: 'magiclink',
+    email: params.email,
+    options: { redirectTo: params.callbackUrl },
+  });
+  if (linkError || !linkData.properties?.action_link) {
+    console.error('[auth] generateLink failed', { email: params.email, err: linkError?.message });
+    return { ok: false, error: linkError?.message ?? 'generateLink failed' };
+  }
+  console.log('[auth] generateLink ok', { email: params.email });
+
+  const sent = await sendEmail({
+    to: params.email,
+    template: 'magic_link_login',
+    variables: {
+      actionLink: linkData.properties.action_link,
+      expiresInMinutes: MAGIC_LINK_EXPIRES_MINUTES,
+    },
+    audit: { userId: params.userId },
+  });
+  if (!sent.ok) {
+    console.error('[auth] Resend send failed', { email: params.email, err: sent.error });
+    return { ok: false, error: sent.error };
+  }
+  console.log('[auth] Resend sent', {
+    email: params.email,
+    providerMessageId: sent.providerMessageId,
+  });
+  return { ok: true };
 }
 
 // ===========================================================================

@@ -8,24 +8,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { signupWithMagicLink } from '@/server/actions/auth';
 
 /**
  * Module 14 PR #43 §B1 — Signup public via magic-link (Option C).
+ * Bug #1 fix sprint 6 mai 2026 PM : envoi serverside via Resend.
  *
  * Flow :
  *   1. User remplit email + checkbox ToS, soumet.
  *   2. Server Action `signupWithMagicLink` :
- *      - valide Zod, anti enumeration (fake success si email finalisé)
+ *      - valide Zod + rate limit + anti enumeration (fake success si compte
+ *        existant ACTIVE)
  *      - crée auth.users + user_profile + persiste ToS pour les nouveaux
- *      - retourne `{ ok: true, isNewUser: bool }`
- *   3. Côté client : on appelle `supabase.auth.signInWithOtp` côté browser
- *      avec `shouldCreateUser: false` (le user a déjà été créé serveur si
- *      nouveau ; sinon login flow standard pour anti enumeration). Le PKCE
- *      verifier est posé en cookie au moment de cet appel — anti
- *      pre-fetching Gmail/Apple Mail.
- *   4. Affichage "Email envoyé" peu importe le retour Supabase.
+ *      - génère un magic link via admin.generateLink + envoie via Resend
+ *      - retourne `{ ok: true, isNewUser: bool }` ou `{ ok: false, error }`
+ *   3. Affichage "Email envoyé" SEULEMENT si Server Action ok=true. Si
+ *      ok=false, on affiche l'erreur explicite (avant Bug #1 fix, le client
+ *      faisait un `signInWithOtp` dont le résultat était IGNORÉ → l'UI
+ *      mentait quand le mail ne partait pas).
  *
  * **Pas de password** (spec MODULE_02 §1.1, magic-link only V1).
  * **Pas de full_name au signup** : capturé à l'étape 1 du wizard
@@ -69,18 +69,9 @@ export function SignupForm({ tosVersion }: { tosVersion: string }) {
         return;
       }
 
-      // Side-effect : envoyer le magic link via signInWithOtp côté browser
-      // (PKCE verifier en cookie). `shouldCreateUser: false` car la Server
-      // Action a déjà créé le user si nouveau ; si compte existait déjà
-      // finalisé, c'est juste un login standard.
-      const supabase = createSupabaseBrowserClient();
-      const callbackUrl = `${window.location.origin}/auth/callback?next=/onboarding/profile`;
-      await supabase.auth.signInWithOtp({
-        email,
-        options: { shouldCreateUser: false, emailRedirectTo: callbackUrl },
-      });
-      // Anti enumeration : on affiche le même écran de succès que ce soit
-      // un new user, un user partiel, ou un user déjà finalisé.
+      // Bug #1 fix : la Server Action a envoyé le magic link via Resend.
+      // Si on arrive ici, le mail est parti (ou la Server Action aurait
+      // retourné ok=false). On affiche le success.
       setSentTo(email);
     });
   }

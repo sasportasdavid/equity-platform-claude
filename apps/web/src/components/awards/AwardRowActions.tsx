@@ -41,6 +41,8 @@ import {
   isPostGrantStatus,
   type AwardStatus,
 } from '@/lib/stateMachines/awardStateMachine';
+import { ComplianceIssuesDialog } from '@/components/shared/ComplianceIssuesDialog';
+import type { ComplianceIssue } from '@/lib/compliance/types';
 import { AWARD_STATUS_LABELS } from './AwardStatusBadge';
 
 const LEAVER_TYPES = [
@@ -87,6 +89,10 @@ export function AwardRowActions({
   const [leaverType, setLeaverType] = useState<LeaverType>('resignation');
   const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
   const [forfeitReason, setForfeitReason] = useState('');
+  // Bug #5bis sprint 6 mai 2026 PM — détail des règles bloquantes via dialog
+  // partagé. Avant ce fix, transitionAward ko renvoyait juste un toast vague
+  // "Compliance check failed : 1 erreur(s) bloquante(s)".
+  const [complianceBlock, setComplianceBlock] = useState<ComplianceIssue[] | null>(null);
 
   const transitions = getAllowedTransitions(status);
   const showCancel = canCancel && isCancellable(status);
@@ -131,6 +137,11 @@ export function AwardRowActions({
       if (res.ok) {
         toast.success(`Transition → ${AWARD_STATUS_LABELS[toStatus]}`);
         router.refresh();
+      } else if (res.complianceIssues && res.complianceIssues.length > 0) {
+        // Bug #5bis fix : afficher le détail au lieu du message vague.
+        // Le dialog liste chaque rule (code + message + suggestedAction).
+        setComplianceBlock(res.complianceIssues);
+        toast.error(`Soumission bloquée : ${res.complianceIssues.length} règle(s) — voir détails`);
       } else {
         toast.error(res.error);
       }
@@ -316,6 +327,16 @@ export function AwardRowActions({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Bug #5bis sprint 6 mai 2026 PM — détail compliance issues */}
+      <ComplianceIssuesDialog
+        open={complianceBlock != null}
+        onOpenChange={(open) => {
+          if (!open) setComplianceBlock(null);
+        }}
+        issues={complianceBlock ?? []}
+        title="Soumission bloquée — règles de conformité"
+      />
     </>
   );
 }

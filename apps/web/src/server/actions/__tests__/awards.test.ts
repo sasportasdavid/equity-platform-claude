@@ -49,26 +49,56 @@ vi.mock('@/lib/compliance/runChecks', () => ({
     .mockResolvedValue({ errors: [], warnings: [], hasHardBlocks: false }),
 }));
 
-// Mock Supabase server client — chainable builder qui renvoie ce qu'on veut
-type MockBuilder = {
-  data?: unknown;
-  error?: unknown;
-};
+// Mock Supabase server client — chainable builder qui renvoie ce qu'on veut.
+// Bug #6 — couche 4 : le mock route selon le nom de table car le tenant
+// guard de createAwardDraft fait des SELECT sur plans + beneficiaries
+// AVANT d'appeler le RPC. Les tables non-overridées retournent un fixture
+// org-matching par défaut pour ne pas faire échouer les tests existants.
+type MockSelectResult = { data: unknown; error: unknown };
 
 const mockState = {
   awardSelect: { data: null as unknown, error: null as unknown },
+  // Defaults org-matching (org_id = 'org-uuid' = activeOrgId du mock requirePermission)
+  planSelect: { data: { id: 'p-uuid', org_id: 'org-uuid' }, error: null } as MockSelectResult,
+  beneficiarySelect: {
+    data: { id: 'b-uuid', org_id: 'org-uuid' },
+    error: null,
+  } as MockSelectResult,
   rpcResult: { data: null as unknown, error: null as unknown },
   updateError: null as unknown,
 };
 
-function makeBuilder() {
+function makeBuilder(table?: string) {
   const builder: Record<string, unknown> = {};
   const noop = () => builder;
   builder.select = noop;
   builder.eq = noop;
-  builder.maybeSingle = () =>
-    Promise.resolve({ data: mockState.awardSelect.data, error: mockState.awardSelect.error });
-  builder.insert = noop;
+  builder.is = noop;
+  builder.in = noop;
+  builder.or = noop;
+  builder.not = noop;
+  builder.order = noop;
+  builder.limit = noop;
+  builder.maybeSingle = () => {
+    if (table === 'plans') {
+      return Promise.resolve(mockState.planSelect);
+    }
+    if (table === 'beneficiaries') {
+      return Promise.resolve(mockState.beneficiarySelect);
+    }
+    return Promise.resolve({
+      data: mockState.awardSelect.data,
+      error: mockState.awardSelect.error,
+    });
+  };
+  // Bug #5bis sprint 6 mai 2026 PM — insert + delete sur compliance_alerts.
+  // Pour ne pas casser les chains existantes (createAwardModification fait
+  // .insert().select().single()), on garde insert chainable. await direct
+  // sur la chain résolu via `then` sur le builder lui-même.
+  builder.insert = () => builder;
+  builder.delete = () => builder;
+  builder.then = (resolve: (val: { error: unknown; data: null }) => unknown) =>
+    resolve({ error: null, data: null });
   builder.single = () => Promise.resolve({ data: { id: 'modif-uuid' }, error: null });
   builder.update = () => ({
     eq: () => Promise.resolve({ error: mockState.updateError }),
@@ -86,7 +116,7 @@ vi.mock('@/server/actions/notifications', () => ({
 
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn().mockResolvedValue({
-    from: () => makeBuilder(),
+    from: (table: string) => makeBuilder(table),
     rpc: vi
       .fn()
       .mockImplementation(() =>
@@ -109,6 +139,8 @@ const validAward = {
 
 beforeEach(() => {
   mockState.awardSelect = { data: null, error: null };
+  mockState.planSelect = { data: { id: 'p-uuid', org_id: 'org-uuid' }, error: null };
+  mockState.beneficiarySelect = { data: { id: 'b-uuid', org_id: 'org-uuid' }, error: null };
   mockState.rpcResult = { data: null, error: null };
   mockState.updateError = null;
 });
@@ -628,5 +660,172 @@ describe('Server Actions awards', () => {
       toStatus: 'PROPOSED',
     });
     expect(res.ok).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Bug #5bis — Compliance UX + persist + logs (sprint 6 mai 2026 PM)
+  // -------------------------------------------------------------------------
+  it('transitionAward DRAFT→PROPOSED ko : log [compliance] award.transition + complianceIssues', async () => {
+    mockState.awardSelect = {
+      data: {
+        id: 'a-uuid',
+        status: 'DRAFT',
+        plan_id: 'p-uuid',
+        beneficiary_id: 'b-uuid',
+        units_granted: 100,
+        units_vested: 0,
+        vesting_start_date: null,
+        grant_date: '2026-04-28',
+      },
+      error: null,
+    };
+    const runChecksMod = await import('@/lib/compliance/runChecks');
+    vi.mocked(runChecksMod.runValuationComplianceChecks).mockResolvedValueOnce({
+      errors: [
+        {
+          severity: 'ERROR',
+          code: 'VALUATION_STALE_BLOCKING',
+          message: 'Aucune valorisation IFRS 2 disponible pour ce plan.',
+        },
+      ],
+      warnings: [],
+      hasHardBlocks: true,
+    });
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const { transitionAward } = await import('../awards');
+      const res = await transitionAward({
+        awardId: 'ccc47b77-2bce-4fd4-bef6-e8a96a1941c1',
+        toStatus: 'PROPOSED',
+      });
+
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.complianceIssues).toBeDefined();
+        expect(res.complianceIssues?.[0]?.code).toBe('VALUATION_STALE_BLOCKING');
+      }
+
+      // Bug #5bis observabilité — au moins 1 log [compliance] award.transition
+      const calls = logSpy.mock.calls.map((c) => String(c[0]));
+      expect(calls.some((c) => /\[compliance\] award\.transition/.test(c))).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Bug #6 — Cross-org tenant guard (sprint 6 mai 2026 PM)
+  // -------------------------------------------------------------------------
+  it('createAwardDraft : beneficiary cross-org → ok=false avec TENANT_VIOLATION', async () => {
+    // Beneficiary appartient à une autre org que l'org active du JWT
+    mockState.beneficiarySelect = {
+      data: { id: 'b-uuid', org_id: 'OTHER-ORG-uuid' },
+      error: null,
+    };
+    mockState.rpcResult = { data: 'should-not-reach', error: null };
+
+    const { createAwardDraft } = await import('../awards');
+    const res = await createAwardDraft(validAward);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/TENANT_VIOLATION/);
+      expect(res.error).toMatch(/bénéficiaire/i);
+    }
+  });
+
+  it('createAwardDraft : plan cross-org → ok=false avec TENANT_VIOLATION', async () => {
+    mockState.planSelect = { data: { id: 'p-uuid', org_id: 'OTHER-ORG-uuid' }, error: null };
+    mockState.rpcResult = { data: 'should-not-reach', error: null };
+
+    const { createAwardDraft } = await import('../awards');
+    const res = await createAwardDraft(validAward);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/TENANT_VIOLATION/);
+      expect(res.error).toMatch(/plan/i);
+    }
+  });
+
+  it('createAwardDraft : beneficiary supprimé/introuvable → ok=false', async () => {
+    mockState.beneficiarySelect = { data: null, error: null };
+
+    const { createAwardDraft } = await import('../awards');
+    const res = await createAwardDraft(validAward);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/Bénéficiaire introuvable/i);
+    }
+  });
+
+  it('createAwardDraft : RPC retourne TENANT_VIOLATION (defense ultime DB) → ok=false', async () => {
+    // Couche 1 (DB) : le RPC raise même si on bypass nos checks Server Action
+    // (par exemple si l'attaquant tape direct la RPC). On simule la propagation.
+    mockState.rpcResult = {
+      data: null,
+      error: {
+        message: 'TENANT_VIOLATION: beneficiary x belongs to org y, expected org z',
+        code: 'P0001',
+      },
+    };
+
+    const { createAwardDraft } = await import('../awards');
+    const res = await createAwardDraft(validAward);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/TENANT_VIOLATION/);
+    }
+  });
+
+  it('updateAwardDraft : award appartient à autre org → ok=false avec TENANT_VIOLATION', async () => {
+    mockState.awardSelect = {
+      data: {
+        id: 'a-uuid',
+        status: 'DRAFT',
+        plan_id: 'p-uuid',
+        org_id: 'OTHER-ORG-uuid',
+      },
+      error: null,
+    };
+
+    const { updateAwardDraft } = await import('../awards');
+    const res = await updateAwardDraft('ccc47b77-2bce-4fd4-bef6-e8a96a1941c1', {
+      unitsGranted: 200,
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/TENANT_VIOLATION/);
+    }
+  });
+
+  it('updateAwardDraft : remplacement bénéficiaire cross-org → ok=false', async () => {
+    mockState.awardSelect = {
+      data: {
+        id: 'a-uuid',
+        status: 'DRAFT',
+        plan_id: 'p-uuid',
+        org_id: 'org-uuid',
+      },
+      error: null,
+    };
+    mockState.beneficiarySelect = {
+      data: { id: 'b-uuid', org_id: 'OTHER-ORG-uuid' },
+      error: null,
+    };
+
+    const { updateAwardDraft } = await import('../awards');
+    const res = await updateAwardDraft('ccc47b77-2bce-4fd4-bef6-e8a96a1941c1', {
+      beneficiaryId: '304e1f3b-2017-4719-b098-6554ed10fb36',
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/TENANT_VIOLATION/);
+    }
   });
 });
