@@ -2,7 +2,11 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-@custom-variant dark (&:is(.dark *));
+/* Match `.dark` lui-même ET ses descendants (Phase fix dark mode).
+   `&:is(.dark *)` n'attrape que les descendants, donc `<html class="dark">`
+   ne matche pas ses propres utilitaires `dark:`. Le `&:where(.dark, .dark *)`
+   couvre les deux cas avec spécificité 0,0,0 (pas de bump CSS layers). */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /*
   Capiwise theme — Editorial Finance V1 (Design System V1, mai 2026)
@@ -256,12 +260,14 @@
   --bond-300: #1f6b48;
   --bond-500: #4fb58a;
   --bond-700: #6fc8a5;
+  --bond-900: #8fdac0;
 
   --title-50: #2a0f0f;
   --title-100: #401818;
   --title-300: #a23131;
   --title-500: #e26a6a;
   --title-700: #ec9090;
+  --title-900: #f4b8b8;
 
   --saffron-50: #2a1f0a;
   --saffron-100: #3e2e10;

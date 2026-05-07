@@ -58,7 +58,7 @@ const NAV_LINKS = [
 
 export function PublicHeader() {
   return (
-    <header className="border-paper-300/60 bg-paper-100/85 sticky top-0 z-30 border-b backdrop-blur-md">
+    <header className="border-border/60 bg-background/85 sticky top-0 z-30 border-b backdrop-blur-md">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-6 px-6 py-4">
         <Link href="/" className="text-ink-900 flex items-center gap-2">
           <CapiwiseMark className="size-8" />
@@ -191,7 +191,7 @@ const TRUST_BADGES_FOOTER = [
 
 export function PublicFooter() {
   return (
-    <footer className="border-paper-300 bg-paper-50 mt-20 border-t">
+    <footer className="border-border bg-card mt-20 border-t">
       <div className="mx-auto w-full max-w-7xl px-6 pb-10 pt-16">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-5">
           <div className="lg:col-span-1">
@@ -268,7 +268,7 @@ export function MarketingLayout({
   className?: string;
 }) {
   return (
-    <div className="bg-paper-100 text-ink-900 flex min-h-full flex-1 flex-col">
+    <div className="bg-background text-foreground flex min-h-full flex-1 flex-col">
       <a
         href="#main-content"
         className="bg-ink-900 text-paper-50 sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:px-4 focus:py-2 focus:text-sm"
