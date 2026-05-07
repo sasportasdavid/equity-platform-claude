@@ -443,6 +443,73 @@ curl https://www.capiwise.fr/api/sentry-test
 
 Puis dashboard Sentry → filtrer par tag `sentry_canary=true`.
 
+## Public Site Architecture (PR #50, V1)
+
+Le site public marketing vit sous des routes top-level distinctes des
+routes app (`/dashboard/*`, `/portal/*`). Toutes les pages publiques
+utilisent un layout dédié `MarketingLayout` (header public différent du
+header dashboard, footer riche 4 colonnes).
+
+### Structure
+
+- **Composants marketing** — `apps/web/src/components/marketing/`
+  séparés des `ui/` (shadcn) et des composants métier. 6 fichiers :
+  `layout.tsx` (MarketingLayout, PublicHeader, PublicFooter, megamenu)
+  `sections.tsx` (HeroLarge/Small/Split, FeatureGrid, BigFeature,
+  StatsBlock, CTABanner, TrustBadges, MarketingSection, SectionHeader),
+  `pricing.tsx` (PricingCard, PricingTable, ComparisonTable),
+  `faq.tsx` (FAQAccordion, BlogCard), `testimonials.tsx`
+  (TestimonialCard, TestimonialGrid, LogoCloud), `visuals.tsx`
+  (10 SVG inline pour les pages produit), `product-page.tsx` (template
+  uniforme pour les 8 pages produit), `brand.tsx` (CapiwiseMark logo).
+- **Pages** : `/`, `/produit` (+ 8 sous-pages), `/tarifs`, `/securite`,
+  `/comparatif`, `/clients`, `/a-propos`, `/contact`, `/ressources`
+  (+ 4 articles), `/legal/mentions-legales`, `/legal/cgv`. Total
+  25 routes publiques.
+- **SEO** : `app/sitemap.ts` + `app/robots.ts` (Next.js auto). OG image
+  generator sur `app/api/og/route.tsx` (Edge runtime, `next/og`).
+  Metadata + canonical URL + OpenGraph par page.
+- **Proxy** : nouvelles routes ajoutées à `proxy.ts` PUBLIC_ROUTES
+  (`/tarifs`, `/securite`, `/comparatif`, `/clients`, `/a-propos`,
+  `/contact`, `/produit`, `/ressources`) et PUBLIC_PREFIXES
+  (`/produit/`, `/ressources/`, `/api/og`).
+
+### Conventions
+
+- **Pas de Server Action côté contact form V1** : le formulaire ouvre
+  un `mailto:contact@capiwise.fr?subject=...&body=...` avec les champs
+  encodés. V1.X = lead capture backend Resend.
+- **Pas de DocuSign / DocuPilot pour signature** : Yousign V3 eIDAS
+  qualifié uniquement (cf Module 6).
+- **Placeholders** : `<!-- TESTIMONIAL_PLACEHOLDER -->`,
+  `<!-- LEGAL_REVIEW_REQUIRED -->`, `<!-- PRICING_TBD -->` à scanner
+  avant lancement public.
+- **Tier gratuit** Starter à 0 €/an (1 plan, 10 bénéficiaires).
+  Growth 1 490 €/an (le tier highlighted), Scale 3 990 €/an,
+  Enterprise sur devis. Prix indicatifs — David valide avant launch.
+- **i18n V1** : FR uniquement. Strings en clair dans les pages, à
+  extraire vers `next-intl` en V1.X.
+
+### Pattern : créer une nouvelle page produit
+
+1. Créer `apps/web/src/app/produit/<slug>/page.tsx`
+2. Importer `ProductPage` depuis `@/components/marketing/product-page`
+3. Fournir `eyebrow`, `title`, `description`, `features[]` (3-6),
+   `bigFeatures[]` (1-2), `useCases[]` (3), `faq[]` (5+),
+   `customSection?` (slot optionnel pour section unique).
+4. Ajouter le slug à `PRODUCT_LINKS` dans `marketing/layout.tsx`,
+   `FOOTER_COLUMNS`, `app/produit/page.tsx` et `app/sitemap.ts`.
+5. Pas besoin de toucher à `proxy.ts` (`/produit/` est déjà PUBLIC_PREFIX).
+
+### Anti-doublons (vs dashboard)
+
+- `MarketingLayout` ≠ `DashboardLayout` : header public n'a pas de
+  org-switcher, pas de sidebar, pas de breadcrumb dashboard.
+- `PublicHeader` ≠ `DashboardSidebar` : pas de check
+  `requirePermission`, pas de display lié au user authentifié.
+- Le visiteur public ne touche jamais au dashboard, et vice versa
+  (proxy + layouts séparés).
+
 ## État actuel
 
 ### Modules livrés

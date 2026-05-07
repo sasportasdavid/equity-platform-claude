@@ -40,9 +40,29 @@ const PUBLIC_ROUTES = new Set([
   // Sentry canary — doit être curl-able depuis n'importe où en prod pour
   // vérifier la chaîne SDK → dashboard. Pas de DB, pas de PII, juste un throw.
   '/api/sentry-test',
+  // Public marketing pages — Site public V1 (PR #50)
+  '/tarifs',
+  '/securite',
+  '/comparatif',
+  '/clients',
+  '/a-propos',
+  '/contact',
+  '/produit',
+  '/ressources',
 ]);
 
-const PUBLIC_PREFIXES = ['/api/webhooks/', '/_next/', '/favicon', '/static/', '/dev/', '/legal/'];
+const PUBLIC_PREFIXES = [
+  '/api/webhooks/',
+  '/_next/',
+  '/favicon',
+  '/static/',
+  '/dev/',
+  '/legal/',
+  // Public marketing pages — Site public V1 (PR #50)
+  '/produit/',
+  '/ressources/',
+  '/api/og',
+];
 
 /**
  * Routes accessibles à un user authentifié SANS `active_org_id` dans son JWT.
