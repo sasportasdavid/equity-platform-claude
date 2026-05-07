@@ -13,7 +13,7 @@ import {
   MktTrust,
 } from '@/components/marketing/editorial';
 import { HeroMockup, PvAudit, PvPortal, PvWizard } from '@/components/marketing/pillar-visuals';
-import { MonteCarloViewerCompact } from '@/components/marketing/monte-carlo-viewer';
+import { McSimulatorLazy } from '@/components/marketing/simulator/McSimulatorLazy';
 
 export const metadata: Metadata = {
   title: 'Capiwise — Pilotez vos plans BSPCE, AGA et Stock Options sans bricolage juridique',
@@ -160,7 +160,7 @@ export default function HomePage() {
           ]}
           ctaLabel="Découvrir IFRS 2"
           ctaHref="/produit/valorisation-ifrs2"
-          visual={<MonteCarloViewerCompact />}
+          visual={<McSimulatorLazy variant="compact" />}
           reverse
         />
 

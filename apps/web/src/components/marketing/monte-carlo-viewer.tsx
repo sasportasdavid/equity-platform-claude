@@ -1,4 +1,18 @@
 /**
+ * @deprecated Phase 5 — Remplacer par `McSimulator` (variant compact ou full)
+ * dans `apps/web/src/components/marketing/simulator/McSimulator.tsx`.
+ *
+ * Encore utilisé en Phase 5 par :
+ *  - `produit/valorisation-ifrs2/page.tsx` BigFeature "Visualisation Monte
+ *     Carlo native, pas un PDF mort" → `MonteCarloViewerCompact`
+ *
+ * À retirer en Phase 6 quand le BigFeature sera refactoré (mini-mockup
+ * SVG ou autre). La homepage et la section ReplayViewerSection ont déjà
+ * basculé sur `McSimulatorLazy variant=compact|full` avec lazy mount
+ * via IntersectionObserver.
+ *
+ * --- Documentation historique du composant ---
+ *
  * Monte Carlo Viewer — reproduction fidèle du mockup live Capiwise.
  *
  * Vue dashboard complète en dark mode (ink-900) du replay viewer

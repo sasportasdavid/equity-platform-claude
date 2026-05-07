@@ -24,11 +24,14 @@ export function KPICards({
   result,
   isQuick,
   T,
+  variant = 'full',
 }: {
   result: McResult | null;
   isQuick: boolean;
   /** Maturité (ans), pour calculer dt = T/steps. */
   T: number;
+  /** `compact` masque la grille 2x2 (utilisé sur la homepage). */
+  variant?: 'full' | 'compact';
 }) {
   const fv = result?.fairValue;
   const ic = result?.ic95;
@@ -74,8 +77,8 @@ export function KPICards({
         </div>
       </div>
 
-      {/* 4 KPIs grid 2x2 */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* 4 KPIs grid 2x2 — masqués en variant compact */}
+      <div className={cn('grid grid-cols-2 gap-3', variant === 'compact' && 'hidden')}>
         <MiniKpi
           label="Hit rate"
           value={result ? `${NF_PCT.format(result.hitRateBarrier * 100)}` : '—'}

@@ -2,10 +2,8 @@ import type { Metadata } from 'next';
 import { BarChart3, Calculator, Clock, FileCheck, Layers3, Sparkles } from 'lucide-react';
 import { ProductPage } from '@/components/marketing/product-page';
 import { SectionHeader } from '@/components/marketing/sections';
-import {
-  MonteCarloViewer,
-  MonteCarloViewerCompact,
-} from '@/components/marketing/monte-carlo-viewer';
+import { MonteCarloViewerCompact } from '@/components/marketing/monte-carlo-viewer';
+import { McSimulatorLazy } from '@/components/marketing/simulator/McSimulatorLazy';
 
 export const metadata: Metadata = {
   title: 'Valorisation IFRS 2 — Monte Carlo 100K paths inclus',
@@ -28,8 +26,8 @@ const ReplayViewerSection = () => (
         description="Pas un PDF mort. Une vue interactive avec trajectoires, percentiles p5/p50/p95, barrières, Greeks par différences finies, et tweaks live de la volatilité, barrière et maturité. Hash SHA-256 des inputs pour rejouabilité bit-à-bit."
       />
     </div>
-    <div className="mx-auto mt-12 w-full max-w-[1400px] px-4 lg:px-10">
-      <MonteCarloViewer />
+    <div id="simulateur" className="mx-auto mt-12 w-full max-w-[1400px] scroll-mt-24 px-4 lg:px-10">
+      <McSimulatorLazy variant="full" />
     </div>
     <div className="mx-auto mt-16 w-full max-w-7xl px-6">
       <SectionHeader
