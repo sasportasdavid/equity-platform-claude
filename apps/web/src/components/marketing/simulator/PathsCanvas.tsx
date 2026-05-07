@@ -10,29 +10,45 @@ const NF_EUR = new Intl.NumberFormat('fr-FR', {
   maximumFractionDigits: 0,
 });
 
+/** Styles par catégorie (Phase 2.1 calibrage) — index = pathCategories enum.
+ *  0 = forfeited (paper-50 dim, arrière-plan)
+ *  1 = hit_otm  (brass medium)
+ *  2 = hit_itm  (bond dominant, dessiné en dernier)
+ */
+const CATEGORY_STYLES = [
+  { color: 'rgba(240, 234, 216, 0.08)', width: 0.6 }, // forfeited
+  { color: 'rgba(212, 160, 106, 0.30)', width: 0.7 }, // hit_otm
+  { color: 'rgba(79, 181, 138, 0.55)', width: 0.8 }, // hit_itm
+] as const;
+
 const COLORS = {
-  pathForfeited: 'rgba(240, 234, 216, 0.15)',
-  pathOtm: 'rgba(212, 160, 106, 0.4)',
-  pathItm: 'rgba(79, 181, 138, 0.55)',
   meanLine: '#D4A06A',
-  barrier: 'rgba(212, 160, 106, 0.7)',
-  strike: 'rgba(240, 234, 216, 0.4)',
-  spot: 'rgba(240, 234, 216, 0.3)',
+  barrier: 'rgba(212, 160, 106, 0.85)',
+  barrierLine: 'rgba(212, 160, 106, 0.55)',
+  strike: 'rgba(240, 234, 216, 0.55)',
+  strikeLine: 'rgba(240, 234, 216, 0.30)',
+  spot: 'rgba(240, 234, 216, 0.55)',
+  spotLine: 'rgba(240, 234, 216, 0.20)',
   quantile: 'rgba(212, 160, 106, 0.45)',
   text: 'rgba(240, 234, 216, 0.55)',
   textBright: 'rgba(240, 234, 216, 0.85)',
 };
 
-const PADDING = { top: 28, right: 110, bottom: 28, left: 16 };
+const PADDING = { top: 28, right: 130, bottom: 28, left: 16 };
 
 /**
  * Canvas 2D rendant les 600 paths sub-samplés du `McResult`,
- * coloré par catégorie (forfeited / hit_otm / hit_itm). Lignes
- * horizontales pour B / K / S0, percentiles p5/p50/p95 calculés
- * client-side, légende + axes.
+ * coloré par catégorie (forfeited / hit_otm / hit_itm).
  *
- * DPR-aware : multiplie les dimensions par devicePixelRatio et
- * scale le ctx pour rester net sur écrans hi-dpi.
+ * Phase 2.1 fixes :
+ *  - Tri par catégorie avant draw (forfeited en arrière-plan, ITM
+ *    en dernier au-dessus)
+ *  - Opacities calibrées : 0.08 / 0.30 / 0.55
+ *  - Clip Y aux quantiles p1/p99 du prix terminal (cap S0×2.8)
+ *  - Annotations posées en bout de ligne respective (pas empilées)
+ *  - Deps useEffect renforcées avec result.inputHash + result.runtimeMs
+ *    pour invalidation garantie (les Float32Array transferred sont
+ *    déjà des refs neuves mais la défense ceinture+bretelles)
  */
 export function PathsCanvas({
   result,
@@ -59,8 +75,13 @@ export function PathsCanvas({
       const dpr = window.devicePixelRatio || 1;
       const cssW = Math.floor(rect.width);
       const cssH = Math.floor(rect.height);
-      if (canvas.width !== cssW * dpr) canvas.width = cssW * dpr;
-      if (canvas.height !== cssH * dpr) canvas.height = cssH * dpr;
+      const targetW = cssW * dpr;
+      const targetH = cssH * dpr;
+      // Setting canvas.width/height auto-clears le buffer ; on le fait
+      // toujours pour garantir un nettoyage complet, même si dimensions
+      // identiques (sécurité contre le rendu superposé).
+      canvas.width = targetW;
+      canvas.height = targetH;
       canvas.style.width = `${cssW}px`;
       canvas.style.height = `${cssH}px`;
       const ctx = canvas.getContext('2d');
@@ -80,7 +101,11 @@ export function PathsCanvas({
       ro.disconnect();
       cancelAnimationFrame(raf);
     };
-  }, [result, params]);
+    // Deps : result entier (Float32Array refs neuves à chaque run via
+    // transferable Float32Array), params (S0/K/B/sigma/T).
+    // result?.inputHash + result?.runtimeMs en filet pour invalidation
+    // garantie même si le hash change identiquement.
+  }, [result, result?.inputHash, result?.runtimeMs, params]);
 
   const itm = result ? (result.itmFinalRate * 100).toFixed(1) : '0,0';
   const otmHit = result
@@ -129,6 +154,8 @@ export function PathsCanvas({
   );
 }
 
+/* === Internal drawing functions ============================== */
+
 function drawScene(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -141,36 +168,68 @@ function drawScene(
   const innerH = h - PADDING.top - PADDING.bottom;
   if (innerW <= 0 || innerH <= 0) return;
 
-  // Y range = min/max sur les paths sample (avec un peu de padding) — robuste
-  // aux outliers extrêmes via percentile 1-99 si trop spread.
   const sample = result.pathsSample;
   const cats = result.pathCategories;
   const sampleCount = cats.length;
   const pathLen = sample.length / Math.max(1, sampleCount);
   if (pathLen < 2) return;
 
-  let yMin = Infinity;
-  let yMax = -Infinity;
-  for (let i = 0; i < sample.length; i++) {
-    const v = sample[i]!;
-    if (v < yMin) yMin = v;
-    if (v > yMax) yMax = v;
+  // === Y range : clip via p1/p99 du terminal + cap S0×2.8 (Fix #2) ===
+  const terminals: number[] = [];
+  for (let p = 0; p < sampleCount; p++) {
+    terminals.push(sample[p * pathLen + (pathLen - 1)]!);
   }
-  // Inclure barrière + strike + spot dans le range
+  terminals.sort((a, b) => a - b);
+  const p1 = terminals[Math.max(0, Math.floor(sampleCount * 0.01))]!;
+  const p99 = terminals[Math.min(sampleCount - 1, Math.floor(sampleCount * 0.99))]!;
+  let yMax = Math.min(p99 * 1.1, params.S0 * 2.8);
+  let yMin = Math.max(p1 * 0.9, params.S0 * 0.2);
+  // Inclure barrière, strike, spot dans la fenêtre visible
   if (params.B !== null) yMax = Math.max(yMax, params.B * 1.05);
-  yMin = Math.min(yMin, params.S0 * 0.6);
+  yMin = Math.min(yMin, params.S0 * 0.5);
   yMax = Math.max(yMax, params.S0 * 1.4);
   if (yMax - yMin < 1) yMax = yMin + 1;
 
   const xOf = (t: number) => PADDING.left + (t / (pathLen - 1)) * innerW;
   const yOf = (price: number) => PADDING.top + (1 - (price - yMin) / (yMax - yMin)) * innerH;
 
-  // Ordre de dessin : forfeited (clair, beaucoup) → otm → itm (vif, dessus)
-  drawPathsByCategory(ctx, sample, cats, pathLen, xOf, yOf, 0, COLORS.pathForfeited);
-  drawPathsByCategory(ctx, sample, cats, pathLen, xOf, yOf, 1, COLORS.pathOtm);
-  drawPathsByCategory(ctx, sample, cats, pathLen, xOf, yOf, 2, COLORS.pathItm);
+  // === Tri par catégorie (Fix #1) ===
+  // forfeited (0) drawn first → arrière-plan ; itm (2) drawn last → top.
+  const order = new Uint16Array(sampleCount);
+  for (let i = 0; i < sampleCount; i++) order[i] = i;
+  // sort par cat ASC (stable insertion suffit pour 600 items)
+  order.sort((a, b) => cats[a]! - cats[b]!);
 
-  // Quantiles : p5, p50, p95 calculés sur sample (par colonne de step)
+  // === Clip rectangle pour les paths (évite débordements) ===
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(PADDING.left, PADDING.top, innerW, innerH);
+  ctx.clip();
+
+  // Dessine en groupant par catégorie (1 path() par cat pour optim)
+  let curCat = -1;
+  for (let oi = 0; oi < sampleCount; oi++) {
+    const p = order[oi]!;
+    const c = cats[p]!;
+    if (c !== curCat) {
+      if (curCat !== -1) ctx.stroke();
+      const style = CATEGORY_STYLES[c] ?? CATEGORY_STYLES[0];
+      ctx.strokeStyle = style.color;
+      ctx.lineWidth = style.width;
+      ctx.beginPath();
+      curCat = c;
+    }
+    const base = p * pathLen;
+    ctx.moveTo(xOf(0), yOf(sample[base]!));
+    for (let t = 1; t < pathLen; t++) {
+      ctx.lineTo(xOf(t), yOf(sample[base + t]!));
+    }
+  }
+  if (curCat !== -1) ctx.stroke();
+
+  ctx.restore();
+
+  // === Quantiles p5 / p50 / p95 ===
   const quantiles = computeQuantiles(sample, sampleCount, pathLen, [0.05, 0.5, 0.95]);
   if (quantiles) {
     drawQuantile(ctx, quantiles.p50, xOf, yOf, COLORS.meanLine, 1.6, false);
@@ -178,95 +237,68 @@ function drawScene(
     drawQuantile(ctx, quantiles.p5, xOf, yOf, COLORS.quantile, 1.2, true);
   }
 
-  // Lignes horizontales : barrière, strike, spot
+  // === Lignes horizontales et annotations en bout de ligne (Fix #5) ===
+  const labelX = w - PADDING.right + 6;
   ctx.font = '10.5px ui-monospace, "JetBrains Mono", monospace';
   ctx.textBaseline = 'middle';
-  if (params.B !== null) {
-    drawHorizontalLine(ctx, yOf(params.B), w - PADDING.right, COLORS.barrier, [6, 4]);
-    drawLabel(
-      ctx,
-      `BARRIÈRE · ${NF_EUR.format(params.B)} €`,
-      w - PADDING.right + 6,
-      yOf(params.B),
-      COLORS.barrier,
-    );
-  }
-  drawHorizontalLine(ctx, yOf(params.K), w - PADDING.right, COLORS.strike, [2, 3]);
-  drawLabel(
-    ctx,
-    `STRIKE · ${NF_EUR.format(params.K)} €`,
-    w - PADDING.right + 6,
-    yOf(params.K),
-    COLORS.strike,
-  );
-  drawHorizontalLine(ctx, yOf(params.S0), w - PADDING.right, COLORS.spot, [2, 3]);
-  drawLabel(
-    ctx,
-    `S₀ · ${NF_EUR.format(params.S0)} €`,
-    w - PADDING.right + 6,
-    yOf(params.S0) - 12,
-    COLORS.spot,
-  );
+  ctx.textAlign = 'left';
 
-  // Quantile labels droite
+  type Label = { y: number; text: string; color: string };
+  const labels: Label[] = [];
+
+  if (params.B !== null) {
+    const yB = yOf(params.B);
+    drawHorizontalLine(ctx, yB, w - PADDING.right, COLORS.barrierLine, [6, 4]);
+    labels.push({ y: yB, text: `BARRIÈRE · ${NF_EUR.format(params.B)} €`, color: COLORS.barrier });
+  }
+  // Strike + Spot fusion si égaux (cas presets vanille K=S0)
+  const yK = yOf(params.K);
+  const yS0 = yOf(params.S0);
+  if (Math.abs(yK - yS0) < 8 && params.K === params.S0) {
+    drawHorizontalLine(ctx, yK, w - PADDING.right, COLORS.spotLine, [2, 3]);
+    labels.push({
+      y: yK,
+      text: `S₀ · STRIKE · ${NF_EUR.format(params.K)} €`,
+      color: COLORS.strike,
+    });
+  } else {
+    if (params.K > 0) {
+      drawHorizontalLine(ctx, yK, w - PADDING.right, COLORS.strikeLine, [2, 3]);
+      labels.push({ y: yK, text: `STRIKE · ${NF_EUR.format(params.K)} €`, color: COLORS.strike });
+    }
+    drawHorizontalLine(ctx, yS0, w - PADDING.right, COLORS.spotLine, [2, 3]);
+    labels.push({ y: yS0, text: `S₀ · ${NF_EUR.format(params.S0)} €`, color: COLORS.spot });
+  }
   if (quantiles) {
     const lastP95 = quantiles.p95[pathLen - 1]!;
     const lastP50 = quantiles.p50[pathLen - 1]!;
     const lastP5 = quantiles.p5[pathLen - 1]!;
-    drawLabel(
-      ctx,
-      `p95 · ${NF_EUR.format(lastP95)} €`,
-      w - PADDING.right + 6,
-      yOf(lastP95) - 12,
-      COLORS.text,
-    );
-    drawLabel(
-      ctx,
-      `p50 · ${NF_EUR.format(lastP50)} €`,
-      w - PADDING.right + 6,
-      yOf(lastP50) + 12,
-      COLORS.text,
-    );
-    drawLabel(
-      ctx,
-      `p5 · ${NF_EUR.format(lastP5)} €`,
-      w - PADDING.right + 6,
-      yOf(lastP5),
-      COLORS.text,
-    );
+    labels.push({ y: yOf(lastP95), text: `p95 · ${NF_EUR.format(lastP95)} €`, color: COLORS.text });
+    labels.push({ y: yOf(lastP50), text: `p50 · ${NF_EUR.format(lastP50)} €`, color: COLORS.text });
+    labels.push({ y: yOf(lastP5), text: `p5 · ${NF_EUR.format(lastP5)} €`, color: COLORS.text });
+  }
+
+  // Anti-overlap : décale les labels qui sont à moins de 14 px les uns des autres.
+  labels.sort((a, b) => a.y - b.y);
+  const MIN_GAP = 13;
+  for (let i = 1; i < labels.length; i++) {
+    const prev = labels[i - 1]!;
+    const cur = labels[i]!;
+    if (cur.y - prev.y < MIN_GAP) cur.y = prev.y + MIN_GAP;
+  }
+  // Clip dans la fenêtre canvas
+  for (const l of labels) {
+    l.y = Math.max(PADDING.top + 8, Math.min(h - PADDING.bottom - 8, l.y));
+    ctx.fillStyle = l.color;
+    ctx.fillText(l.text, labelX, l.y);
   }
 
   // Axes labels bas
   ctx.fillStyle = COLORS.text;
-  ctx.font = '10.5px ui-monospace, "JetBrains Mono", monospace';
   ctx.textAlign = 'left';
   ctx.fillText('t = 0', PADDING.left, h - 8);
   ctx.textAlign = 'right';
   ctx.fillText(`T = ${formatT(params.T)} ans`, w - PADDING.right, h - 8);
-}
-
-function drawPathsByCategory(
-  ctx: CanvasRenderingContext2D,
-  sample: Float32Array,
-  cats: Uint8Array,
-  pathLen: number,
-  xOf: (t: number) => number,
-  yOf: (price: number) => number,
-  cat: number,
-  color: string,
-) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 0.7;
-  ctx.beginPath();
-  for (let p = 0; p < cats.length; p++) {
-    if (cats[p] !== cat) continue;
-    const base = p * pathLen;
-    ctx.moveTo(xOf(0), yOf(sample[base]!));
-    for (let t = 1; t < pathLen; t++) {
-      ctx.lineTo(xOf(t), yOf(sample[base + t]!));
-    }
-  }
-  ctx.stroke();
 }
 
 function drawHorizontalLine(
@@ -285,18 +317,6 @@ function drawHorizontalLine(
   ctx.lineTo(xMax, y);
   ctx.stroke();
   ctx.restore();
-}
-
-function drawLabel(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  color: string,
-) {
-  ctx.fillStyle = color;
-  ctx.textAlign = 'left';
-  ctx.fillText(text, x, y);
 }
 
 function drawQuantile(

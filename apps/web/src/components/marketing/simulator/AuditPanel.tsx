@@ -4,8 +4,18 @@ import type { McResult } from '@/lib/mc/types';
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
-/** Bandeau audit haut-droite : seed/hash/runtime/N. */
-export function AuditPanel({ result }: { result: McResult | null }) {
+/**
+ * Bandeau audit haut-droite.
+ *
+ * Phase 2.1 fix #3 : seed et hash sont DEUX choses distinctes.
+ *  - seed : entier 32-bit (source de randomness reproductible),
+ *           affiché en hex padé sur 8 chars
+ *  - hash : SHA-256 truncated des inputs canonicalisés (change quand
+ *           tweak Vol/B/T) — déjà calculé côté engine via
+ *           crypto.subtle.digest, exposé dans `result.inputHash`
+ */
+export function AuditPanel({ result, seed }: { result: McResult | null; seed: number }) {
+  const seedHex = (seed >>> 0).toString(16).padStart(8, '0');
   return (
     <div
       className="text-mkt-mono flex flex-col items-end gap-1 text-[11px] tracking-wider text-[#F0EAD8]/55"
@@ -13,9 +23,7 @@ export function AuditPanel({ result }: { result: McResult | null }) {
     >
       <div>
         <span className="text-[#F0EAD8]/40">seed</span>{' '}
-        <span className="text-[#F0EAD8]/85">
-          {result ? formatSeed(result.inputHash) : '--------'}
-        </span>
+        <span className="text-[#F0EAD8]/85">{seedHex}</span>
       </div>
       <div>
         <span className="text-[#F0EAD8]/40">hash</span>{' '}
@@ -25,7 +33,7 @@ export function AuditPanel({ result }: { result: McResult | null }) {
         <span className="text-[#F0EAD8]/40">runtime</span>{' '}
         <span className="text-[#F0EAD8]/85">
           {result
-            ? `${Math.round(result.runtimeMs)} ms · ${formatPaths(result)}`
+            ? `${Math.round(result.runtimeMs)} ms · ${formatPaths(result.N)}`
             : '— ms · — paths'}
         </span>
       </div>
@@ -46,20 +54,7 @@ export function AuditFooter({ result }: { result: McResult | null }) {
   );
 }
 
-function formatSeed(hash: string): string {
-  // On affiche le hash 8-hex comme "seed" éditorial (idem mockup).
-  // Le vrai seed numérique est dans `params.seed` mais on n'a pas
-  // d'accès direct ici ; le hash est dérivé du seed entre autres.
-  return hash;
-}
-
-function formatPaths(result: McResult): string {
-  // McResult ne contient pas N directement, mais on peut le retrouver
-  // depuis pathCategories.length × sampleStride. On affiche un compteur
-  // approximatif basé sur ça, ou bien on hard-code via convergenceCurve
-  // qui se termine à count = N.
-  const last = result.convergenceCurve[result.convergenceCurve.length - 1];
-  const N = last?.n ?? result.pathCategories.length;
-  if (N >= 1000) return `${(N / 1000).toFixed(0)}k paths`;
+function formatPaths(N: number): string {
+  if (N >= 1000) return `${Math.round(N / 1000)}k paths`;
   return `${N} paths`;
 }

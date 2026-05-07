@@ -356,6 +356,8 @@ export async function runMonteCarlo(input: McInput): Promise<McResult> {
     inputHash,
     runtimeMs,
     engineVersion: ENGINE_VERSION,
+    N,
+    steps,
   };
 }
 

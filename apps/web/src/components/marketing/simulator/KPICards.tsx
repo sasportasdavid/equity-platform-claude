@@ -11,19 +11,31 @@ const NF_PCT = new Intl.NumberFormat('fr-FR', {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 });
-const NF_INT = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
-
 function formatPaths(N: number): string {
   if (N >= 1000) return `${Math.round(N / 1000)}k`;
   return String(N);
 }
 
-export function KPICards({ result, isQuick }: { result: McResult | null; isQuick: boolean }) {
+function formatDt(dt: number): string {
+  return dt.toFixed(3).replace('.', ',');
+}
+
+export function KPICards({
+  result,
+  isQuick,
+  T,
+}: {
+  result: McResult | null;
+  isQuick: boolean;
+  /** Maturité (ans), pour calculer dt = T/steps. */
+  T: number;
+}) {
   const fv = result?.fairValue;
   const ic = result?.ic95;
   const stdErr = result?.stdError;
-  const last = result?.convergenceCurve[result.convergenceCurve.length - 1];
-  const N = last?.n ?? 0;
+  const N = result?.N ?? 0;
+  const steps = result?.steps ?? 0;
+  const dt = steps > 0 ? T / steps : 0;
 
   return (
     <div className={cn('flex flex-col gap-4', isQuick && 'opacity-90')}>
@@ -85,8 +97,8 @@ export function KPICards({ result, isQuick }: { result: McResult | null; isQuick
         <MiniKpi
           label="Paths"
           value={N ? formatPaths(N) : '—'}
-          unit={N >= 1000 ? '' : ''}
-          sub={result ? `${NF_INT.format(N)} simulés` : '—'}
+          unit=""
+          sub={result ? `${steps} pas · dt ${formatDt(dt)}a` : '—'}
         />
       </div>
     </div>

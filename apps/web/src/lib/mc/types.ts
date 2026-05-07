@@ -93,6 +93,10 @@ export type McResult = {
   runtimeMs: number;
   /** Version de l'engine (semver-ish), exposée pour audit / replay. */
   engineVersion: string;
+  /** N (nombre de paths) du run. Re-exposé ici pour les KPI / audit UI. */
+  N: number;
+  /** Steps de discrétisation. Permet de calculer dt = T/steps côté UI. */
+  steps: number;
 };
 
 /**

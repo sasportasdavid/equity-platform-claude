@@ -177,7 +177,31 @@ function Slider({
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="custom-range absolute inset-0 w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed"
+          className={cn(
+            'mc-slider absolute inset-0 w-full cursor-pointer appearance-none bg-transparent',
+            'disabled:cursor-not-allowed',
+            // Thumb WebKit
+            '[&::-webkit-slider-thumb]:appearance-none',
+            '[&::-webkit-slider-thumb]:size-3.5',
+            '[&::-webkit-slider-thumb]:rounded-full',
+            '[&::-webkit-slider-thumb]:bg-[#D4A06A]',
+            '[&::-webkit-slider-thumb]:border-2',
+            '[&::-webkit-slider-thumb]:border-[#0B1124]',
+            '[&::-webkit-slider-thumb]:shadow-[0_0_0_1px_rgba(212,160,106,0.3)]',
+            '[&::-webkit-slider-thumb]:cursor-pointer',
+            '[&::-webkit-slider-thumb]:transition-transform',
+            'hover:[&::-webkit-slider-thumb]:scale-110',
+            'disabled:[&::-webkit-slider-thumb]:bg-[rgba(212,160,106,0.3)]',
+            'disabled:[&::-webkit-slider-thumb]:cursor-not-allowed',
+            // Thumb Firefox
+            '[&::-moz-range-thumb]:size-3.5',
+            '[&::-moz-range-thumb]:rounded-full',
+            '[&::-moz-range-thumb]:bg-[#D4A06A]',
+            '[&::-moz-range-thumb]:border-2',
+            '[&::-moz-range-thumb]:border-[#0B1124]',
+            '[&::-moz-range-thumb]:cursor-pointer',
+            'disabled:[&::-moz-range-thumb]:bg-[rgba(212,160,106,0.3)]',
+          )}
         />
       </div>
       <div className="text-mkt-mono flex justify-between text-[9.5px] text-[#F0EAD8]/35">

@@ -56,6 +56,8 @@ function makeFakeResult(): McResult {
     inputHash: 'deadbeef',
     runtimeMs: 740,
     engineVersion: 'capiwise-mc-js-1.0.0',
+    N: 60_000,
+    steps: 40,
   };
 }
 

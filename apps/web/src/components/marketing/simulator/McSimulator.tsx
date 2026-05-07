@@ -52,7 +52,7 @@ export function McSimulator({
             {PRESETS[sim.presetKey].label} · grant date fair value
           </p>
         </div>
-        <AuditPanel result={sim.result} />
+        <AuditPanel result={sim.result} seed={sim.params.seed} />
       </div>
 
       {/* === Preset selector === */}
@@ -71,7 +71,7 @@ export function McSimulator({
           />
         </div>
         <div className="flex flex-col gap-5 lg:col-span-4">
-          <KPICards result={sim.result} isQuick={isQuick} />
+          <KPICards result={sim.result} isQuick={isQuick} T={sim.params.T} />
           <TweaksPanel params={sim.params} setParam={sim.setParam} nextSeed={sim.nextSeed} />
         </div>
       </div>
