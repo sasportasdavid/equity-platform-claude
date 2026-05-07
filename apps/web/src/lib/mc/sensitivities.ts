@@ -6,8 +6,7 @@
  * Volatilité" du viewer Phase 2.
  */
 
-import { createGaussian } from './gaussian';
-import { createPcg32 } from './prng';
+import { createPcg32, type Pcg32 } from './prng';
 import type { McInput } from './types';
 
 const SENS_N = 8_000;
@@ -20,35 +19,61 @@ const SENS_RANGES = {
 
 export type SensitivityPoint = { x: number; fv: number };
 
+/** Box-Muller polaire inliné — partagé avec engine.ts via copy. */
+function gaussInline(prng: Pcg32, cache: { v: number | null }): number {
+  if (cache.v !== null) {
+    const out = cache.v;
+    cache.v = null;
+    return out;
+  }
+  let u1: number;
+  let u2: number;
+  let s: number;
+  do {
+    u1 = prng.nextFloat01() * 2 - 1;
+    u2 = prng.nextFloat01() * 2 - 1;
+    s = u1 * u1 + u2 * u2;
+  } while (s >= 1 || s === 0);
+  const factor = Math.sqrt((-2 * Math.log(s)) / s);
+  cache.v = u2 * factor;
+  return u1 * factor;
+}
+
 function runLightCore(input: McInput): number {
   const { S0, K, B, sigma, r, q, T, N, steps, seed, preset } = input;
   const dt = T / steps;
   const drift = (r - q - 0.5 * sigma * sigma) * dt;
   const volStep = sigma * Math.sqrt(dt);
   const discount = Math.exp(-r * T);
+  const hasBarrier = B !== null;
+  const logBarrier = hasBarrier ? Math.log(B / S0) : 0;
   const isTsr = preset === 'tsr_peer';
   const rho = 0.5;
   const peerVolFactor = Math.sqrt(1 - rho * rho);
 
   const prng = createPcg32(seed);
-  const gauss = createGaussian(prng);
+  const cache = { v: null as number | null };
   let sum = 0;
   for (let n = 0; n < N; n++) {
-    let s = S0;
-    let sPeer = isTsr ? S0 : 0;
-    let touched = !B;
+    let cumLog = 0;
+    let cumLogPeer = 0;
+    let touched = !hasBarrier;
     for (let t = 0; t < steps; t++) {
-      const z = gauss();
-      s = s * Math.exp(drift + volStep * z);
-      if (B && !touched && s >= B) touched = true;
+      const z = gaussInline(prng, cache);
+      cumLog += drift + volStep * z;
+      if (hasBarrier && !touched && cumLog >= logBarrier) touched = true;
       if (isTsr) {
-        const z2 = gauss();
+        const z2 = gaussInline(prng, cache);
         const zPeer = rho * z + peerVolFactor * z2;
-        sPeer = sPeer * Math.exp(drift + volStep * zPeer);
+        cumLogPeer += drift + volStep * zPeer;
       }
     }
+    const s = S0 * Math.exp(cumLog);
     let payoff = touched ? Math.max(s - K, 0) : 0;
-    if (isTsr && payoff > 0 && sPeer >= s) payoff = 0;
+    if (isTsr && payoff > 0) {
+      const sPeer = S0 * Math.exp(cumLogPeer);
+      if (sPeer >= s) payoff = 0;
+    }
     sum += discount * payoff;
   }
   return sum / N;

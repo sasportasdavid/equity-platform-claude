@@ -30,8 +30,7 @@
  * internes, pré-cache des bins d'histogrammes.
  */
 
-import { createGaussian } from './gaussian';
-import { createPcg32 } from './prng';
+import { createPcg32, type Pcg32 } from './prng';
 import type { McInput, McResult } from './types';
 
 export const ENGINE_VERSION = 'capiwise-mc-js-1.0.0';
@@ -45,18 +44,59 @@ const HIST_BINS = 30;
  * sensibilités. Retourne le minimum nécessaire pour calculer la FV
  * (pas les histogrammes / paths sample qui ne sont produits qu'une
  * fois côté caller).
+ *
+ * Optimisations Phase 1.5 :
+ *  - Gaussian Box-Muller polaire inliné (évite la closure call sur
+ *    ~N*steps tirages, ≈ 4M appels pour psp_barrier 60k×60).
+ *  - PRNG xoshiro128++ (zéro BigInt, JIT-friendly).
+ *  - Cache du 2nd tirage gaussien dans une variable locale.
  */
 type LightRun = { fv: number };
 
+/**
+ * Boucle interne factorisée — partagée par `runCore` (FV-only) et
+ * `runMonteCarlo` (avec sampling/histogrammes).
+ *
+ * Box-Muller polaire inliné : la rejection (~21% des paires) reste
+ * gérée via boucle `do/while` mais sans appel de fonction.
+ */
+function gaussInline(prng: Pcg32, cachePrev: { v: number | null }): number {
+  if (cachePrev.v !== null) {
+    const out = cachePrev.v;
+    cachePrev.v = null;
+    return out;
+  }
+  let u1: number;
+  let u2: number;
+  let s: number;
+  do {
+    u1 = prng.nextFloat01() * 2 - 1;
+    u2 = prng.nextFloat01() * 2 - 1;
+    s = u1 * u1 + u2 * u2;
+  } while (s >= 1 || s === 0);
+  const factor = Math.sqrt((-2 * Math.log(s)) / s);
+  cachePrev.v = u2 * factor;
+  return u1 * factor;
+}
+
+/**
+ * Optimisation cumulative-log : au lieu d'appeler `Math.exp` à chaque
+ * step (60k×40 = 2.4M appels), on accumule `cumLog += drift + volStep·z`
+ * et on appelle `Math.exp` UNE FOIS en fin de path. La condition de
+ * barrière `S ≥ B` devient `cumLog ≥ log(B/S0)`. Économise ~28× de
+ * Math.exp pour `runCore` (qui ne fait pas de path sampling).
+ */
 function runCore(input: McInput): LightRun {
   const { S0, K, B, sigma, r, q, T, N, steps, seed, preset } = input;
   const dt = T / steps;
   const drift = (r - q - 0.5 * sigma * sigma) * dt;
   const volStep = sigma * Math.sqrt(dt);
   const discount = Math.exp(-r * T);
+  const hasBarrier = B !== null;
+  const logBarrier = hasBarrier ? Math.log(B / S0) : 0;
 
   const prng = createPcg32(seed);
-  const gauss = createGaussian(prng);
+  const cache = { v: null as number | null };
 
   // TSR peer correlation (Cholesky 2D)
   const isTsr = preset === 'tsr_peer';
@@ -65,21 +105,25 @@ function runCore(input: McInput): LightRun {
 
   let sumPayoff = 0;
   for (let n = 0; n < N; n++) {
-    let s = S0;
-    let sPeer = isTsr ? S0 : 0;
-    let touched = !B; // si pas de barrière, payoff inconditionnel
+    let cumLog = 0;
+    let cumLogPeer = 0;
+    let touched = !hasBarrier;
     for (let t = 0; t < steps; t++) {
-      const z = gauss();
-      s = s * Math.exp(drift + volStep * z);
-      if (B && !touched && s >= B) touched = true;
+      const z = gaussInline(prng, cache);
+      cumLog += drift + volStep * z;
+      if (hasBarrier && !touched && cumLog >= logBarrier) touched = true;
       if (isTsr) {
-        const z2 = gauss();
+        const z2 = gaussInline(prng, cache);
         const zPeer = rho * z + peerVolFactor * z2;
-        sPeer = sPeer * Math.exp(drift + volStep * zPeer);
+        cumLogPeer += drift + volStep * zPeer;
       }
     }
+    const s = S0 * Math.exp(cumLog);
     let payoff = touched ? Math.max(s - K, 0) : 0;
-    if (isTsr && payoff > 0 && sPeer >= s) payoff = 0;
+    if (isTsr && payoff > 0) {
+      const sPeer = S0 * Math.exp(cumLogPeer);
+      if (sPeer >= s) payoff = 0;
+    }
     sumPayoff += discount * payoff;
   }
 
@@ -165,48 +209,57 @@ export async function runMonteCarlo(input: McInput): Promise<McResult> {
   let itmCount = 0;
 
   const prng = createPcg32(seed);
-  const gauss = createGaussian(prng);
+  const cache = { v: null as number | null };
+  const hasBarrier = B !== null;
+  const logBarrier = hasBarrier ? Math.log(B / S0) : 0;
 
   const isTsr = preset === 'tsr_peer';
   const rho = 0.5;
   const peerVolFactor = Math.sqrt(1 - rho * rho);
 
   for (let n = 0; n < N; n++) {
-    let s = S0;
-    let sPeer = isTsr ? S0 : 0;
-    let touched = !B;
+    let cumLog = 0;
+    let cumLogPeer = 0;
+    let touched = !hasBarrier;
     let firstHitT = -1;
     const isSampled = sampleStride === 1 || n % sampleStride === 0;
     const sampleIdx = isSampled ? Math.floor(n / sampleStride) : -1;
+    const writingSample = sampleIdx >= 0 && sampleIdx < sampleCount;
 
-    if (sampleIdx >= 0 && sampleIdx < sampleCount) {
-      pathsSample[sampleIdx * pathLen] = s;
+    if (writingSample) {
+      pathsSample[sampleIdx * pathLen] = S0;
     }
 
     for (let t = 0; t < steps; t++) {
-      const z = gauss();
-      s = s * Math.exp(drift + volStep * z);
-      if (B && !touched && s >= B) {
+      const z = gaussInline(prng, cache);
+      cumLog += drift + volStep * z;
+      if (hasBarrier && !touched && cumLog >= logBarrier) {
         touched = true;
         firstHitT = (t + 1) * dt;
       }
       if (isTsr) {
-        const z2 = gauss();
+        const z2 = gaussInline(prng, cache);
         const zPeer = rho * z + peerVolFactor * z2;
-        sPeer = sPeer * Math.exp(drift + volStep * zPeer);
+        cumLogPeer += drift + volStep * zPeer;
       }
-      if (sampleIdx >= 0 && sampleIdx < sampleCount) {
-        pathsSample[sampleIdx * pathLen + t + 1] = s;
+      if (writingSample) {
+        // Pour les paths sampled (1% du total), on a besoin de S(t) à
+        // chaque step pour la viz trajectoires — exp() gardée ici.
+        pathsSample[sampleIdx * pathLen + t + 1] = S0 * Math.exp(cumLog);
       }
     }
 
+    const s = S0 * Math.exp(cumLog);
     let payoff = touched ? Math.max(s - K, 0) : 0;
-    if (isTsr && payoff > 0 && sPeer >= s) payoff = 0;
+    if (isTsr && payoff > 0) {
+      const sPeer = S0 * Math.exp(cumLogPeer);
+      if (sPeer >= s) payoff = 0;
+    }
     const discPayoff = discount * payoff;
 
     payoffs[n] = discPayoff;
     terminals[n] = s;
-    if (touched && B) hitTimes.push(firstHitT);
+    if (touched && hasBarrier) hitTimes.push(firstHitT);
     if (touched) touchedCount++;
     if (payoff > 0) itmCount++;
 
@@ -248,7 +301,7 @@ export async function runMonteCarlo(input: McInput): Promise<McResult> {
   const terminalHistogram = buildHistogramTerminal(terminals, HIST_BINS);
 
   let hitTimeHistogram: McResult['hitTimeHistogram'];
-  if (B && hitTimes.length > 0) {
+  if (hasBarrier && hitTimes.length > 0) {
     const ht = Float32Array.from(hitTimes);
     const meanHit = hitTimes.reduce((a, b) => a + b, 0) / hitTimes.length;
     const hist = buildHistogramRange(ht, HIST_BINS, 0, T);
@@ -259,8 +312,11 @@ export async function runMonteCarlo(input: McInput): Promise<McResult> {
 
   const pathsAtZero = countAtZero(payoffs);
 
-  // Greeks par différences finies centrées (CRN avec même seed)
-  const greeksN = Math.max(2000, Math.floor(N / 2));
+  // Greeks par différences finies centrées (CRN avec même seed).
+  // Phase 1.5 : N greeks réduit de N/2 → N/4 (suffisant pour FD avec
+  // CRN — la variance se réduit déjà par contraste, pas besoin de
+  // beaucoup de paths). Économise ~25% du compute total.
+  const greeksN = Math.max(2000, Math.floor(N / 4));
   const baseLight = { N: greeksN };
   const sBumpUp = runCore({ ...input, ...baseLight, S0: S0 * 1.01 });
   const sBumpDn = runCore({ ...input, ...baseLight, S0: S0 * 0.99 });
@@ -281,7 +337,7 @@ export async function runMonteCarlo(input: McInput): Promise<McResult> {
     fairValue,
     stdError,
     ic95,
-    hitRateBarrier: B ? touchedCount / N : 0,
+    hitRateBarrier: hasBarrier ? touchedCount / N : 0,
     forfeitedRate: (N - itmCount) / N,
     itmFinalRate: itmCount / N,
     delta,

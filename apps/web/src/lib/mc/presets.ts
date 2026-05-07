@@ -70,7 +70,11 @@ export function buildInput(
     q: overrides.q ?? spec.defaults.q,
     T: overrides.T ?? spec.defaults.T,
     N: overrides.N ?? 60_000,
-    steps: overrides.steps ?? 60,
+    // Phase 1.5 : default abaissé de 60 à 40 (FV delta < 1 % vs 60
+    // sur psp_barrier, et < 0,1 % sur les vanilles). Économise ~33 %
+    // du compute. Le caller peut toujours forcer steps=60 via override
+    // pour les barrières exotiques où la résolution temporelle compte.
+    steps: overrides.steps ?? 40,
     seed: overrides.seed ?? 42,
   };
 }

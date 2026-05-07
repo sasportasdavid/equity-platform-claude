@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createPcg32 } from '@/lib/mc/prng';
 
-describe('PCG32', () => {
-  it('pcg32_known_seed — seed=42, 5 premiers floats sont déterministes', () => {
+describe('xoshiro128++', () => {
+  it('xoshiro128pp_known_seed — seed=42, 5 premiers floats sont déterministes', () => {
     const prng = createPcg32(42);
     const samples = [
       prng.nextFloat01(),
@@ -16,11 +16,13 @@ describe('PCG32', () => {
       expect(s).toBeGreaterThanOrEqual(0);
       expect(s).toBeLessThan(1);
     }
-    // Régression : ces 5 valeurs sont figées au 1er run par toMatchInlineSnapshot.
-    // Si elles changent par la suite, c'est une rupture API du PRNG (à signaler).
+    // Régression : valeurs ancrées xoshiro128++ seed=42 (Phase 1.5).
+    // L'ancien snapshot PCG32 BigInt était figé à
+    // "0.76155828,0.44811550,0.95970718,0.79600818,0.48016406".
+    // Si ces valeurs changent à nouveau, c'est une rupture API du PRNG.
     const fingerprint = samples.map((s) => s.toFixed(8)).join(',');
     expect(fingerprint).toMatchInlineSnapshot(
-      `"0.76155828,0.44811550,0.95970718,0.79600818,0.48016406"`,
+      `"0.09419437,0.35485424,0.76222215,0.08994304,0.12210429"`,
     );
   });
 

@@ -1,47 +1,88 @@
 /**
- * PCG32 — Permuted Congruential Generator (state 64 bits, output 32 bits).
+ * xoshiro128++ — Permuted Linear Generator (state 4×32-bit, output 32-bit).
  *
- * Choix vs Math.random() : seedable, déterministe, period 2^64, qualité
- * statistique correcte pour Monte Carlo grand public. Implémentation
- * naïve mais portable (BigInt pour la state, conversion Number 32-bit
- * en sortie). Pas de lib externe.
+ * L'API expose toujours `createPcg32` / `Pcg32` pour préserver la
+ * compatibilité avec `engine.ts`, `gaussian.ts` et les tests Phase 1.
+ * Seule l'implémentation interne change : on remplace PCG32 BigInt
+ * (state 64-bit, ~5× plus lent en V8 à cause des allocations BigInt
+ * par tirage) par xoshiro128++ Number (zéro BigInt, JIT-optimisable).
  *
- * Référence : https://www.pcg-random.org/
+ * Algorithme (Blackman & Vigna 2019) :
+ *   state = (s0, s1, s2, s3) ∈ Uint32^4
+ *   result = rotl(s0 + s3, 7) + s0
+ *   t = s1 << 9
+ *   s2 ^= s0
+ *   s3 ^= s1
+ *   s1 ^= s2
+ *   s0 ^= s3
+ *   s2 ^= t
+ *   s3 = rotl(s3, 11)
+ *
+ * Period 2^128 - 1, passe BigCrush et PractRand. C'est la famille que
+ * V8 utilise sous le capot pour `Math.random` (variant xorshift128+).
+ *
+ * Seed : splitmix32 (variant 32-bit du splitmix64 de Vigna) pour
+ * étaler le seed scalaire en 4 mots Int32 sans corrélation triviale.
+ *
+ * Réf : https://prng.di.unimi.it/xoshiro128plusplus.c
+ *       https://prng.di.unimi.it/splitmix64.c
  */
-
-const MULTIPLIER = 6364136223846793005n;
-const INCREMENT = 1442695040888963407n;
-const MASK_64 = 0xffffffffffffffffn;
 
 export type Pcg32 = {
   /** Tirage entier non-signé 32 bits. */
   nextU32: () => number;
-  /** Tirage flottant uniforme dans [0, 1). 53 bits effectifs (24 + 29). */
+  /** Tirage flottant uniforme dans [0, 1). 53 bits effectifs (27 + 26). */
   nextFloat01: () => number;
 };
 
-/**
- * Crée un générateur PCG32 seedé par `seed` (entier 32-bit non-signé).
- * Le pas d'init avance la state d'un tirage pour éviter les corrélations
- * triviales entre seeds adjacents.
- */
+/** splitmix32 — étale un seed scalaire en séquence pseudo-aléatoire. */
+function splitmix32(seed: number): () => number {
+  let z = seed >>> 0;
+  return function next(): number {
+    z = (z + 0x9e3779b9) >>> 0;
+    let x = z;
+    x = Math.imul(x ^ (x >>> 16), 0x85ebca6b) >>> 0;
+    x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35) >>> 0;
+    return (x ^ (x >>> 16)) >>> 0;
+  };
+}
+
+/** Rotate-left 32 bits (équivalent C : `(x << k) | (x >> (32 - k))`). */
+function rotl32(x: number, k: number): number {
+  return ((x << k) | (x >>> (32 - k))) >>> 0;
+}
+
 export function createPcg32(seed: number): Pcg32 {
-  let state = (BigInt(seed >>> 0) + INCREMENT) & MASK_64;
-  // Burn-in : un tirage à vide pour mixer la seed.
-  state = (state * MULTIPLIER + INCREMENT) & MASK_64;
+  // Seed les 4 mots state via splitmix32 — protège contre les seeds
+  // corrélés (ex: seed=0 ne doit pas donner state tout-à-zéro).
+  const sm = splitmix32(seed);
+  let s0 = sm();
+  let s1 = sm();
+  let s2 = sm();
+  let s3 = sm();
+  // Garde-fou : si state tout-à-zéro (impossible en pratique avec
+  // splitmix32 mais théoriquement possible si seed adverse), force
+  // un mot non-nul.
+  if ((s0 | s1 | s2 | s3) === 0) s0 = 1;
 
   function nextU32(): number {
-    const oldstate = state;
-    state = (state * MULTIPLIER + INCREMENT) & MASK_64;
-    // Output function : XOR-shift puis rotation.
-    const xorshifted = Number(((oldstate >> 18n) ^ oldstate) >> 27n) & 0xffffffff;
-    const rot = Number(oldstate >> 59n);
-    const result = ((xorshifted >>> rot) | (xorshifted << (-rot & 31))) & 0xffffffff;
-    return result >>> 0;
+    // result = rotl(s0 + s3, 7) + s0
+    const sum = (s0 + s3) >>> 0;
+    const result = (rotl32(sum, 7) + s0) >>> 0;
+
+    const t = (s1 << 9) >>> 0;
+    s2 = (s2 ^ s0) >>> 0;
+    s3 = (s3 ^ s1) >>> 0;
+    s1 = (s1 ^ s2) >>> 0;
+    s0 = (s0 ^ s3) >>> 0;
+    s2 = (s2 ^ t) >>> 0;
+    s3 = rotl32(s3, 11);
+
+    return result;
   }
 
   function nextFloat01(): number {
-    // 53 bits = 26 high + 27 low de 2 tirages 32-bit.
+    // 53 bits = 27 high + 26 low de 2 tirages 32-bit, format double.
     const a = nextU32() >>> 5; // 27 bits
     const b = nextU32() >>> 6; // 26 bits
     return (a * 0x4000000 + b) / 0x20000000000000;
