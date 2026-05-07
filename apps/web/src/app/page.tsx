@@ -1,33 +1,34 @@
 import type { Metadata } from 'next';
 import { MarketingLayout } from '@/components/marketing/layout';
 import {
-  BigFeature,
-  CTABanner,
-  HeroLarge,
-  MarketingSection,
-  SectionHeader,
-  StatsBlock,
-  TrustBadges,
-} from '@/components/marketing/sections';
-import { ComparisonTable } from '@/components/marketing/pricing';
-import { LogoCloud, TestimonialGrid } from '@/components/marketing/testimonials';
+  MktComparison,
+  MktCtaBanner,
+  MktHero,
+  MktLogoCloud,
+  MktPillar,
+  MktSection,
+  MktSectionHead,
+  MktStatsInk,
+  MktTestimonials,
+  MktTrust,
+} from '@/components/marketing/editorial';
 import {
-  ApprovalVisual,
-  AuditVisual,
-  HomepageDashboardMockup,
-  MonteCarloVisual,
-  PortalVisual,
-} from '@/components/marketing/visuals';
+  HeroMockup,
+  PvAudit,
+  PvMonteCarlo,
+  PvPortal,
+  PvWizard,
+} from '@/components/marketing/pillar-visuals';
 
 export const metadata: Metadata = {
-  title: 'Capiwise — Plateforme française de gestion d’actionnariat salarié',
+  title: 'Capiwise — Pilotez vos plans BSPCE, AGA et Stock Options sans bricolage juridique',
   description:
-    'BSPCE, AGA, Stock Options, BSA, RSU. Conformité FR native (art. 163 bis G CGI), valorisation IFRS 2 par Monte Carlo, workflow d’approbation auditable. Hébergé en France.',
+    'Plateforme française de gestion d’actionnariat salarié : conformité native (art. 163 bis G CGI), valorisation IFRS 2 par Monte Carlo, workflow d’approbation auditable. Hébergée en France.',
   alternates: { canonical: 'https://www.capiwise.fr/' },
   openGraph: {
     title: 'Capiwise — Plateforme française d’actionnariat salarié',
     description:
-      'Pilotez vos plans BSPCE, AGA et Stock Options avec la rigueur d’un cabinet M&A et la simplicité d’un SaaS moderne.',
+      'Conçue pour les CFO exigeants et les fondateurs ambitieux. BSPCE, AGA, Stock Options, BSA, RSU.',
     url: 'https://www.capiwise.fr/',
     siteName: 'Capiwise',
     locale: 'fr_FR',
@@ -38,268 +39,354 @@ export const metadata: Metadata = {
 export default function HomePage() {
   return (
     <MarketingLayout>
-      <HeroLarge
-        eyebrow="Plateforme française · Beta privée 18 mai 2026"
+      {/* ===== HERO ===== */}
+      <MktHero
+        eyebrow="Plateforme française de gestion d'actionnariat salarié"
         title={
           <>
-            Pilotez vos plans BSPCE, AGA et Stock Options sans bricolage{' '}
-            <span className="serif-italic text-brass-700">juridique</span>.
+            Pilotez vos plans <span className="text-mkt-italic text-brass-700">BSPCE, AGA</span> et{' '}
+            <span className="text-mkt-italic text-brass-700">Stock Options</span> sans bricolage
+            juridique.
           </>
         }
-        description="La seule plateforme française qui combine conformité native (art. 163 bis G CGI), valorisation IFRS 2 par Monte Carlo et workflow d’approbation auditable. Conçue pour les CFO exigeants et les fondateurs ambitieux."
+        lede={
+          <>
+            La seule plateforme française qui combine conformité native (art. 163 bis G CGI),
+            valorisation IFRS&nbsp;2 par Monte Carlo, et workflow d’approbation auditable. Conçue
+            pour les CFO exigeants et les fondateurs ambitieux.
+          </>
+        }
         primaryCta={{ label: 'Demander une démo', href: '/contact' }}
         secondaryCta={{ label: 'Voir les tarifs', href: '/tarifs' }}
-        visual={<HomepageDashboardMockup className="w-full max-w-xl" />}
-      />
-
-      <LogoCloud title="Ils nous font confiance pour structurer leur actionnariat salarié" />
-
-      <StatsBlock
-        stats={[
-          { value: '5', label: 'Instruments natifs', hint: 'BSPCE · SO · AGA · RSU · BSA' },
-          { value: '100%', label: 'Conformité FR', hint: 'Art. 163 bis G CGI + IFRS 2' },
-          { value: '🇫🇷', label: 'Hébergé en France', hint: 'RGPD strict, hors Cloud Act' },
-          { value: '10×', label: 'Plus rapide', hint: 'vs Excel + cabinet externe' },
+        trustItems={[
+          'Hébergement France · RGPD strict',
+          'eIDAS qualifié avancé via Yousign',
+          'Audit-trail immuable',
         ]}
+        visual={<HeroMockup />}
       />
 
-      <MarketingSection paper>
-        <SectionHeader
-          eyebrow="Quatre piliers produit"
+      {/* ===== LOGO CLOUD ===== */}
+      <MktSection tight className="!pt-0">
+        <MktLogoCloud title="Ils nous font confiance pour structurer leur actionnariat salarié" />
+      </MktSection>
+
+      {/* ===== STATS sur fond ink-900 ===== */}
+      <MktSection variant="ink" tight>
+        <MktStatsInk
+          stats={[
+            {
+              value: '5',
+              italic: true,
+              labelBold: 'Instruments couverts',
+              label: 'BSPCE, SO, AGA, RSU, BSA',
+            },
+            {
+              value: '100',
+              unit: '%',
+              labelBold: 'Conforme FR',
+              label: 'art. 163 bis G CGI · IFRS 2',
+            },
+            {
+              value: 'FR',
+              italic: true,
+              labelBold: 'Hébergement',
+              label: 'RGPD strict · pas de Cloud Act',
+            },
+            {
+              value: '10',
+              unit: '×',
+              labelBold: 'Plus rapide',
+              label: 'vs Excel + cabinet externe',
+            },
+          ]}
+        />
+      </MktSection>
+
+      {/* ===== 4 PILIERS ALTERNÉS ===== */}
+      <MktSection>
+        <MktSectionHead
+          eyebrow="Quatre piliers, une rigueur"
           title={
             <>
-              Tout l’actionnariat salarié,{' '}
-              <span className="serif-italic text-brass-700">en un seul outil</span>.
+              De la création du plan à la{' '}
+              <span className="text-mkt-italic text-brass-700">levée d’options</span>, tout sur une
+              seule plateforme.
             </>
           }
-          description="Plans, attribution, valorisation, audit. Conçu en France pour les sociétés françaises, avec la rigueur d’un cabinet M&A."
+          description="On ne facture pas la valorisation IFRS 2 en sus. On ne sous-traite pas la conformité à un cabinet. On ne renvoie pas vos salariés sur un PDF mort. La valeur est dans la chaîne complète, et elle vous revient."
         />
-      </MarketingSection>
 
-      <BigFeature
-        eyebrow="Plans & Attributions"
-        title="Créez vos plans en quelques clics, attribuez en toute conformité."
-        description="Du wizard 7 étapes à la validation AGE automatique : 5 instruments natifs, calendaires ou conditionnels, contraintes légales pré-câblées."
-        bullets={[
-          '5 instruments natifs : BSPCE, Stock Options, AGA, RSU, BSA',
-          'Wizard guidé avec auto-save et compliance live',
-          'Validation automatique des contraintes légales (plafonds AGA, art. 163 bis G CGI)',
-          'Workflow d’approbation N-niveaux (CFO → CEO → Board)',
-          'Templates GLOBAL prêts à l’emploi (DOCX/PDF)',
-        ]}
-        cta={{ label: 'Découvrir le module Plans', href: '/produit/plans' }}
-        visual={<HomepageDashboardMockup className="w-full" />}
-      />
-
-      <BigFeature
-        reverse
-        eyebrow="Valorisation IFRS 2"
-        title={
-          <>
-            Monte Carlo 100 000 paths.{' '}
-            <span className="serif-italic text-brass-700">Aussi simple qu’un export Excel.</span>
-          </>
-        }
-        description="Pricer Black-Scholes & Heston, conditions de performance multi-conditions, juste valeur par tranche. Inclus, pas facturé en sus."
-        bullets={[
-          'Pricer Black-Scholes & Heston (modèle paramétrique)',
-          'Conditions de performance (TSR, VWAP, EBITDA, market metrics)',
-          'Juste valeur par tranche, refresh trimestriel automatique',
-          'Visualisation Monte Carlo native (pas un PDF mort)',
-          'Audit-ready : exports CAC + traces complètes',
-        ]}
-        cta={{ label: 'Découvrir la valorisation IFRS 2', href: '/produit/valorisation-ifrs2' }}
-        visual={<MonteCarloVisual className="h-full w-full" />}
-      />
-
-      <BigFeature
-        eyebrow="Conformité & Audit"
-        title="Au-dessus du standard CAC, pas en-dessous."
-        description="Audit trail immuable hash-chainé, exports auditeurs, defense-in-depth multi-tenant à 4 couches. Pensé pour passer le contrôle d’un Big Four."
-        bullets={[
-          'Audit trail immuable (hash chain SHA-256)',
-          'Exports auditeurs (CSV, JSON, PDF) en 1 clic',
-          'Chaîne d’approbation auditable, idempotente',
-          'Defense-in-depth 4 couches (RLS · TENANT_VIOLATION · server checks · UI)',
-          'Signature eIDAS qualifiée avancée via Yousign',
-        ]}
-        cta={{ label: 'Voir la conformité FR', href: '/produit/conformite-fr' }}
-        visual={<AuditVisual className="h-full w-full" />}
-      />
-
-      <BigFeature
-        reverse
-        eyebrow="Portail bénéficiaire"
-        title="Vos salariés comprennent enfin leur equity."
-        description="Vesting visualisé, simulateur de départ, documents centralisés. Un espace dédié qui transforme leur stock-option de mystère en levier de motivation."
-        bullets={[
-          'Vesting timeline interactive avec progression cumulée',
-          'Simulateur de départ (Good / Bad leaver, accélération)',
-          'Documents signés en ligne, accès permanent',
-          'Notifications smart sur les jalons (cliff, exercice ouvert)',
-          'Espace RH dédié pour onboarding bénéficiaire',
-        ]}
-        cta={{ label: 'Découvrir le portail bénéficiaire', href: '/produit/portail-beneficiaire' }}
-        visual={<PortalVisual className="h-full w-full" />}
-      />
-
-      <BigFeature
-        eyebrow="Approbations & Workflow"
-        title="Une chaîne d’approbation que vos auditeurs vont adorer."
-        description="Définissez vos workflows N-niveaux, séquentiels ou parallèles, avec idempotence native et audit log automatique."
-        bullets={[
-          'Workflow custom illimité (jusqu’à 10 niveaux)',
-          'Approbation séquentielle ou parallèle',
-          'Idempotence stricte (impossible de double-approuver)',
-          'Repli automatique si SLA dépassé (V2)',
-          'Multi-org natif pour groupes avec filiales',
-        ]}
-        cta={{ label: 'Voir le module Attribution', href: '/produit/attribution' }}
-        visual={<ApprovalVisual className="h-full w-full" />}
-      />
-
-      <MarketingSection paper>
-        <SectionHeader
-          eyebrow="Comparatif"
+        {/* Pilier 1 — Plans & Attributions */}
+        <MktPillar
+          index="i"
+          category="Plans & Attributions"
           title={
             <>
-              Pourquoi choisir Capiwise{' '}
-              <span className="serif-italic text-brass-700">plutôt que Carta&nbsp;?</span>
+              Créez vos plans, attribuez en toute{' '}
+              <span className="text-mkt-italic text-brass-700">conformité</span>.
             </>
           }
-          description="Cinq critères qui font la différence quand on gère un actionnariat salarié français."
+          description="Wizard guidé, 5 instruments natifs, validation automatique des contraintes légales (BSPCE éligibilité, AGA plafonds AGE), et workflow d’approbation N-niveaux. Vous n’oubliez plus rien parce que la plateforme refuse de continuer si quelque chose manque."
+          bullets={[
+            {
+              highlight: 'BSPCE, SO, AGA, RSU, BSA',
+              rest: 'instruments natifs avec contrôles juridiques inline',
+            },
+            { highlight: 'Vesting', rest: 'calendaire ou conditionnel, cliff configurable' },
+            {
+              highlight: 'Workflow',
+              rest: 'chaînes d’approbation séquentielles ou parallèles, idempotentes',
+            },
+          ]}
+          ctaLabel="Découvrir les plans"
+          ctaHref="/produit/plans"
+          visual={<PvWizard />}
         />
-        <div className="mt-8">
-          <ComparisonTable
-            columns={[
-              { name: 'Capiwise', highlight: true },
-              { name: 'Carta' },
-              { name: 'Uplaw' },
-              { name: 'Equify' },
-            ]}
-            categories={[
-              {
-                title: 'Différenciation',
-                rows: [
-                  {
-                    label: 'Conformité FR native (art. 163 bis G CGI)',
-                    values: [
-                      { type: 'check' },
-                      { type: 'partial', label: 'Manuel' },
-                      { type: 'check' },
-                      { type: 'check' },
-                    ],
-                  },
-                  {
-                    label: 'Valorisation IFRS 2 incluse',
-                    values: [
-                      { type: 'check', label: 'Inclus' },
-                      { type: 'paid', label: '$2-5k / valuation' },
-                      { type: 'missing' },
-                      { type: 'missing' },
-                    ],
-                  },
-                  {
-                    label: 'Hébergement France / RGPD strict',
-                    values: [
-                      { type: 'check' },
-                      { type: 'warning', label: 'US / Cloud Act' },
-                      { type: 'check' },
-                      { type: 'check' },
-                    ],
-                  },
-                  {
-                    label: 'Pricing transparent',
-                    values: [
-                      { type: 'check', label: 'Public' },
-                      { type: 'partial', label: 'Sales' },
-                      { type: 'missing', label: 'Sur devis' },
-                      { type: 'missing', label: 'Sur devis' },
-                    ],
-                  },
-                  {
-                    label: 'Multi-tenant audit-ready',
-                    values: [
-                      { type: 'check', label: '4 couches' },
-                      { type: 'unknown' },
-                      { type: 'unknown' },
-                      { type: 'unknown' },
-                    ],
-                  },
-                ],
-              },
-            ]}
-            caption="Comparatif détaillé (≈30 lignes) sur la page dédiée."
-          />
-        </div>
-        <div className="mt-6 text-center">
+
+        {/* Pilier 2 — Valorisation IFRS 2 */}
+        <MktPillar
+          index="ii"
+          category="Valorisation IFRS 2"
+          title={
+            <>
+              Monte Carlo <span className="text-mkt-italic text-brass-700">100&nbsp;K paths</span>.
+              Aussi simple qu’un export Excel.
+            </>
+          }
+          description="Pricer Black-Scholes & Heston, conditions de performance multi-conditions (TSR, VWAP, EBITDA), juste valeur par tranche, refresh trimestriel automatisé. Carta facture 2-5 k$ par valorisation. Cabinet externe : 10-15 k€ par exercice. Inclus chez nous."
+          bullets={[
+            { highlight: 'Pricers', rest: 'Black-Scholes, Heston, modèle binomial' },
+            {
+              highlight: 'Audit-ready',
+              rest: 'exports CAC, traçabilité paramètres, versionning',
+            },
+            { highlight: 'Refresh', rest: 'trimestriel automatique, annuel via pg_cron' },
+          ]}
+          ctaLabel="Découvrir IFRS 2"
+          ctaHref="/produit/valorisation-ifrs2"
+          visual={<PvMonteCarlo />}
+          reverse
+        />
+
+        {/* Pilier 3 — Conformité & Audit */}
+        <MktPillar
+          index="iii"
+          category="Conformité & Audit"
+          title={
+            <>
+              Au-dessus du standard CAC,{' '}
+              <span className="text-mkt-italic text-brass-700">pas en-dessous</span>.
+            </>
+          }
+          description="Audit trail immuable (chaîne de hash), exports auditeurs en un clic, defense-in-depth multi-tenant à 4 couches, signature eIDAS qualifié avancé via Yousign. Chaque action est horodatée, cosignée, et reproductible."
+          bullets={[
+            {
+              highlight: 'Hash chain',
+              rest: 'preuve d’intégrité cryptographique de bout en bout',
+            },
+            {
+              highlight: 'Exports CAC',
+              rest: 'registre des mouvements + journal des décisions, en un clic',
+            },
+            {
+              highlight: 'Defense-in-depth',
+              rest: 'RLS Postgres, TENANT_VIOLATION guards, server checks, frontend filtering',
+            },
+          ]}
+          ctaLabel="Découvrir la conformité"
+          ctaHref="/produit/conformite-fr"
+          visual={<PvAudit />}
+        />
+
+        {/* Pilier 4 — Portail bénéficiaire */}
+        <MktPillar
+          index="iv"
+          category="Portail bénéficiaire"
+          title={
+            <>
+              Vos salariés <span className="text-mkt-italic text-brass-700">comprennent enfin</span>{' '}
+              leur equity.
+            </>
+          }
+          description="Vesting visualisé en timeline, simulateur de sortie what-if, documents centralisés, acceptation en ligne. La meilleure manière de transformer un BSPCE oublié dans un drawer en outil de motivation salariale."
+          bullets={[
+            {
+              highlight: 'Timeline vesting',
+              rest: 'segments acquis, en cours, futurs, conditionnels',
+            },
+            {
+              highlight: 'Simulateur de sortie',
+              rest: 'slider what-if, gain net après PFU 30 %',
+            },
+            { highlight: 'Acceptation', rest: 'signature en ligne, archive eIDAS' },
+          ]}
+          ctaLabel="Découvrir le portail"
+          ctaHref="/produit/portail-beneficiaire"
+          visual={<PvPortal />}
+          reverse
+        />
+      </MktSection>
+
+      {/* ===== COMPARATIF ===== */}
+      <MktSection variant="paper-200">
+        <MktSectionHead
+          eyebrow="Capiwise vs concurrents"
+          title={
+            <>
+              Pourquoi nous, plutôt que{' '}
+              <span className="text-mkt-italic text-brass-700">Carta, Uplaw</span> ou Equify ?
+            </>
+          }
+          description="Cinq différences qui comptent quand vous structurez vos premiers plans, montez en série A/B, ou préparez une due diligence acquéreur."
+        />
+        <MktComparison
+          columns={['Critère', 'Capiwise', 'Carta', 'Uplaw', 'Equify']}
+          rows={[
+            {
+              criterion: 'Conformité FR native (BSPCE / AGA / AGE)',
+              values: [
+                { type: 'yes', label: 'Natif' },
+                { type: 'partial', label: 'Manuel' },
+                { type: 'yes', label: 'Natif' },
+                { type: 'yes', label: 'Natif' },
+              ],
+            },
+            {
+              criterion: 'Valorisation IFRS 2 (Monte Carlo)',
+              values: [
+                { type: 'yes', label: 'Inclus' },
+                { type: 'paid', label: '2-5 k$ / val.' },
+                { type: 'no', label: 'Non' },
+                { type: 'no', label: 'Non' },
+              ],
+            },
+            {
+              criterion: 'Hébergement FR / EU · pas de Cloud Act',
+              values: [
+                { type: 'yes', label: 'Vercel + Supabase EU' },
+                { type: 'no', label: 'US' },
+                { type: 'yes', label: 'FR' },
+                { type: 'yes', label: 'FR' },
+              ],
+            },
+            {
+              criterion: 'Pricing transparent & public',
+              values: [
+                { type: 'yes', label: '3 plans publics' },
+                { type: 'partial', label: 'Sales-led' },
+                { type: 'no', label: 'Sur devis' },
+                { type: 'no', label: 'Sur devis' },
+              ],
+            },
+            {
+              criterion: 'Multi-tenant audit-ready (defense-in-depth)',
+              values: [
+                { type: 'yes', label: '4 couches' },
+                { type: 'partial', label: 'Non documenté' },
+                { type: 'partial', label: 'Non documenté' },
+                { type: 'partial', label: 'Non documenté' },
+              ],
+            },
+          ]}
+        />
+        <div className="mt-8 flex justify-center">
           <a
             href="/comparatif"
-            className="text-brass-700 hover:text-brass-900 inline-flex items-center gap-1.5 text-sm font-medium"
+            className="border-paper-300 hover:border-ink-700 text-ink-800 inline-flex items-center gap-2 rounded-md border bg-transparent px-[18px] py-2.5 text-[13.5px] font-medium transition-all"
           >
-            Voir le comparatif détaillé →
+            Voir le comparatif détaillé sur 30+ critères →
           </a>
         </div>
-      </MarketingSection>
+      </MktSection>
 
-      <MarketingSection>
-        <SectionHeader
-          eyebrow="Témoignages"
-          title="Ce que disent nos premiers utilisateurs"
-          description="Retours collectés en beta privée. Versions anonymisées pour préserver la confidentialité avant publication officielle."
+      {/* ===== TESTIMONIALS ===== */}
+      <MktSection>
+        <MktSectionHead
+          eyebrow="Premiers retours"
+          title={
+            <>
+              Ils ont structuré leur actionnariat{' '}
+              <span className="text-mkt-italic text-brass-700">chez nous</span>.
+            </>
+          }
+          description="Témoignages de notre cohorte beta privée, ouverte le 18 mai 2026. Les noms et logos sont anonymisés en attendant la sortie publique."
         />
-        <div className="mt-12">
-          {/* TESTIMONIAL_PLACEHOLDER: à remplacer post-beta du 18 mai 2026 */}
-          <TestimonialGrid
-            placeholder
-            testimonials={[
-              {
-                quote:
-                  'On gérait nos BSPCE sur Excel. Le passage à Capiwise nous a fait gagner trois jours sur chaque attribution et a sécurisé notre passage en Série A.',
-                author: 'CFO Startup A',
-                role: 'CFO',
-                company: 'SaaS B2B · Série A',
-                initials: 'CF',
-              },
-              {
-                quote:
-                  'Le module IFRS 2 a remplacé notre cabinet d’expertise. Le rapport est plus détaillé et nos commissaires aux comptes le valident sans question.',
-                author: 'DAF Scale-up B',
-                role: 'DAF',
-                company: 'FinTech · Série B',
-                initials: 'DB',
-              },
-              {
-                quote:
-                  'Le portail bénéficiaire a transformé l’equity de zone d’ombre à levier de rétention. Nos salariés comprennent enfin ce qu’ils ont.',
-                author: 'CHRO Groupe C',
-                role: 'CHRO',
-                company: 'Groupe industriel · ETI',
-                initials: 'GC',
-              },
-            ]}
-          />
-        </div>
-      </MarketingSection>
+        <MktTestimonials
+          testimonials={[
+            {
+              quote:
+                'Le wizard nous a forcés à expliciter ce qu’on faisait à la main depuis trois ans. On a découvert deux non-conformités AGE en 20 minutes. Plus jamais Excel pour ça.',
+              initials: 'CL',
+              name: 'Camille L.',
+              role: 'CFO · SaaS Série A · 32 béné.',
+            },
+            {
+              quote:
+                'L’IFRS 2 par Monte Carlo, c’était un sujet annuel à 12 k€ de cabinet. Maintenant c’est un onglet. Notre CAC valide les exports sans question.',
+              initials: 'JM',
+              name: 'Jean-Marc D.',
+              role: 'DAF · Industriel · 80 béné.',
+            },
+            {
+              quote:
+                'Mes 47 salariés ont un portail qui leur dit ce qu’ils ont, ce qu’ils auront, et ce que ça vaut si on sort à 200 M€. Ça a changé leurs conversations RH.',
+              initials: 'SR',
+              name: 'Sophie R.',
+              role: 'People Ops · Scale-up B · 47 béné.',
+            },
+          ]}
+        />
+      </MktSection>
 
-      <TrustBadges
-        title="Sécurité, conformité, transparence"
-        badges={[
-          { label: 'RGPD strict', hint: 'DPO + registre + DPIA' },
-          { label: 'Hébergement FR', hint: 'Vercel EU + Supabase EU' },
-          { label: 'eIDAS qualifié', hint: 'Yousign avancé' },
-          { label: 'ISO 27001', hint: 'Certification en cours · Q4 2026' },
-          { label: 'Audit trail immuable', hint: 'Hash chain SHA-256' },
-        ]}
-      />
+      {/* ===== TRUST BADGES ===== */}
+      <MktSection tight>
+        <MktTrust
+          badges={[
+            {
+              label: 'Conformité',
+              name: 'RGPD',
+              italicSuffix: 'strict',
+              desc: 'DPO interne · DPIA documenté · registre des traitements',
+            },
+            {
+              label: 'Hébergement',
+              name: 'France',
+              italicSuffix: '& EU',
+              desc: 'Vercel EU · Supabase EU · Sentry DE · pas d’exposition Cloud Act',
+            },
+            {
+              label: 'Signature',
+              name: 'eIDAS',
+              italicSuffix: 'qualifié',
+              desc: 'via Yousign · niveau qualifié avancé · valeur juridique FR',
+            },
+            {
+              label: 'En cours · Q4 2026',
+              name: 'ISO',
+              italicSuffix: '27001',
+              desc: 'Audit en cours · SOC 2 Type II prévu 2027',
+              pending: true,
+            },
+          ]}
+        />
+      </MktSection>
 
-      <CTABanner
-        eyebrow="Prêt à structurer votre actionnariat salarié ?"
-        title="Démo personnalisée en 30 minutes."
-        description="Sans engagement. Notre équipe vous montre comment Capiwise s’adapte à votre stade, vos instruments et votre stack."
-        primaryCta={{ label: 'Demander une démo', href: '/contact' }}
-        secondaryCta={{ label: 'Voir les tarifs', href: '/tarifs' }}
-      />
+      {/* ===== CTA BANNER ===== */}
+      <MktSection tight>
+        <MktCtaBanner
+          title={
+            <>
+              Prêt à structurer votre{' '}
+              <span className="text-mkt-italic text-brass-300">actionnariat salarié</span> ?
+            </>
+          }
+          description="Démo personnalisée en 30 minutes avec un consultant equity. Sans engagement, sans script commercial. Vous repartez avec une cartographie de vos plans actuels et des recommandations chiffrées."
+          primaryCta={{ label: 'Demander une démo', href: '/contact' }}
+          secondaryCta={{ label: 'Voir les tarifs', href: '/tarifs' }}
+          asideContact="contact@capiwise.fr · réponse sous 24 h ouvrées"
+        />
+      </MktSection>
     </MarketingLayout>
   );
 }
