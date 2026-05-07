@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
 import { BarChart3, Calculator, Clock, FileCheck, Layers3, Sparkles } from 'lucide-react';
 import { ProductPage } from '@/components/marketing/product-page';
-import { MarketingSection, SectionHeader } from '@/components/marketing/sections';
-import { MonteCarloVisual } from '@/components/marketing/visuals';
+import { SectionHeader } from '@/components/marketing/sections';
+import {
+  MonteCarloViewer,
+  MonteCarloViewerCompact,
+} from '@/components/marketing/monte-carlo-viewer';
 
 export const metadata: Metadata = {
   title: 'Valorisation IFRS 2 — Monte Carlo 100K paths inclus',
@@ -11,50 +14,67 @@ export const metadata: Metadata = {
   alternates: { canonical: 'https://www.capiwise.fr/produit/valorisation-ifrs2' },
 };
 
-const WhyCapiwiseSection = () => (
-  <MarketingSection paper>
-    <SectionHeader
-      eyebrow="Pourquoi Capiwise pour IFRS 2"
-      title={
-        <>
-          Inclus chez nous,{' '}
-          <span className="serif-italic text-brass-700">facturé en sus partout ailleurs</span>.
-        </>
-      }
-    />
-    <div className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-3">
-      {[
-        {
-          before: 'Carta vous facture',
-          big: '2 000–5 000 $',
-          unit: 'par valorisation',
-          after: 'Inclus chez Capiwise.',
-        },
-        {
-          before: 'Cabinet externe (Big Four)',
-          big: '10 000–15 000 €',
-          unit: 'par exercice annuel',
-          after: 'Inclus chez Capiwise.',
-        },
-        {
-          before: 'Output Capiwise',
-          big: 'Visualisation native',
-          unit: 'pas un PDF mort',
-          after: 'Replay Monte Carlo, audit trail, exports.',
-        },
-      ].map((card) => (
-        <article
-          key={card.big}
-          className="border-paper-300 bg-paper-50 flex flex-col gap-3 rounded-xl border p-6"
-        >
-          <span className="text-overline text-ink-500">{card.before}</span>
-          <span className="text-numeric-lg text-title-700">{card.big}</span>
-          <span className="text-ink-500 text-xs">{card.unit}</span>
-          <p className="text-bond-700 text-sm font-medium">{card.after}</p>
-        </article>
-      ))}
+const ReplayViewerSection = () => (
+  <section className="bg-paper-50 px-0 py-20">
+    <div className="mx-auto w-full max-w-7xl px-6">
+      <SectionHeader
+        eyebrow="Replay viewer · Module 11"
+        title={
+          <>
+            Le viewer Monte Carlo{' '}
+            <span className="serif-italic text-brass-700">tel que vos auditeurs le voient</span>.
+          </>
+        }
+        description="Pas un PDF mort. Une vue interactive avec trajectoires, percentiles p5/p50/p95, barrières, Greeks par différences finies, et tweaks live de la volatilité, barrière et maturité. Hash SHA-256 des inputs pour rejouabilité bit-à-bit."
+      />
     </div>
-  </MarketingSection>
+    <div className="mx-auto mt-12 w-full max-w-[1400px] px-4 lg:px-10">
+      <MonteCarloViewer />
+    </div>
+    <div className="mx-auto mt-16 w-full max-w-7xl px-6">
+      <SectionHeader
+        eyebrow="Pourquoi Capiwise pour IFRS 2"
+        title={
+          <>
+            Inclus chez nous,{' '}
+            <span className="serif-italic text-brass-700">facturé en sus partout ailleurs</span>.
+          </>
+        }
+      />
+      <div className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-3">
+        {[
+          {
+            before: 'Carta vous facture',
+            big: '2 000–5 000 $',
+            unit: 'par valorisation',
+            after: 'Inclus chez Capiwise.',
+          },
+          {
+            before: 'Cabinet externe (Big Four)',
+            big: '10 000–15 000 €',
+            unit: 'par exercice annuel',
+            after: 'Inclus chez Capiwise.',
+          },
+          {
+            before: 'Output Capiwise',
+            big: 'Visualisation native',
+            unit: 'pas un PDF mort',
+            after: 'Replay Monte Carlo, audit trail, exports.',
+          },
+        ].map((card) => (
+          <article
+            key={card.big}
+            className="border-paper-300 bg-paper-50 flex flex-col gap-3 rounded-xl border p-6"
+          >
+            <span className="text-overline text-ink-500">{card.before}</span>
+            <span className="text-numeric-lg text-title-700">{card.big}</span>
+            <span className="text-ink-500 text-xs">{card.unit}</span>
+            <p className="text-bond-700 text-sm font-medium">{card.after}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
 );
 
 export default function ProduitValuationPage() {
@@ -118,7 +138,7 @@ export default function ProduitValuationPage() {
             'Export PDF executive summary par exercice',
             'Compatible audit annuel CAC (template d’export dédié)',
           ],
-          visual: <MonteCarloVisual />,
+          visual: <MonteCarloViewerCompact />,
         },
       ]}
       useCases={[
@@ -138,7 +158,7 @@ export default function ProduitValuationPage() {
             'Refresh trimestriel automatique + export PDF auditeur. Le CAC reçoit les inputs, payloads et outputs en un seul package.',
         },
       ]}
-      customSection={<WhyCapiwiseSection />}
+      customSection={<ReplayViewerSection />}
       faq={[
         {
           question: 'Le moteur Python est-il vraiment déterministe ?',
