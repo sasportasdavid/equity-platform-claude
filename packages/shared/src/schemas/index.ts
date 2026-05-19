@@ -12,3 +12,4 @@ export * from './tax-simulation';
 export * from './exercise';
 export * from './market-data';
 export * from './cap-table';
+export * from './signature';

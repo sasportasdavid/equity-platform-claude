@@ -165,6 +165,24 @@ export async function createOrganization(
     });
   }
 
+  // 4ter. V1.X — seed des signature_settings (Layer A) avec les defaults
+  // (14j expiry, SEQUENTIAL, no cosigner, 3j reminder). Idempotent.
+  // Fire-and-forget non-bloquant idem ci-dessus.
+  const { error: sigSeedError } = await (
+    admin as never as {
+      rpc: (
+        n: string,
+        p: Record<string, unknown>,
+      ) => Promise<{ error: { message: string } | null }>;
+    }
+  ).rpc('seed_signature_settings_for_org', { p_org_id: org.id });
+  if (sigSeedError) {
+    console.warn('[createOrganization] seed signature settings failed (non-blocking)', {
+      orgId: org.id,
+      error: sigSeedError.message,
+    });
+  }
+
   // 5. Audit
   await logAuditEvent({
     eventType: 'org.created',
