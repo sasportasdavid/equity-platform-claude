@@ -147,6 +147,24 @@ export async function createOrganization(
     app_metadata: { ...currentAppMeta, active_org_id: org.id, active_roles: ['OWNER'] },
   });
 
+  // 4bis. V1.X (UX 2026-05-19) — seed du workflow d'approbation par défaut.
+  // La RPC `seed_default_approval_workflow_for_org` (migration 00039) crée
+  // un workflow AWARD_GRANT minimal (1 étape, role APPROVER, mode ANY) si
+  // aucun n'existe — idempotent. Sans cet appel, le premier award PROPOSED
+  // restait bloqué en PROPOSED sans déclenchement de workflow (ux KO :
+  // "rien ne se passe" perçu par l'admin).
+  // Fire-and-forget : si le seed foire, l'org est quand même créée et
+  // l'admin peut créer un workflow manuellement via /dashboard/settings/approvals.
+  const { error: seedError } = await admin.rpc('seed_default_approval_workflow_for_org', {
+    p_org_id: org.id,
+  });
+  if (seedError) {
+    console.warn('[createOrganization] seed default approval workflow failed (non-blocking)', {
+      orgId: org.id,
+      error: seedError.message,
+    });
+  }
+
   // 5. Audit
   await logAuditEvent({
     eventType: 'org.created',
