@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import type { Role, SignupWithMagicLinkInput } from '@equity/shared';
@@ -378,13 +379,51 @@ export async function sendMagicLink(
 // ===========================================================================
 // logout — Module 2 §1.6
 // ===========================================================================
+//
+// **Bug "boucle de profile switch" (fix 2026-05-19)** :
+// `supabase.auth.signOut()` queue les cookie writes via
+// `onAuthStateChange('SIGNED_OUT', ...)` qui est async — sous certaines
+// races (Next 16 Server Action + `redirect()` synchrone), les Set-Cookie
+// peuvent ne pas être appliqués au 303 response. Résultat : User A
+// "déconnecté" garde sa session côté browser, User B s'auth par dessus,
+// et le proxy voit un état mixte → boucle entre /login ↔ /dashboard ↔
+// /select-org.
+//
+// Defensive sweep : on énumère TOUS les cookies `sb-*` du request et on
+// les force à expirer (`maxAge: 0`) AVANT le redirect — en plus du
+// signOut() canonique. Garantit que le 303 transporte les Set-Cookie
+// de suppression, même si l'event listener Supabase n'a pas terminé.
+// Coût : ~5 cookieStore.set() supplémentaires (négligeable).
 
 export async function logout(): Promise<never> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // 1. signOut() canonique — invalide la session côté Supabase (scope:
+  //    'global' par défaut, ce qui révoque le refresh token globalement).
   await supabase.auth.signOut();
+
+  // 2. Sweep défensif : force-delete tous les cookies `sb-*` du browser.
+  //    Inclut les variantes chunked (`sb-xxx.0`, `sb-xxx.1`...) et le PKCE
+  //    verifier (`sb-xxx-auth-token-code-verifier`).
+  const cookieStore = await cookies();
+  const sbCookies = cookieStore.getAll().filter((c) => c.name.startsWith('sb-'));
+  for (const { name } of sbCookies) {
+    cookieStore.set(name, '', {
+      path: '/',
+      maxAge: 0,
+      sameSite: 'lax',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+    });
+  }
+  console.info('[auth] logout', {
+    userId: user?.id ?? null,
+    cookiesCleared: sbCookies.map((c) => c.name),
+  });
+
   if (user) {
     await logAuditEvent({
       eventType: 'auth.logout',
@@ -394,6 +433,11 @@ export async function logout(): Promise<never> {
       userEmail: user.email ?? null,
     });
   }
+
+  // 3. Invalide tout le SSR cache — évite que User B voit des données
+  //    cachées par User A (sidebar counts, etc.).
+  revalidatePath('/', 'layout');
+
   redirect('/login');
 }
 

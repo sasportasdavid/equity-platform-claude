@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { LogOut, Settings } from 'lucide-react';
 import { DashboardSidebar } from '@/components/shared/dashboard-sidebar';
@@ -15,11 +16,34 @@ import { cn } from '@/lib/utils';
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
 
+  // **Bug "boucle profile switch" (fix 2026-05-19)** : si le JWT contient
+  // un `active_org_id` STALE (pointe vers une org dont le user n'est plus
+  // membre ACTIVE — survient après switch de profil ou cleanup DB), le
+  // proxy laisse passer mais les queries org-scoped retournent vide → user
+  // voit un dashboard cassé sans pouvoir naviguer. On vérifie la membership
+  // au layout : si pas d'ACTIVE matching → /select-org, qui re-démarrera
+  // un flow propre.
+  const admin = getSupabaseAdminClient();
+  if (user.activeOrgId) {
+    const { count: validMembership } = await admin
+      .from('memberships')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('org_id', user.activeOrgId)
+      .eq('status', 'ACTIVE');
+    if ((validMembership ?? 0) === 0) {
+      console.warn('[dashboard] stale active_org_id', {
+        userId: user.id,
+        activeOrgId: user.activeOrgId,
+      });
+      redirect('/select-org');
+    }
+  }
+
   // Charge le nom de l'org active pour l'afficher dans le switcher (server-side
   // pour éviter un flash "Organisation" → "Capiwise" côté client).
   let activeOrgName: string | null = null;
   if (user.activeOrgId) {
-    const admin = getSupabaseAdminClient();
     const { data: org } = await admin
       .from('organizations')
       .select('name')

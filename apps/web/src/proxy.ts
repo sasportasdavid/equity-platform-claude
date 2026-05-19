@@ -156,6 +156,13 @@ export async function proxy(request: NextRequest) {
       url.pathname = '/dashboard';
     }
     url.search = '';
+    console.info('[proxy] authed-on-auth-route → redirect', {
+      from: pathname,
+      to: url.pathname,
+      userId: user?.id ?? null,
+      activeOrgId,
+      onboardingIncomplete: onboardingExplicitlyIncomplete,
+    });
     return NextResponse.redirect(url);
   }
 
@@ -164,6 +171,7 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirectTo', pathname);
+    console.info('[proxy] anon-on-private → /login', { from: pathname });
     return NextResponse.redirect(url);
   }
 
@@ -174,6 +182,10 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = '/select-org';
     url.search = '';
+    console.info('[proxy] no-active-org → /select-org', {
+      from: pathname,
+      userId: user?.id ?? null,
+    });
     return NextResponse.redirect(url);
   }
 

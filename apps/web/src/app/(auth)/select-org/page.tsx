@@ -31,6 +31,32 @@ export default async function SelectOrgPage() {
     redirect('/onboarding');
   }
 
+  // **Bug "boucle profile switch" (fix 2026-05-19)** : si l'activeOrgId du
+  // JWT ne correspond à AUCUNE membership ACTIVE (stale claim après switch
+  // de profil), on le purge en DB pour éviter qu'il ressurgisse au prochain
+  // refreshSession via le custom_access_token_hook (qui lit
+  // default_org_id mais peut aussi laisser l'ancien si pas d'invariant).
+  // On ne redirige pas — on laisse le user choisir explicitement.
+  const memberOrgIds = new Set(memberships.map((m) => m.org_id));
+  if (user.activeOrgId && !memberOrgIds.has(user.activeOrgId)) {
+    console.warn('[select-org] purging stale active_org_id', {
+      userId: user.id,
+      staleOrgId: user.activeOrgId,
+    });
+    const { data: authUser } = await admin.auth.admin.getUserById(user.id);
+    const currentAppMeta = (authUser?.user?.app_metadata ?? {}) as Record<string, unknown>;
+    const cleanedAppMeta: Record<string, unknown> = { ...currentAppMeta };
+    delete cleanedAppMeta.active_org_id;
+    delete cleanedAppMeta.active_roles;
+    await admin.auth.admin.updateUserById(user.id, { app_metadata: cleanedAppMeta });
+    // Idem côté user_profiles.default_org_id si stale
+    await admin
+      .from('user_profiles')
+      .update({ default_org_id: null })
+      .eq('id', user.id)
+      .eq('default_org_id', user.activeOrgId);
+  }
+
   // Si une seule org ET qu'elle est DÉJÀ l'active du JWT → redirect /dashboard.
   // Sinon (ex: JWT sans active_org_id à cause de la dette #33 — hook
   // `custom_access_token_hook` instable), on AFFICHE le picker même avec
