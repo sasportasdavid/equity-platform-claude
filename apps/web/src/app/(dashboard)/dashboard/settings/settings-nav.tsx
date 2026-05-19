@@ -2,7 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bell, Building2, HelpCircle, ScrollText, ShieldCheck, User, Users } from 'lucide-react';
+import {
+  Bell,
+  Building2,
+  FileSignature,
+  HelpCircle,
+  ScrollText,
+  ShieldCheck,
+  User,
+  Users,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -28,6 +37,11 @@ const ITEMS: Item[] = [
     href: '/dashboard/settings/approvals',
     label: 'Approbations',
     icon: <ShieldCheck className="size-4" />,
+  },
+  {
+    href: '/dashboard/settings/signatures',
+    label: 'Signatures',
+    icon: <FileSignature className="size-4" />,
   },
   {
     href: '/dashboard/settings/notifications',
