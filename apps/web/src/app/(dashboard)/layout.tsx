@@ -40,6 +40,36 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     }
   }
 
+  // **Bug "BENEFICIARY pur accède au dashboard admin" (fix 2026-05-19)** :
+  // Le proxy ne filtre pas par rôle. Un user dont l'unique rôle dans l'org
+  // active est `BENEFICIARY` arrivait sur /dashboard (sidebar admin, Plans
+  // org-wide visibles via sidebar counts admin-client — exposition de données).
+  // On route ces users vers /portal qui est leur vraie home.
+  //
+  // Lecture des rôles depuis le membership DB (pas le JWT) — plus fiable
+  // après le fix custom_access_token_hook 00104 mais avant que tous les JWT
+  // en cours soient refresh. Si l'user a un BENEFICIARY ET un autre rôle
+  // (ex: OWNER pour son propre side-project), on le laisse accéder au
+  // dashboard.
+  if (user.activeOrgId) {
+    const { data: membership } = await admin
+      .from('memberships')
+      .select('roles')
+      .eq('user_id', user.id)
+      .eq('org_id', user.activeOrgId)
+      .eq('status', 'ACTIVE')
+      .maybeSingle();
+    const roles = (membership?.roles ?? []) as string[];
+    const isBeneficiaryOnly = roles.length > 0 && roles.every((r) => r === 'BENEFICIARY');
+    if (isBeneficiaryOnly) {
+      console.info('[dashboard] beneficiary-only → /portal', {
+        userId: user.id,
+        roles,
+      });
+      redirect('/portal');
+    }
+  }
+
   // Charge le nom de l'org active pour l'afficher dans le switcher (server-side
   // pour éviter un flash "Organisation" → "Capiwise" côté client).
   let activeOrgName: string | null = null;
