@@ -133,7 +133,19 @@ describe('approveExerciseDecision', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('No approvals.act perm → error (R4 defense-in-depth)', async () => {
+    // Pas d'ajout de perm — check doit bloquer en premier.
+    const result = await approveExerciseDecision({
+      exerciseRequestId: TEST_REQUEST_ID,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('approvals.act');
+    }
+  });
+
   it('No PENDING decision for user → error', async () => {
+    mockState.permissions.add('approvals.act');
     mockState.pendingDecision = null;
     const result = await approveExerciseDecision({
       exerciseRequestId: TEST_REQUEST_ID,
@@ -145,6 +157,7 @@ describe('approveExerciseDecision', () => {
   });
 
   it('Happy path → ok', async () => {
+    mockState.permissions.add('approvals.act');
     const result = await approveExerciseDecision({
       exerciseRequestId: TEST_REQUEST_ID,
       comment: 'Validated',
@@ -153,6 +166,7 @@ describe('approveExerciseDecision', () => {
   });
 
   it('RPC error propagated', async () => {
+    mockState.permissions.add('approvals.act');
     mockState.rpcRecordError = { message: 'Workflow already completed' };
     const result = await approveExerciseDecision({
       exerciseRequestId: TEST_REQUEST_ID,
@@ -171,6 +185,7 @@ describe('rejectExerciseDecision', () => {
   });
 
   it('Happy path with valid comment → ok', async () => {
+    mockState.permissions.add('approvals.act');
     const result = await rejectExerciseDecision({
       exerciseRequestId: TEST_REQUEST_ID,
       comment: 'Insufficient documentation provided',
@@ -179,12 +194,24 @@ describe('rejectExerciseDecision', () => {
   });
 
   it('No PENDING decision → error', async () => {
+    mockState.permissions.add('approvals.act');
     mockState.pendingDecision = null;
     const result = await rejectExerciseDecision({
       exerciseRequestId: TEST_REQUEST_ID,
       comment: 'Reject this please',
     });
     expect(result.ok).toBe(false);
+  });
+
+  it('No approvals.act perm → error (R4 defense-in-depth)', async () => {
+    const result = await rejectExerciseDecision({
+      exerciseRequestId: TEST_REQUEST_ID,
+      comment: 'Reject this please for sure',
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('approvals.act');
+    }
   });
 });
 

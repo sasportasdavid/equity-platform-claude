@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -42,6 +43,12 @@ export default async function SelectOrgPage() {
     console.warn('[select-org] purging stale active_org_id', {
       userId: user.id,
       staleOrgId: user.activeOrgId,
+    });
+    // R5 audit RBAC — signal mesurable de la flakiness hook (dette #33).
+    Sentry.captureMessage('jwt.active_org_purged', {
+      level: 'warning',
+      tags: { dette: '33', surface: 'select_org_page' },
+      extra: { userId: user.id, staleOrgId: user.activeOrgId },
     });
     const { data: authUser } = await admin.auth.admin.getUserById(user.id);
     const currentAppMeta = (authUser?.user?.app_metadata ?? {}) as Record<string, unknown>;

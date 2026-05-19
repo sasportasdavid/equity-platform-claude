@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -35,6 +36,16 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       console.warn('[dashboard] stale active_org_id', {
         userId: user.id,
         activeOrgId: user.activeOrgId,
+      });
+      // R5 audit RBAC 2026-05-19 : signal mesurable de la flakiness
+      // `custom_access_token_hook` (dette #33). Chaque hit ici = un user
+      // avec un claim qui ne reflète pas la DB. Permet de mesurer la
+      // fréquence du quirk Supabase et de calibrer une éventuelle
+      // mitigation V2.
+      Sentry.captureMessage('jwt.active_org_stale', {
+        level: 'warning',
+        tags: { dette: '33', surface: 'dashboard_layout' },
+        extra: { userId: user.id, claimOrgId: user.activeOrgId },
       });
       redirect('/select-org');
     }
