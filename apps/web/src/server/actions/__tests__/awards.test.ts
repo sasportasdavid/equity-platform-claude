@@ -114,6 +114,13 @@ vi.mock('@/server/actions/notifications', () => ({
   notifyCreatorOfApprovalDecision: vi.fn().mockResolvedValue({ ok: true, notificationId: null }),
 }));
 
+// V1.X hook GRANTED → notif bénéficiaire. Idem chaîne admin client à mocker.
+vi.mock('@/server/actions/_helpers/award-notifications', () => ({
+  notifyBeneficiaryOfAwardGranted: vi
+    .fn()
+    .mockResolvedValue({ ok: true, notificationId: 'mock-notif-id' }),
+}));
+
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn().mockResolvedValue({
     from: (table: string) => makeBuilder(table),

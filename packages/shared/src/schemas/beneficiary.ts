@@ -90,6 +90,10 @@ export const createBeneficiarySchema = z.object({
   // Phone & gender
   phone: z.string().max(30).optional(),
   gender: z.enum(['M', 'F', 'X']).nullable().optional(),
+
+  // V1.X — opt-out de l'auto-invitation (default false = on invite auto).
+  // Utilisé par bulkCreateBeneficiaries pour éviter de spammer N envois.
+  skipInvitation: z.boolean().optional().default(false),
 });
 export type CreateBeneficiaryInput = z.infer<typeof createBeneficiarySchema>;
 

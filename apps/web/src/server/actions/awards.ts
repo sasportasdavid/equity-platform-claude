@@ -28,6 +28,7 @@ import {
 } from '@/lib/stateMachines/awardStateMachine';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { notifyApproversOfPendingApproval } from '@/server/actions/notifications';
+import { notifyBeneficiaryOfAwardGranted } from '@/server/actions/_helpers/award-notifications';
 
 /**
  * Module 3b — Server Actions pour le lifecycle des awards.
@@ -620,6 +621,19 @@ export async function transitionAward(input: unknown): Promise<ActionVoid | Acti
         );
       });
     }
+  }
+
+  // V1.X (résout dette #46) — Hook notif EMAIL au bénéficiaire quand l'award
+  // passe GRANTED. Fire-and-forget : si la notif fail, on ne bloque pas la
+  // transition. L'helper résout l'email via beneficiary.email puis fallback
+  // auth.users.email si nécessaire.
+  if (toStatus === 'GRANTED') {
+    void notifyBeneficiaryOfAwardGranted({ awardId }).catch((err) => {
+      console.error(
+        `[transitionAward] notifyBeneficiaryOfAwardGranted failed for award ${awardId}:`,
+        err,
+      );
+    });
   }
 
   revalidatePath('/dashboard/awards');

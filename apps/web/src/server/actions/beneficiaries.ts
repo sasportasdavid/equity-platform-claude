@@ -242,6 +242,23 @@ export async function createBeneficiary(
     orgId: user.activeOrgId,
   });
 
+  // V1.X — auto-invite par défaut (résout demande user 2026-05-19)
+  // Le caller peut passer `skipInvitation: true` pour les imports CSV
+  // (où on préfère batcher les envois en post-import). Fire-and-forget :
+  // si le magic link foire (Supabase Auth indispo, etc.), le bénéficiaire
+  // est quand même créé et un admin peut cliquer "Inviter" manuellement.
+  // L'erreur est logguée mais n'empêche pas le success.
+  if (!data.skipInvitation) {
+    const inv = await inviteBeneficiary({ beneficiaryId: ins.id });
+    if (!inv.ok) {
+      console.warn('[createBeneficiary] auto-invite failed (non-blocking)', {
+        beneficiaryId: ins.id,
+        email: data.email,
+        error: inv.error,
+      });
+    }
+  }
+
   revalidatePath('/dashboard/beneficiaries');
   return { ok: true, id: ins.id };
 }
