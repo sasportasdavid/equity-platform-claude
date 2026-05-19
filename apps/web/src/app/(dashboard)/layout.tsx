@@ -1,4 +1,6 @@
+import * as Sentry from '@sentry/nextjs';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { LogOut, Settings } from 'lucide-react';
 import { DashboardSidebar } from '@/components/shared/dashboard-sidebar';
@@ -15,11 +17,74 @@ import { cn } from '@/lib/utils';
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
 
+  // **Bug "boucle profile switch" (fix 2026-05-19)** : si le JWT contient
+  // un `active_org_id` STALE (pointe vers une org dont le user n'est plus
+  // membre ACTIVE — survient après switch de profil ou cleanup DB), le
+  // proxy laisse passer mais les queries org-scoped retournent vide → user
+  // voit un dashboard cassé sans pouvoir naviguer. On vérifie la membership
+  // au layout : si pas d'ACTIVE matching → /select-org, qui re-démarrera
+  // un flow propre.
+  const admin = getSupabaseAdminClient();
+  if (user.activeOrgId) {
+    const { count: validMembership } = await admin
+      .from('memberships')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('org_id', user.activeOrgId)
+      .eq('status', 'ACTIVE');
+    if ((validMembership ?? 0) === 0) {
+      console.warn('[dashboard] stale active_org_id', {
+        userId: user.id,
+        activeOrgId: user.activeOrgId,
+      });
+      // R5 audit RBAC 2026-05-19 : signal mesurable de la flakiness
+      // `custom_access_token_hook` (dette #33). Chaque hit ici = un user
+      // avec un claim qui ne reflète pas la DB. Permet de mesurer la
+      // fréquence du quirk Supabase et de calibrer une éventuelle
+      // mitigation V2.
+      Sentry.captureMessage('jwt.active_org_stale', {
+        level: 'warning',
+        tags: { dette: '33', surface: 'dashboard_layout' },
+        extra: { userId: user.id, claimOrgId: user.activeOrgId },
+      });
+      redirect('/select-org');
+    }
+  }
+
+  // **Bug "BENEFICIARY pur accède au dashboard admin" (fix 2026-05-19)** :
+  // Le proxy ne filtre pas par rôle. Un user dont l'unique rôle dans l'org
+  // active est `BENEFICIARY` arrivait sur /dashboard (sidebar admin, Plans
+  // org-wide visibles via sidebar counts admin-client — exposition de données).
+  // On route ces users vers /portal qui est leur vraie home.
+  //
+  // Lecture des rôles depuis le membership DB (pas le JWT) — plus fiable
+  // après le fix custom_access_token_hook 00104 mais avant que tous les JWT
+  // en cours soient refresh. Si l'user a un BENEFICIARY ET un autre rôle
+  // (ex: OWNER pour son propre side-project), on le laisse accéder au
+  // dashboard.
+  if (user.activeOrgId) {
+    const { data: membership } = await admin
+      .from('memberships')
+      .select('roles')
+      .eq('user_id', user.id)
+      .eq('org_id', user.activeOrgId)
+      .eq('status', 'ACTIVE')
+      .maybeSingle();
+    const roles = (membership?.roles ?? []) as string[];
+    const isBeneficiaryOnly = roles.length > 0 && roles.every((r) => r === 'BENEFICIARY');
+    if (isBeneficiaryOnly) {
+      console.info('[dashboard] beneficiary-only → /portal', {
+        userId: user.id,
+        roles,
+      });
+      redirect('/portal');
+    }
+  }
+
   // Charge le nom de l'org active pour l'afficher dans le switcher (server-side
   // pour éviter un flash "Organisation" → "Capiwise" côté client).
   let activeOrgName: string | null = null;
   if (user.activeOrgId) {
-    const admin = getSupabaseAdminClient();
     const { data: org } = await admin
       .from('organizations')
       .select('name')

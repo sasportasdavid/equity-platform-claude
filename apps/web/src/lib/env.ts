@@ -46,6 +46,17 @@ const serverEnvSchema = z.object({
   SENTRY_ORG: optionalString,
   SENTRY_PROJECT: optionalString,
   SENTRY_AUTH_TOKEN: optionalString,
+  /**
+   * Feature flag R3 (audit RBAC 2026-05-19) — autorise la création d'orgs
+   * par n'importe quel utilisateur authentifié. Par défaut `false` en
+   * production (beta fermée, V1.0). Mettre à `true` côté Vercel quand on
+   * ouvre les inscriptions publiques. Acceptable en dev pour les
+   * sandbox / E2E.
+   */
+  ALLOW_PUBLIC_SIGNUP: z
+    .preprocess((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : v), z.boolean())
+    .optional()
+    .default(false),
 });
 
 const clientEnvSchema = z.object({

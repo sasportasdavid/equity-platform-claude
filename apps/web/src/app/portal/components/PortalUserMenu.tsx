@@ -20,6 +20,15 @@ import { logout } from '@/server/actions/auth';
  *   - Display name + email (header non cliquable)
  *   - "Mon profil" → /portal/profile
  *   - "Déconnexion" (Server Action logout existant)
+ *
+ * **Bug "déconnexion ne fait rien" (fix 2026-05-19)** : on ne peut PAS
+ * appeler la Server Action `logout()` directement via `void logout()`
+ * dans un `onSelect` callback — le `redirect('/login')` interne throw
+ * un `NEXT_REDIRECT` qui est swallowed par le `void` et ne déclenche
+ * pas la navigation côté browser. Pattern correct = soumettre via
+ * `<form action={logout}>` (comme le dashboard layout). Le bouton
+ * "Déconnexion" est donc rendu comme un form-submit déguisé en
+ * DropdownMenuItem visuel.
  */
 export function PortalUserMenu({ fullName, email }: { fullName: string; email: string }) {
   const router = useRouter();
@@ -59,17 +68,22 @@ export function PortalUserMenu({ fullName, email }: { fullName: string; email: s
           Mon profil
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={(e) => {
-            e.preventDefault();
-            void logout();
-          }}
-          className="gap-2"
-          data-testid="portal-sign-out"
-        >
-          <LogOut className="size-4" />
-          Déconnexion
-        </DropdownMenuItem>
+        {/*
+          ⚠️ Le DropdownMenuItem reçoit un `render` prop qui le rend en form
+          submit. Le form englobe le bouton et appelle directement la
+          Server Action `logout` — pattern identique au dashboard layout.
+          Sans ça, `void logout()` swallow le NEXT_REDIRECT throw.
+        */}
+        <form action={logout} className="contents">
+          <DropdownMenuItem
+            render={
+              <button type="submit" className="gap-2" data-testid="portal-sign-out">
+                <LogOut className="size-4" />
+                Déconnexion
+              </button>
+            }
+          />
+        </form>
       </DropdownMenuContent>
     </DropdownMenu>
   );

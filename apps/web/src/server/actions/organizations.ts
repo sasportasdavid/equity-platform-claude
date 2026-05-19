@@ -10,6 +10,7 @@ import {
 } from '@equity/shared';
 import { logAuditEvent } from '@/lib/audit';
 import { requirePermission, requireUser } from '@/lib/auth/rbac';
+import { getServerEnv } from '@/lib/env';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 
 // ===========================================================================
@@ -24,9 +25,13 @@ import { getSupabaseAdminClient } from '@/lib/supabase/admin';
 // utilisateur, on renvoie une erreur explicite (pas d'auto-incrémentation
 // silencieuse — l'utilisateur doit choisir un nouveau nom).
 //
-// Sécurité : pas de check `org.create` (la perm n'existe pas en V1) — toute
-// personne authentifiée peut créer une org dont elle sera OWNER. En prod
-// fermée beta, on désactivera via feature flag `allow_public_signup` (V2).
+// **Sécurité (R3 audit RBAC 2026-05-19)** : Gate via feature flag
+// `ALLOW_PUBLIC_SIGNUP` (default false en prod). Si l'user a déjà une
+// membership ACTIVE (multi-org → admin existant qui crée une org pour un
+// nouveau client), on l'autorise quoi qu'il arrive (cas légitime onboarding
+// admin existant). Sinon (user totalement nouveau → veut créer son org),
+// on exige le flag activé. En beta fermée V1.0, le flag est à false →
+// les comptes new doivent être créés via invitation admin.
 
 function slugify(name: string): string {
   return name
@@ -56,6 +61,30 @@ export async function createOrganization(
   const data = parsed.data;
   const user = await requireUser();
   const admin = getSupabaseAdminClient();
+
+  // R3 audit — feature gate. Si l'user n'a AUCUNE membership ACTIVE, c'est
+  // un signup public (potentiellement self-service). Refuser si le flag est
+  // OFF. Si l'user a déjà des memberships, c'est un admin existant qui crée
+  // une org pour un nouveau client (toujours autorisé).
+  const env = getServerEnv();
+  if (!env.ALLOW_PUBLIC_SIGNUP) {
+    const { count: existingMemberships } = await admin
+      .from('memberships')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('status', 'ACTIVE');
+    if ((existingMemberships ?? 0) === 0) {
+      console.warn('[organizations.create] blocked public signup', {
+        userId: user.id,
+        email: user.email,
+      });
+      return {
+        success: false,
+        error:
+          'La création d’organisations en self-service est désactivée. Contactez votre administrateur Capiwise pour recevoir une invitation.',
+      };
+    }
+  }
 
   // Slug avec suffixe court pour éviter les collisions (Capiwise → capiwise-a3f)
   const slug = `${slugify(data.name) || 'org'}-${Math.random().toString(36).slice(2, 5)}`;

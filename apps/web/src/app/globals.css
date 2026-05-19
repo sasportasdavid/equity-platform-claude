@@ -2,7 +2,11 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-@custom-variant dark (&:is(.dark *));
+/* Match `.dark` lui-même ET ses descendants (Phase fix dark mode).
+   `&:is(.dark *)` n'attrape que les descendants, donc `<html class="dark">`
+   ne matche pas ses propres utilitaires `dark:`. Le `&:where(.dark, .dark *)`
+   couvre les deux cas avec spécificité 0,0,0 (pas de bump CSS layers). */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /*
   Capiwise theme — Editorial Finance V1 (Design System V1, mai 2026)
@@ -256,12 +260,14 @@
   --bond-300: #1f6b48;
   --bond-500: #4fb58a;
   --bond-700: #6fc8a5;
+  --bond-900: #8fdac0;
 
   --title-50: #2a0f0f;
   --title-100: #401818;
   --title-300: #a23131;
   --title-500: #e26a6a;
   --title-700: #ec9090;
+  --title-900: #f4b8b8;
 
   --saffron-50: #2a1f0a;
   --saffron-100: #3e2e10;
@@ -425,6 +431,58 @@
   font-family: var(--font-serif);
   font-style: italic;
   font-weight: 500;
+}
+
+/* === Marketing typos éditoriales (PR #50 site public) === */
+/* Dérivées du brief HTML capiwise-public-home.html — calibrées pour
+   les pages publiques uniquement, ne touchent pas le dashboard. */
+
+@utility text-mkt-hero {
+  font-family: var(--font-serif);
+  font-size: 68px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+@utility text-mkt-h2 {
+  font-family: var(--font-serif);
+  font-size: 44px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+@utility text-mkt-h3 {
+  font-family: var(--font-serif);
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+@utility text-mkt-italic {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 500;
+  font-variation-settings: 'opsz' 144;
+}
+
+@utility text-mkt-overline {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+@utility text-mkt-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
 }
 
 /* === Vesting Timeline (cw-vt) — PR #38 V1f canonique ====================== */

@@ -102,6 +102,12 @@ export async function approveExerciseDecision(input: unknown): Promise<{ ok: tru
   if (!parsed.success) return validationError(parsed.error);
 
   const user = await requireUser();
+  // R4 audit RBAC 2026-05-19 : defense-in-depth. La RPC record_approval_decision
+  // vérifie déjà `approvals.act` côté DB, mais on duplique au TS pour ne pas
+  // dépendre uniquement de la couche RPC en cas de régression silencieuse.
+  if (!(await hasPermission('approvals.act'))) {
+    return { ok: false, error: 'Permission refusée : approvals.act' };
+  }
   const decision = await findUserPendingDecision(parsed.data.exerciseRequestId, user.id);
   if (!decision) {
     return {
@@ -168,6 +174,10 @@ export async function rejectExerciseDecision(input: unknown): Promise<{ ok: true
   if (!parsed.success) return validationError(parsed.error);
 
   const user = await requireUser();
+  // R4 audit RBAC 2026-05-19 : defense-in-depth (idem approveExerciseDecision).
+  if (!(await hasPermission('approvals.act'))) {
+    return { ok: false, error: 'Permission refusée : approvals.act' };
+  }
   const decision = await findUserPendingDecision(parsed.data.exerciseRequestId, user.id);
   if (!decision) {
     return {

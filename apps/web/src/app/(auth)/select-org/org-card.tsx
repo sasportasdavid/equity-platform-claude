@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { Check } from 'lucide-react';
 import { toast } from 'sonner';
@@ -23,7 +22,6 @@ export function OrgCard({
   roles: string[];
   isActive: boolean;
 }) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   function onClick() {
@@ -34,11 +32,19 @@ export function OrgCard({
         toast.error(result.error);
         return;
       }
-      // Force refresh du JWT côté client pour matcher le nouveau active_org_id
+      // Force refresh du JWT côté client pour matcher le nouveau active_org_id.
+      // Le `custom_access_token_hook` doit re-fire pour injecter le claim
+      // depuis le default_org_id qu'on vient d'écrire en DB.
       const supabase = createSupabaseBrowserClient();
       await supabase.auth.refreshSession();
-      router.replace('/dashboard');
-      router.refresh();
+      // **Bug "boucle profile switch" (fix 2026-05-19)** : `router.replace`
+      // + `router.refresh` envoient parfois la requête /dashboard avec le
+      // cookie auth-token PRÉCÉDENT (race entre l'écriture du nouveau JWT
+      // par refreshSession et l'attachement aux requêtes Next). Résultat :
+      // le proxy lit l'ancien JWT (sans active_org_id) → redirect vers
+      // /select-org → boucle. Hard reload garantit que le navigateur
+      // utilise le cookie fraîchement écrit pour la requête /dashboard.
+      window.location.href = '/dashboard';
     });
   }
 
