@@ -103,6 +103,21 @@ export async function createWorkflow(
 
   const supabase = await createSupabaseServerClient();
 
+  // V1.X (fix 2026-05-19) — si le nouveau workflow doit être default actif,
+  // on désactive l'éventuel précédent default actif pour le même applies_to.
+  // Sans ça : violation contrainte UNIQUE `uq_approval_workflow_default_per_applies_to`
+  // (migration 00107) → erreur DB brute "duplicate key" peu lisible.
+  if (data.isDefault && data.isActive) {
+    await supabase
+      .from('approval_workflows')
+      .update({ is_default: false } as never)
+      .eq('org_id', user.activeOrgId)
+      .eq('applies_to', data.appliesTo)
+      .eq('is_default', true)
+      .eq('is_active', true)
+      .is('deleted_at', null);
+  }
+
   // INSERT workflow
   const { data: wf, error: wfErr } = await supabase
     .from('approval_workflows')
@@ -199,6 +214,33 @@ export async function updateWorkflow(input: unknown): Promise<ActionVoid> {
         error: `Compliance check failed : ${compliance.errors.length} erreur(s) bloquante(s)`,
         complianceIssues: compliance.errors,
       };
+    }
+  }
+
+  // V1.X (fix 2026-05-19) — si on rend ce workflow default+active, on
+  // désactive l'éventuel précédent default actif pour le même applies_to
+  // dans la même org. Cf migration 00107 (contrainte UNIQUE partielle).
+  // On lit l'applies_to courant si non patché (besoin pour le filtre).
+  const willBeDefault = patch.isDefault === true;
+  const willBeActive = patch.isActive !== false; // default true si non patché
+  if (willBeDefault && willBeActive) {
+    const { data: currentWf } = await supabase
+      .from('approval_workflows')
+      .select('applies_to')
+      .eq('id', workflowId)
+      .eq('org_id', user.activeOrgId)
+      .maybeSingle();
+    const targetAppliesTo = patch.appliesTo ?? currentWf?.applies_to;
+    if (targetAppliesTo) {
+      await supabase
+        .from('approval_workflows')
+        .update({ is_default: false } as never)
+        .eq('org_id', user.activeOrgId)
+        .eq('applies_to', targetAppliesTo)
+        .eq('is_default', true)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .neq('id', workflowId);
     }
   }
 
