@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { CheckCircle2, MoreVertical, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, MoreVertical, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
@@ -87,9 +87,20 @@ export function WorkflowsListClient({
       description={`${activeCount} workflow${activeCount > 1 ? 's' : ''} actif${activeCount > 1 ? 's' : ''} · ${inactiveCount} archivé${inactiveCount > 1 ? 's' : ''}`}
       actions={
         canConfigure ? (
-          <Link href="/dashboard/settings/approvals/new" className={buttonVariants()}>
-            <Plus className="mr-2 size-4" /> Nouveau workflow
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/dashboard/settings/approvals/quick"
+              className={buttonVariants({ variant: 'default' })}
+            >
+              <Sparkles className="mr-2 size-4" /> Configuration rapide
+            </Link>
+            <Link
+              href="/dashboard/settings/approvals/new"
+              className={buttonVariants({ variant: 'outline' })}
+            >
+              <Plus className="mr-2 size-4" /> Mode avancé
+            </Link>
+          </div>
         ) : null
       }
     >
@@ -146,12 +157,17 @@ export function WorkflowsListClient({
               : "Modifier les filtres ci-dessus pour voir d'autres workflows."}
           </p>
           {workflows.length === 0 && canConfigure ? (
-            <Link
-              href="/dashboard/settings/approvals/new"
-              className={buttonVariants({ className: 'mt-4' })}
-            >
-              <Plus className="mr-2 size-4" /> Créer un workflow
-            </Link>
+            <div className="mt-4 flex justify-center gap-2">
+              <Link href="/dashboard/settings/approvals/quick" className={buttonVariants()}>
+                <Sparkles className="mr-2 size-4" /> Configuration rapide
+              </Link>
+              <Link
+                href="/dashboard/settings/approvals/new"
+                className={buttonVariants({ variant: 'outline' })}
+              >
+                <Plus className="mr-2 size-4" /> Mode avancé
+              </Link>
+            </div>
           ) : null}
         </div>
       ) : (
