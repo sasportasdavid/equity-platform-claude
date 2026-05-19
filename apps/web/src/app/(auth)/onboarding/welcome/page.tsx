@@ -27,7 +27,9 @@ export const metadata: Metadata = {
  */
 export default async function OnboardingWelcomePage() {
   const state = await resolveOnboardingState();
-  if (state.completed) redirect('/dashboard');
+  // Voir commentaire dans /onboarding/profile/page.tsx — invariants
+  // complets requis pour shortcut /dashboard (sinon boucle).
+  if (state.completed && state.profileFilled && state.hasOrg) redirect('/dashboard');
   if (!state.profileFilled) redirect('/onboarding/profile');
   if (!state.hasOrg) redirect('/onboarding/company');
 

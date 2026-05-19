@@ -16,7 +16,13 @@ export const metadata: Metadata = {
  */
 export default async function OnboardingProfilePage() {
   const state = await resolveOnboardingState();
-  if (state.completed) redirect('/dashboard');
+  // **Bug "boucle /onboarding ↔ /onboarding/profile ↔ /select-org"
+  // (fix 2026-05-19)** : ne redirige vers /dashboard QUE si les 3
+  // invariants sont satisfaits. Sinon (ex: profil incomplet ou pas d'org
+  // mais `onboarding_completed_at` set en DB — état orphelin), on laisse
+  // l'user filler le form. Sans ça : /onboarding/profile → /dashboard →
+  // proxy /select-org → 0 memb → /onboarding → re-redirige ici → boucle.
+  if (state.completed && state.profileFilled && state.hasOrg) redirect('/dashboard');
   if (state.profileFilled) redirect('/onboarding');
 
   return (
