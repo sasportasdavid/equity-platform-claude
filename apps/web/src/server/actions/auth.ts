@@ -245,17 +245,28 @@ async function sendMagicLinkInternal(params: {
     email: params.email,
     options: { redirectTo: params.callbackUrl },
   });
-  if (linkError || !linkData.properties?.action_link) {
+  if (linkError || !linkData.properties?.hashed_token) {
     console.error('[auth] generateLink failed', { email: params.email, err: linkError?.message });
     return { ok: false, error: linkError?.message ?? 'generateLink failed' };
   }
   console.log('[auth] generateLink ok', { email: params.email });
 
+  // ⚠️ FIX 2026-05-27 — incompatibilité flow PKCE / lien server-side.
+  // Le projet est en `flowType: 'pkce'`. L'`action_link` brut pointe vers
+  // /auth/v1/verify qui, en PKCE, redirige vers /auth/callback?code=XXX →
+  // exchangeCodeForSession() ÉCHOUE (aucun code_verifier en cookie car le
+  // lien est généré server-side). On construit donc une URL vers le flow
+  // OTP legacy du /auth/callback (token_hash + type) qui appelle verifyOtp()
+  // — lequel ne nécessite PAS de verifier PKCE.
+  const actionUrl = new URL(params.callbackUrl);
+  actionUrl.searchParams.set('token_hash', linkData.properties.hashed_token);
+  actionUrl.searchParams.set('type', 'magiclink');
+
   const sent = await sendEmail({
     to: params.email,
     template: 'magic_link_login',
     variables: {
-      actionLink: linkData.properties.action_link,
+      actionLink: actionUrl.toString(),
       expiresInMinutes: MAGIC_LINK_EXPIRES_MINUTES,
     },
     audit: { userId: params.userId },
@@ -342,17 +353,24 @@ export async function sendMagicLink(
     options: { redirectTo: callbackUrl },
   });
 
-  if (linkError || !linkData.properties?.action_link) {
+  if (linkError || !linkData.properties?.hashed_token) {
     console.error('[auth] generateLink failed', linkError);
     return { success: true }; // toujours fake success
   }
+
+  // ⚠️ FIX 2026-05-27 — flow OTP legacy au lieu de l'action_link brut
+  // (incompatible PKCE pour les liens générés server-side). Cf.
+  // sendMagicLinkInternal pour l'explication détaillée.
+  const actionUrl = new URL(callbackUrl);
+  actionUrl.searchParams.set('token_hash', linkData.properties.hashed_token);
+  actionUrl.searchParams.set('type', 'magiclink');
 
   // 3. Envoi via Resend
   const sent = await sendEmail({
     to: email,
     template: 'magic_link_login',
     variables: {
-      actionLink: linkData.properties.action_link,
+      actionLink: actionUrl.toString(),
       expiresInMinutes: MAGIC_LINK_EXPIRES_MINUTES,
     },
     audit: { userId: profile.id },
