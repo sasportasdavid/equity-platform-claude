@@ -330,6 +330,20 @@ export async function acceptInvitation(
   });
 
   // 6. Magic link auto-login
+  //
+  // ⚠️ FIX 2026-05-27 — incompatibilité flow PKCE / lien server-side.
+  // Le projet est en `flowType: 'pkce'` (client/server/proxy). L'`action_link`
+  // brut de generateLink pointe vers /auth/v1/verify qui, en PKCE, redirige
+  // vers /auth/callback?code=XXX → exchangeCodeForSession() ÉCHOUE car aucun
+  // code_verifier n'a été posé en cookie (le lien est généré côté admin
+  // server, pas via un signInWithOtp browser). Symptôme : "le magic link ne
+  // marche pas" → redirect /login?error=exchange_failed.
+  //
+  // Solution : on n'utilise PAS l'action_link. On extrait le `hashed_token`
+  // et on construit une URL vers le flow OTP legacy du /auth/callback
+  // (`?token_hash=...&type=magiclink`) qui appelle verifyOtp() — lequel ne
+  // nécessite PAS de code_verifier PKCE. C'est le flow fiable pour les liens
+  // générés server-side (invitation, recovery admin, etc.).
   const next = invite.roles.includes('BENEFICIARY') ? '/portal' : '/dashboard';
   const callbackUrl = `${env.NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(next)}`;
   const { data: linkData } = await admin.auth.admin.generateLink({
@@ -337,6 +351,13 @@ export async function acceptInvitation(
     email: invite.email,
     options: { redirectTo: callbackUrl },
   });
+
+  const hashedToken = linkData?.properties?.hashed_token;
+  const redirectUrl = hashedToken
+    ? `${env.NEXT_PUBLIC_APP_URL}/auth/callback?token_hash=${encodeURIComponent(
+        hashedToken,
+      )}&type=magiclink&next=${encodeURIComponent(next)}`
+    : `${env.NEXT_PUBLIC_APP_URL}/login`;
 
   // 7. Audit
   await logAuditEvent({
@@ -349,10 +370,7 @@ export async function acceptInvitation(
     metadata: { roles: invite.roles, is_beneficiary: !!invite.beneficiary_id },
   });
 
-  return {
-    success: true,
-    redirectUrl: linkData?.properties?.action_link ?? `${env.NEXT_PUBLIC_APP_URL}/login`,
-  };
+  return { success: true, redirectUrl };
 }
 
 // ===========================================================================

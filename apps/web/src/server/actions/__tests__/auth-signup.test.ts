@@ -68,8 +68,13 @@ const mockAdminState = {
     error: null as { message: string } | null,
   },
   generateLinkResult: {
-    data: { properties: { action_link: 'https://www.capiwise.fr/auth/callback?token=fake' } } as {
-      properties?: { action_link?: string };
+    data: {
+      properties: {
+        action_link: 'https://www.capiwise.fr/auth/callback?token=fake',
+        hashed_token: 'fake_hashed_token_abc123',
+      },
+    } as {
+      properties?: { action_link?: string; hashed_token?: string };
     } | null,
     error: null as { message: string } | null,
   },
@@ -137,7 +142,12 @@ beforeEach(() => {
     error: null,
   };
   mockAdminState.generateLinkResult = {
-    data: { properties: { action_link: 'https://www.capiwise.fr/auth/callback?token=fake' } },
+    data: {
+      properties: {
+        action_link: 'https://www.capiwise.fr/auth/callback?token=fake',
+        hashed_token: 'fake_hashed_token_abc123',
+      },
+    },
     error: null,
   };
   mockAdminState.tosUpdateError = null;
