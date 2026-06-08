@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Eye, EyeOff } from 'lucide-react';
@@ -15,18 +15,26 @@ import { confirmPasswordReset } from '@/server/actions/auth';
  * /reset-password — étape 2 du flow forgot password.
  * Pré-requis : session "recovery" établie par /auth/callback (vérifié dans
  * la page Server Component parent).
+ *
+ * Uncontrolled (FormData) pour rester compatible avec les password managers
+ * (1Password, Chrome, etc.) qui autofill sans déclencher `onChange` React.
  */
 export function ResetPasswordForm() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
-  function onSubmit() {
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setError(null);
+
+    const formData = new FormData(e.currentTarget);
+    const password = String(formData.get('password') ?? '');
+    const confirmPassword = String(formData.get('confirm') ?? '');
+
     if (password.length < 8) {
       setError('Le mot de passe doit faire au moins 8 caractères');
       return;
@@ -71,65 +79,62 @@ export function ResetPasswordForm() {
           Choisissez un nouveau mot de passe pour votre compte Capiwise.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="password">Nouveau mot de passe (8 caractères min)</Label>
-          <div className="relative">
+      <CardContent>
+        <form ref={formRef} onSubmit={onSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="password">Nouveau mot de passe (8 caractères min)</Label>
+            <div className="relative">
+              <Input
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                minLength={8}
+                maxLength={128}
+                required
+                placeholder="••••••••"
+                disabled={pending}
+                aria-invalid={!!error}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setShowPassword((s) => !s)}
+                className="text-muted-foreground hover:text-foreground absolute right-2 top-1/2 -translate-y-1/2"
+                aria-label={showPassword ? 'Cacher' : 'Afficher'}
+              >
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="confirm">Confirmation</Label>
             <Input
-              id="password"
+              id="confirm"
+              name="confirm"
               type={showPassword ? 'text' : 'password'}
               autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               minLength={8}
               maxLength={128}
+              required
               placeholder="••••••••"
               disabled={pending}
-              aria-invalid={!!error}
             />
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => setShowPassword((s) => !s)}
-              className="text-muted-foreground hover:text-foreground absolute right-2 top-1/2 -translate-y-1/2"
-              aria-label={showPassword ? 'Cacher' : 'Afficher'}
-            >
-              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
           </div>
-        </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="confirm">Confirmation</Label>
-          <Input
-            id="confirm"
-            type={showPassword ? 'text' : 'password'}
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            minLength={8}
-            maxLength={128}
-            placeholder="••••••••"
-            disabled={pending}
-          />
-        </div>
+          {error ? <p className="text-destructive text-xs">{error}</p> : null}
 
-        {error ? <p className="text-destructive text-xs">{error}</p> : null}
+          <Button type="submit" disabled={pending} className="w-full">
+            {pending ? 'Mise à jour…' : 'Définir mon mot de passe'}
+          </Button>
 
-        <Button
-          type="button"
-          onClick={onSubmit}
-          disabled={pending || !password || !confirmPassword}
-          className="w-full"
-        >
-          {pending ? 'Mise à jour…' : 'Définir mon mot de passe'}
-        </Button>
-
-        <p className="text-muted-foreground text-center text-xs">
-          <Link href="/login" className="hover:text-foreground underline">
-            Retour à la connexion
-          </Link>
-        </p>
+          <p className="text-muted-foreground text-center text-xs">
+            <Link href="/login" className="hover:text-foreground underline">
+              Retour à la connexion
+            </Link>
+          </p>
+        </form>
       </CardContent>
     </Card>
   );

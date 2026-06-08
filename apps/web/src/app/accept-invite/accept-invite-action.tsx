@@ -10,38 +10,30 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { acceptInvitation } from '@/server/actions/invitations';
 
 /**
- * Accept invite flow V2 (Phase 2 password) :
+ * Accept invite flow V2 (Phase 2 password).
  *
- *   1. User voit la card invitation + form "Choisir mon mot de passe"
- *   2. Submit → acceptInvitation({ token, password })
- *      → server crée user (avec password) + profile + membership + active_org
- *   3. Si passwordSet=true (= password fourni) :
- *      Browser fait signInWithPassword({email, password}) → session établie
- *      → window.location.href = next (/portal ou /dashboard)
- *   4. Si passwordSet=false (legacy fallback) :
- *      Browser suit le redirectUrl (magic link OTP via /auth/callback)
- *
- * Le password est obligatoire V2 (UX cible). Magic link auto-login reste
- * comme fallback en cas d'erreur signInWithPassword post-acceptation.
+ * Uncontrolled form (FormData) pour rester robuste face aux password managers
+ * qui autofill sans déclencher `onChange` React (1Password, Chrome, Safari).
  */
 export function AcceptInviteAction({ token }: { token: string }) {
   const [pending, startTransition] = useTransition();
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function validate(): string | null {
-    if (password.length < 8) return 'Le mot de passe doit faire au moins 8 caractères';
-    if (password !== confirmPassword) return 'Les deux mots de passe ne correspondent pas';
-    return null;
-  }
-
-  function onAccept() {
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setError(null);
-    const vErr = validate();
-    if (vErr) {
-      setError(vErr);
+
+    const formData = new FormData(e.currentTarget);
+    const password = String(formData.get('password') ?? '');
+    const confirmPassword = String(formData.get('confirm') ?? '');
+
+    if (password.length < 8) {
+      setError('Le mot de passe doit faire au moins 8 caractères');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Les deux mots de passe ne correspondent pas');
       return;
     }
 
@@ -65,17 +57,16 @@ export function AcceptInviteAction({ token }: { token: string }) {
           window.location.href = result.next;
           return;
         }
-        // signInWithPassword fail → fallback magic link
         console.warn('[accept-invite] signInWithPassword failed, fallback magic link', signInErr);
       }
 
-      // Fallback : suit le magic link auto-login (legacy / si signInWithPassword fail)
+      // Fallback : suit le magic link auto-login
       window.location.href = result.redirectUrl;
     });
   }
 
   return (
-    <div className="space-y-3">
+    <form onSubmit={onSubmit} className="space-y-3">
       <div className="border-primary/20 bg-primary/5 flex items-start gap-2 rounded-md border p-3 text-xs">
         <Lock className="text-primary mt-0.5 size-4 shrink-0" />
         <p>
@@ -89,13 +80,13 @@ export function AcceptInviteAction({ token }: { token: string }) {
         <div className="relative">
           <Input
             id="invite-password"
+            name="password"
             type={showPassword ? 'text' : 'password'}
             autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             minLength={8}
             maxLength={128}
+            required
             disabled={pending}
             aria-invalid={!!error}
           />
@@ -115,13 +106,13 @@ export function AcceptInviteAction({ token }: { token: string }) {
         <Label htmlFor="invite-password-confirm">Confirmation</Label>
         <Input
           id="invite-password-confirm"
+          name="confirm"
           type={showPassword ? 'text' : 'password'}
           autoComplete="new-password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
           placeholder="••••••••"
           minLength={8}
           maxLength={128}
+          required
           disabled={pending}
           aria-invalid={!!error}
         />
@@ -129,12 +120,7 @@ export function AcceptInviteAction({ token }: { token: string }) {
 
       {error ? <p className="text-destructive text-xs">{error}</p> : null}
 
-      <Button
-        type="button"
-        className="w-full"
-        disabled={pending || !password || !confirmPassword}
-        onClick={onAccept}
-      >
+      <Button type="submit" className="w-full" disabled={pending}>
         {pending ? (
           'Activation de votre compte…'
         ) : (
@@ -144,6 +130,6 @@ export function AcceptInviteAction({ token }: { token: string }) {
           </>
         )}
       </Button>
-    </div>
+    </form>
   );
 }
