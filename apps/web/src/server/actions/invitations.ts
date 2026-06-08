@@ -228,7 +228,17 @@ export async function createInvitation(
 // de SELECT FOR UPDATE explicit.
 
 export type AcceptInvitationResult =
-  | { success: true; redirectUrl: string }
+  | {
+      success: true;
+      /** URL fallback magic link OTP (utilisée seulement si passwordSet=false). */
+      redirectUrl: string;
+      /** Email pour signInWithPassword côté browser si password fourni. */
+      email: string;
+      /** Path post-login souhaité (/portal ou /dashboard selon rôles). */
+      next: string;
+      /** True si le user a défini un password → le browser doit faire signInWithPassword. */
+      passwordSet: boolean;
+    }
   | { success: false; error: string };
 
 export async function acceptInvitation(
@@ -264,6 +274,8 @@ export async function acceptInvitation(
   }
 
   // 2. Find or create auth.users
+  //    Si password fourni : create user AVEC password (ou updateUserById si
+  //    existe déjà) → le user pourra signInWithPassword directement.
   let userId: string;
   const { data: existingProfile } = await admin
     .from('user_profiles')
@@ -271,13 +283,54 @@ export async function acceptInvitation(
     .eq('email', invite.email)
     .maybeSingle();
 
+  // Check auth.users aussi car user_profiles peut être manquant (compte zombie)
+  const { data: existingAuthUserResponse } = await admin.auth.admin.listUsers();
+  const existingAuthUser =
+    existingAuthUserResponse?.users?.find((u) => u.email === invite.email) ?? null;
+
   if (existingProfile) {
     userId = existingProfile.id;
+    // Si password fourni → mise à jour du password
+    if (parsed.data.password) {
+      const { error: pwErr } = await admin.auth.admin.updateUserById(userId, {
+        password: parsed.data.password,
+        email_confirm: true,
+      });
+      if (pwErr) {
+        return {
+          success: false,
+          error: `Mise à jour du mot de passe impossible : ${pwErr.message}`,
+        };
+      }
+    }
+  } else if (existingAuthUser) {
+    // auth.users existe mais pas user_profiles (zombie) → réutilise, set
+    // password si fourni, créer le profile.
+    userId = existingAuthUser.id;
+    if (parsed.data.password) {
+      const { error: pwErr } = await admin.auth.admin.updateUserById(userId, {
+        password: parsed.data.password,
+        email_confirm: true,
+      });
+      if (pwErr) {
+        return {
+          success: false,
+          error: `Mise à jour du mot de passe impossible : ${pwErr.message}`,
+        };
+      }
+    }
+    await admin.from('user_profiles').insert({
+      id: userId,
+      email: invite.email,
+      default_org_id: invite.org_id,
+    });
   } else {
+    // Création complète : auth.users + user_profiles
     const { data: created, error: createError } = await admin.auth.admin.createUser({
       email: invite.email,
       email_confirm: true,
       user_metadata: {},
+      ...(parsed.data.password ? { password: parsed.data.password } : {}),
     });
     if (createError || !created.user) {
       // Best-effort rollback : remettre PENDING (mais on a un audit trail OK)
@@ -367,10 +420,20 @@ export async function acceptInvitation(
     userEmail: invite.email,
     resourceType: 'INVITATION',
     resourceId: invite.id,
-    metadata: { roles: invite.roles, is_beneficiary: !!invite.beneficiary_id },
+    metadata: {
+      roles: invite.roles,
+      is_beneficiary: !!invite.beneficiary_id,
+      password_set: !!parsed.data.password,
+    },
   });
 
-  return { success: true, redirectUrl };
+  return {
+    success: true,
+    redirectUrl,
+    email: invite.email,
+    next,
+    passwordSet: !!parsed.data.password,
+  };
 }
 
 // ===========================================================================

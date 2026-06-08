@@ -50,6 +50,7 @@ import {
 import { InvitationRevoked, type InvitationRevokedProps } from './InvitationRevoked';
 import { MagicLinkLogin, type MagicLinkLoginProps } from './MagicLinkLogin';
 import { OrgRoleChanged, type OrgRoleChangedProps } from './OrgRoleChanged';
+import { PasswordReset, type PasswordResetProps } from './PasswordReset';
 import { TeamMemberInvite, type TeamMemberInviteProps } from './TeamMemberInvite';
 
 export type TemplateMap = {
@@ -71,6 +72,8 @@ export type TemplateMap = {
   exercise_request_rejected: ExerciseRequestRejectedProps;
   exercise_payment_confirmed: ExercisePaymentConfirmedProps;
   exercise_request_cancelled_by_admin: ExerciseRequestCancelledByAdminProps;
+  // Phase 3 password (V1.X) — mot de passe oublié
+  password_reset: PasswordResetProps;
 };
 
 export type TemplateCode = keyof TemplateMap;
@@ -140,6 +143,10 @@ export const TEMPLATES: { [K in TemplateCode]: TemplateEntry<K> } = {
   exercise_request_cancelled_by_admin: {
     Component: ExerciseRequestCancelledByAdmin,
     subject: ExerciseRequestCancelledByAdmin.subject,
+  },
+  password_reset: {
+    Component: PasswordReset,
+    subject: PasswordReset.subject,
   },
 };
 

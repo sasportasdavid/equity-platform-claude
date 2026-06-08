@@ -35,6 +35,8 @@ const PUBLIC_ROUTES = new Set([
   '/signup',
   '/accept-invite',
   '/auth/callback',
+  '/forgot-password',
+  '/reset-password',
   '/unauthorized',
   '/no-access',
   // Sentry canary — doit être curl-able depuis n'importe où en prod pour

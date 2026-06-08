@@ -21,6 +21,15 @@ export type CreateInvitationInput = z.infer<typeof createInvitationSchema>;
 
 export const acceptInvitationSchema = z.object({
   token: z.string().min(32).max(128),
+  /**
+   * Mot de passe optionnel — si fourni, le compte sera créé avec ce password
+   * et le user pourra se connecter directement via signInWithPassword. Sinon
+   * comportement legacy : magic link auto-login (fragile en flow PKCE).
+   *
+   * Validation côté UI ; ici on accepte tout string non-vide ≥ 8 (rule
+   * souple — l'UI peut être plus stricte via passwordSchema).
+   */
+  password: z.string().min(8).max(128).optional(),
 });
 export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>;
 
