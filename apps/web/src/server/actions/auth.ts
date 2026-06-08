@@ -395,6 +395,227 @@ export async function sendMagicLink(
 }
 
 // ===========================================================================
+// requestPasswordReset — Phase 3 (mot de passe oublié)
+// ===========================================================================
+//
+// Génère un lien de récupération via admin.generateLink({ type: 'recovery' })
+// et l'envoie via Resend (template `password_reset`). Anti-enumeration : on
+// répond toujours `success: true` même si l'email n'existe pas.
+//
+// Le lien reçu pointe vers `/auth/callback?token_hash=X&type=recovery&next=/reset-password`.
+// Le callback flow OTP legacy (verifyOtp) établit une session "recovery"
+// temporaire — la page /reset-password détecte cette session et présente le
+// form "nouveau mot de passe".
+
+const RequestPasswordResetSchema = z.object({ email: emailSchema });
+
+export type RequestPasswordResetResult = { ok: true };
+
+export async function requestPasswordReset(
+  input: z.input<typeof RequestPasswordResetSchema>,
+): Promise<RequestPasswordResetResult> {
+  // Rate limit anti-spam
+  const rl = await checkRateLimitForCurrentRequest('password_reset');
+  if (!rl.allowed) {
+    // Anti enum : ok=true même si rate-limited
+    return { ok: true };
+  }
+
+  const parsed = RequestPasswordResetSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: true }; // anti enum
+  }
+  const { email } = parsed.data;
+  const env = getServerEnv();
+  const admin = getSupabaseAdminClient();
+
+  // Check existence anti-enum (on continue même si pas trouvé)
+  const { data: profile } = await admin
+    .from('user_profiles')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle();
+  if (!profile) {
+    console.log('[auth] requestPasswordReset email unknown (anti-enum)', { email });
+    return { ok: true };
+  }
+
+  const callbackUrl = `${env.NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(
+    '/reset-password',
+  )}`;
+
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    type: 'recovery',
+    email,
+    options: { redirectTo: callbackUrl },
+  });
+  if (linkError || !linkData.properties?.hashed_token) {
+    console.error('[auth] requestPasswordReset generateLink failed', {
+      email,
+      err: linkError?.message,
+    });
+    return { ok: true }; // anti enum
+  }
+
+  // Construire l'URL OTP legacy (token_hash + type) au lieu de l'action_link
+  // brut PKCE-incompatible (cf. PR #58).
+  const actionUrl = new URL(callbackUrl);
+  actionUrl.searchParams.set('token_hash', linkData.properties.hashed_token);
+  actionUrl.searchParams.set('type', 'recovery');
+
+  // Envoi Resend — template `password_reset` (Module Auth Phase 3)
+  const sent = await sendEmail({
+    to: email,
+    template: 'password_reset',
+    variables: {
+      actionLink: actionUrl.toString(),
+      expiresInMinutes: 60,
+    },
+    audit: { userId: profile.id },
+  });
+  if (!sent.ok) {
+    console.error('[auth] requestPasswordReset sendEmail failed', { email, err: sent.error });
+  }
+
+  await logAuditEvent({
+    eventType: 'auth.password_reset_requested',
+    resourceType: 'USER',
+    resourceId: profile.id,
+    userId: profile.id,
+    userEmail: email,
+    metadata: { sent_via: 'resend' },
+  });
+
+  return { ok: true };
+}
+
+// ===========================================================================
+// confirmPasswordReset — Phase 3 (étape 2 : nouveau password depuis /reset-password)
+// ===========================================================================
+//
+// Pré-condition : le user est authentifié via la session "recovery"
+// (établie par /auth/callback verifyOtp). On vérifie qu'il y a bien un user
+// authed puis on met à jour son password via service_role (le client SSR
+// cookie-based ferait aussi l'affaire mais on isole pour clarity).
+
+const ConfirmPasswordResetSchema = z.object({
+  password: z.string().min(8).max(128),
+});
+
+export type ConfirmPasswordResetResult = { ok: true } | { ok: false; error: string };
+
+export async function confirmPasswordReset(
+  input: z.input<typeof ConfirmPasswordResetSchema>,
+): Promise<ConfirmPasswordResetResult> {
+  const parsed = ConfirmPasswordResetSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: 'Mot de passe invalide (min 8 caractères)' };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+    error: getUserErr,
+  } = await supabase.auth.getUser();
+  if (getUserErr || !user) {
+    return { ok: false, error: 'Session de récupération expirée. Demandez un nouveau lien.' };
+  }
+
+  const admin = getSupabaseAdminClient();
+  const { error: updErr } = await admin.auth.admin.updateUserById(user.id, {
+    password: parsed.data.password,
+  });
+  if (updErr) {
+    return { ok: false, error: `Échec mise à jour : ${updErr.message}` };
+  }
+
+  await logAuditEvent({
+    eventType: 'auth.password_reset_completed',
+    resourceType: 'USER',
+    resourceId: user.id,
+    userId: user.id,
+    userEmail: user.email ?? null,
+  });
+
+  return { ok: true };
+}
+
+// ===========================================================================
+// changeMyPassword — Phase 4 (settings, user authentifié change son password)
+// ===========================================================================
+
+const ChangePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1),
+    newPassword: z.string().min(8).max(128),
+    confirmNewPassword: z.string().min(8).max(128),
+  })
+  .refine((d) => d.newPassword === d.confirmNewPassword, {
+    message: 'Les deux mots de passe ne correspondent pas',
+    path: ['confirmNewPassword'],
+  });
+
+export type ChangePasswordResult = { ok: true } | { ok: false; error: string };
+
+export async function changeMyPassword(
+  input: z.input<typeof ChangePasswordSchema>,
+): Promise<ChangePasswordResult> {
+  const parsed = ChangePasswordSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? 'Validation échouée',
+    };
+  }
+
+  const user = await requireUser();
+  if (!user.email) {
+    return { ok: false, error: 'Email manquant sur le compte' };
+  }
+
+  const admin = getSupabaseAdminClient();
+
+  // 1. Re-authenticate via signInWithPassword côté admin (vérifie current)
+  //    Note : on ne peut pas appeler signInWithPassword côté SSR car ça
+  //    écraserait la session du caller. On utilise une instance fraîche du
+  //    client supabase-js standard juste pour la vérification.
+  const { createClient } = await import('@supabase/supabase-js');
+  const env = getServerEnv();
+  const verifyClient = createClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      auth: { persistSession: false, autoRefreshToken: false },
+    },
+  );
+  const { error: verifyErr } = await verifyClient.auth.signInWithPassword({
+    email: user.email,
+    password: parsed.data.currentPassword,
+  });
+  if (verifyErr) {
+    return { ok: false, error: 'Mot de passe actuel incorrect' };
+  }
+
+  // 2. Update password via service_role
+  const { error: updErr } = await admin.auth.admin.updateUserById(user.id, {
+    password: parsed.data.newPassword,
+  });
+  if (updErr) {
+    return { ok: false, error: `Échec mise à jour : ${updErr.message}` };
+  }
+
+  await logAuditEvent({
+    eventType: 'auth.password_changed',
+    resourceType: 'USER',
+    resourceId: user.id,
+    userId: user.id,
+    userEmail: user.email,
+  });
+
+  return { ok: true };
+}
+
+// ===========================================================================
 // logout — Module 2 §1.6
 // ===========================================================================
 //

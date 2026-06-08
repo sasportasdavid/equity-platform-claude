@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { AlertTriangle, Mail } from 'lucide-react';
+import { AlertTriangle, Lock, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,41 +12,21 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { checkEmailExistsForLogin } from '@/server/actions/auth';
 
 /**
- * Magic-link login form — flow PKCE côté CLIENT (Module 2 §1.1, §5.2).
+ * Login form V2 — email + mot de passe (primaire) + magic link (fallback).
  *
- * **Architecture (refacto Option B)** :
- *  - L'envoi du magic link est fait DIRECTEMENT par le browser via
- *    `supabase.auth.signInWithOtp(...)` — au lieu de passer par une
- *    Server Action `sendMagicLink` qui utilisait `admin.generateLink`.
- *  - Avec `flowType: 'pkce'` configuré sur `createSupabaseBrowserClient`,
- *    Supabase pose un PKCE verifier en cookie au moment du submit. Le
- *    pre-fetching Gmail / Apple Mail ne peut donc plus consommer le
- *    code car il manque ce verifier côté serveur de mail.
- *  - **`shouldCreateUser: false`** : pas de signup public — si l'email
- *    n'existe pas, Supabase ne crée PAS de compte (l'inscription se
- *    fait uniquement par invitation admin).
+ * Pourquoi password + magic link (au lieu de magic link only) :
+ *   - Magic link a multiplié les bugs en prod (PKCE incompatible server-side,
+ *     pre-fetching Gmail, domaine Resend non vérifié, comptes zombies). Cf
+ *     PR #58 + audit V1.X.
+ *   - Password = UX standard, pas de dépendance Resend pour login quotidien.
+ *   - Magic link reste disponible en fallback pour les users qui préfèrent.
  *
- * **Trade-off accepté** : on perd le custom template Resend
- * (template_magic_link_login). Supabase envoie son propre template
- * configuré dans Dashboard > Authentication > Email Templates. Le
- * template par défaut Supabase reste correct pour MVP. La Server Action
- * `sendMagicLink` reste utilisée pour les invitations admin (template
- * Resend custom préservé pour ce cas).
- *
- * **Anti email enumeration** : on affiche toujours "Email envoyé" peu
- * importe le retour de Supabase (sauf network error pure). Si l'email
- * n'existe pas, Supabase répond silencieusement (avec `shouldCreateUser:
- * false`) — pas de leak.
- *
- * Le `redirectTo` est lu dans `?redirectTo=/some/path` (proxy.ts l'ajoute
- * automatiquement quand un user anon hit une route privée).
- */
-/**
- * Mappe les codes d'erreur Supabase vers un message FR user-friendly.
- * Les erreurs viennent soit de la query string (ex : `?error=missing_code`),
- * soit du fragment URL (`#error=access_denied&error_code=otp_expired`)
- * que Supabase pose sur certaines erreurs auth — ce dernier est lu
- * côté client via `window.location.hash` au mount.
+ * Flow :
+ *   1. User tape email + password → signInWithPassword côté browser
+ *      → session établie via cookies → redirect /dashboard ou /portal
+ *   2. Si "Mot de passe oublié" → /forgot-password (Phase 3)
+ *   3. Si "Pas de mot de passe ?" → clic "Recevoir un lien magique" →
+ *      signInWithOtp browser (PKCE) → email → /auth/callback
  */
 function getAuthErrorMessage(
   queryError: string | null,
@@ -56,8 +36,6 @@ function getAuthErrorMessage(
   if (fragmentErrorCode === 'otp_expired') {
     return (
       'Le lien de connexion a expiré ou a déjà été utilisé. ' +
-      'Cause fréquente : votre client mail (Gmail, Apple Mail) pré-charge ' +
-      'les liens pour les analyser, ce qui consomme le code à usage unique. ' +
       'Demandez un nouveau lien et cliquez dessus rapidement.'
     );
   }
@@ -76,6 +54,8 @@ function getAuthErrorMessage(
       return 'Vérification du code OTP échouée. Demandez un nouveau lien.';
     case 'unknown_otp_type':
       return "Type d'OTP inconnu. Contactez le support.";
+    case 'invalid_credentials':
+      return 'Email ou mot de passe incorrect.';
     default:
       return null;
   }
@@ -84,13 +64,11 @@ function getAuthErrorMessage(
 export function LoginForm() {
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [magicSentTo, setMagicSentTo] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
-  // Erreurs Supabase posées dans le fragment `#error=...&error_code=...`
-  // — invisibles côté server. On utilise le pattern derived state (set
-  // pendant le render, gardé par un flag `hasReadFragment`) plutôt
-  // qu'un `useEffect` interdit par la règle Next 16
-  // `react-hooks/set-state-in-effect`.
+  const [credentialsError, setCredentialsError] = useState<string | null>(null);
+
+  // Fragment error (Supabase posée parfois dans #error=...)
   const [fragmentError, setFragmentError] = useState<{
     errorCode: string | null;
     description: string | null;
@@ -113,61 +91,87 @@ export function LoginForm() {
   }
 
   const queryError = params.get('error');
-  const authErrorMessage = getAuthErrorMessage(
-    queryError,
-    fragmentError.errorCode,
-    fragmentError.description,
-  );
+  const authErrorMessage =
+    credentialsError ??
+    getAuthErrorMessage(queryError, fragmentError.errorCode, fragmentError.description);
 
-  function onSubmit(formData: FormData) {
+  function getRedirectTo(): string {
+    const redirectToQuery = params.get('redirectTo');
+    return redirectToQuery?.startsWith('/') ? redirectToQuery : '/dashboard';
+  }
+
+  function onSubmitPassword(formData: FormData) {
     setErrors({});
+    setCredentialsError(null);
     const email = String(formData.get('email') ?? '').trim();
+    const password = String(formData.get('password') ?? '');
+
     if (!email || !email.includes('@')) {
       setErrors({ email: ['Adresse email invalide'] });
       return;
     }
-    const redirectToQuery = params.get('redirectTo');
-    const redirectTo = redirectToQuery?.startsWith('/') ? redirectToQuery : '/dashboard';
-    const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-      redirectTo,
-    )}`;
+    if (!password) {
+      setErrors({ password: ['Mot de passe requis'] });
+      return;
+    }
 
     startTransition(async () => {
-      // Pre-check d'existence côté server (Server Action) — nécessaire
-      // pour bloquer le signup public sans tomber sur le 422
-      // `otp_disabled` que Supabase renvoie quand on combine
-      // `shouldCreateUser: false` + Signups disabled côté Dashboard.
-      const exists = await checkEmailExistsForLogin(email);
-      if (!exists) {
-        // Anti email enumeration : on simule le succès même si l'email
-        // n'existe pas. Le seul side-effect distinguable serait la
-        // latence — qu'on pourrait aussi smoother ici via setTimeout.
-        setSentTo(email);
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        // Anti-enumeration : on n'expose pas la différence entre "email
+        // inconnu" et "mot de passe faux". Message générique unique.
+        if (error.status === 400 || error.status === 401) {
+          setCredentialsError('Email ou mot de passe incorrect.');
+        } else if (error.status && error.status >= 500) {
+          setCredentialsError(`Erreur serveur (${error.status}). Réessayez dans un instant.`);
+        } else {
+          setCredentialsError(error.message || 'Connexion impossible.');
+        }
         return;
       }
 
-      // L'email existe → on peut appeler signInWithOtp en sécurité avec
-      // `shouldCreateUser: true` (Supabase ne créera rien car le user
-      // existe déjà). Le PKCE verifier est posé en cookie au moment de
-      // cet appel, anti pre-fetching Gmail/Apple Mail.
+      // Hard reload pour que le proxy lise les cookies fraîchement écrits
+      // (cf fix boucle login switch profile — branche router.replace
+      // utilise parfois les anciens cookies).
+      window.location.href = getRedirectTo();
+    });
+  }
+
+  function onRequestMagicLink() {
+    setErrors({});
+    setCredentialsError(null);
+    const emailInput = document.getElementById('email') as HTMLInputElement | null;
+    const email = (emailInput?.value ?? '').trim();
+    if (!email || !email.includes('@')) {
+      setErrors({ email: ['Saisissez votre email pour recevoir un lien magique'] });
+      return;
+    }
+    const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
+      getRedirectTo(),
+    )}`;
+
+    startTransition(async () => {
+      const exists = await checkEmailExistsForLogin(email);
+      if (!exists) {
+        // Anti enum : fake success comme avant.
+        setMagicSentTo(email);
+        return;
+      }
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: {
-          emailRedirectTo: callbackUrl,
-          shouldCreateUser: true,
-        },
+        options: { emailRedirectTo: callbackUrl, shouldCreateUser: true },
       });
       if (error && error.status && error.status >= 500) {
         setErrors({ email: [`Erreur serveur (${error.status}). Réessayez dans un instant.`] });
         return;
       }
-      // 4xx Supabase (rate limit, etc.) → fake success malgré tout
-      setSentTo(email);
+      setMagicSentTo(email);
     });
   }
 
-  if (sentTo) {
+  if (magicSentTo) {
     return (
       <Card className="w-full max-w-sm">
         <CardHeader>
@@ -175,7 +179,7 @@ export function LoginForm() {
             <Mail className="size-5" /> Email envoyé
           </CardTitle>
           <CardDescription>
-            Si un compte existe pour <strong>{sentTo}</strong>, un lien de connexion vient de
+            Si un compte existe pour <strong>{magicSentTo}</strong>, un lien de connexion vient de
             partir. Cliquez sur le bouton dans l’email pour vous connecter (le lien expire dans 15
             minutes).
           </CardDescription>
@@ -185,7 +189,7 @@ export function LoginForm() {
             type="button"
             variant="outline"
             className="w-full"
-            onClick={() => setSentTo(null)}
+            onClick={() => setMagicSentTo(null)}
           >
             Utiliser une autre adresse
           </Button>
@@ -198,10 +202,7 @@ export function LoginForm() {
     <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle>Se connecter</CardTitle>
-        <CardDescription>
-          Saisissez votre adresse email professionnelle. Nous vous enverrons un lien de connexion
-          sécurisé — pas de mot de passe à retenir.
-        </CardDescription>
+        <CardDescription>Saisissez votre email et votre mot de passe Capiwise.</CardDescription>
       </CardHeader>
       <CardContent>
         {authErrorMessage ? (
@@ -213,7 +214,8 @@ export function LoginForm() {
             <p>{authErrorMessage}</p>
           </div>
         ) : null}
-        <form action={onSubmit} className="space-y-4" data-testid="login-form">
+
+        <form action={onSubmitPassword} className="space-y-4" data-testid="login-form">
           <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -229,16 +231,55 @@ export function LoginForm() {
               <p className="text-destructive text-xs">{errors.email[0]}</p>
             ) : null}
           </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Mot de passe</Label>
+              <Link
+                href="/forgot-password"
+                className="text-muted-foreground hover:text-foreground text-xs"
+              >
+                Mot de passe oublié ?
+              </Link>
+            </div>
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              placeholder="••••••••••••"
+              aria-invalid={!!errors.password}
+            />
+            {errors.password?.[0] ? (
+              <p className="text-destructive text-xs">{errors.password[0]}</p>
+            ) : null}
+          </div>
+
           <Button type="submit" disabled={pending} className="w-full">
-            {pending ? 'Envoi du lien…' : 'Recevoir un lien de connexion'}
+            <Lock className="mr-2 size-4" />
+            {pending ? 'Connexion…' : 'Se connecter'}
           </Button>
         </form>
-        <p className="text-muted-foreground mt-6 text-center text-xs">
+
+        {/* Magic link fallback */}
+        <div className="text-muted-foreground border-border/60 mt-6 border-t pt-4 text-center text-xs">
+          Pas de mot de passe ?{' '}
+          <button
+            type="button"
+            onClick={onRequestMagicLink}
+            disabled={pending}
+            className="hover:text-foreground underline disabled:opacity-50"
+          >
+            Recevoir un lien magique
+          </button>
+        </div>
+
+        <p className="text-muted-foreground mt-3 text-center text-xs">
           Pas encore de compte ?{' '}
           <Link href="/signup" className="hover:text-foreground underline">
             Créer un compte
           </Link>
-          . Inscription gratuite par email — pas de mot de passe.
         </p>
       </CardContent>
     </Card>

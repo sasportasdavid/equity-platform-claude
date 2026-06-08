@@ -24,6 +24,8 @@ const DEFAULT_LIMITS = {
   magic_link: { limit: 5, windowMs: 15 * 60 * 1000 },
   accept_invite: { limit: 5, windowMs: 15 * 60 * 1000 },
   invitation_resend: { limit: 5, windowMs: 15 * 60 * 1000 },
+  // Phase 3 password (V1.X)
+  password_reset: { limit: 5, windowMs: 15 * 60 * 1000 },
 } as const satisfies Record<string, { limit: number; windowMs: number }>;
 
 export type RateLimitCategory = keyof typeof DEFAULT_LIMITS;

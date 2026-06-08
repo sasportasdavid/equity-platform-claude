@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireUser } from '@/lib/auth/rbac';
 import { getSupabaseAdminClient } from '@/lib/supabase/admin';
+import { ChangePasswordForm } from './change-password-form';
 import { ProfileForm } from './profile-form';
 
 export const metadata: Metadata = {
@@ -40,6 +41,19 @@ export default async function ProfilePage() {
             initialFullName={profile?.full_name ?? user.fullName ?? ''}
             initialPhone={profile?.phone ?? ''}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Mot de passe</CardTitle>
+          <CardDescription>
+            Changez votre mot de passe Capiwise. Vous devrez saisir votre mot de passe actuel pour
+            confirmer.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChangePasswordForm />
         </CardContent>
       </Card>
     </div>
