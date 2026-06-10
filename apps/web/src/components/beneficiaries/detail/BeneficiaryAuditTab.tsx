@@ -40,7 +40,7 @@ const EVENT_META: Record<string, { label: string; icon: typeof Activity; tone: s
   'beneficiary.archived': {
     label: 'Archivage',
     icon: Trash2,
-    tone: 'text-slate-600',
+    tone: 'text-muted-foreground',
   },
 };
 

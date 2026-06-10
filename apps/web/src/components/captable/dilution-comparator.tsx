@@ -108,9 +108,9 @@ export function DilutionComparator({
                 <div
                   className={`font-mono text-2xl ${
                     totalDelta > 0
-                      ? 'text-emerald-700'
+                      ? 'text-emerald-700 dark:text-emerald-400'
                       : totalDelta < 0
-                        ? 'text-red-700'
+                        ? 'text-red-700 dark:text-red-400'
                         : 'text-muted-foreground'
                   }`}
                 >
@@ -155,9 +155,9 @@ export function DilutionComparator({
                           <span
                             className={`font-mono text-xs ${
                               d.delta > 0
-                                ? 'text-emerald-700'
+                                ? 'text-emerald-700 dark:text-emerald-400'
                                 : d.delta < 0
-                                  ? 'text-red-700'
+                                  ? 'text-red-700 dark:text-red-400'
                                   : 'text-muted-foreground'
                             }`}
                           >

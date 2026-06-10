@@ -294,7 +294,10 @@ export function SignatureSettingsClient({
                       {wf.name}
                     </Link>
                     {wf.isDefault ? (
-                      <Badge variant="outline" className="border-emerald-400 text-emerald-700">
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-400 text-emerald-700 dark:text-emerald-400"
+                      >
                         <CheckCircle2 className="mr-1 size-3" /> Par défaut
                       </Badge>
                     ) : null}

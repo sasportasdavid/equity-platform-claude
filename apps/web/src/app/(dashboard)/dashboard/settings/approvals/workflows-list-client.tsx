@@ -229,7 +229,10 @@ export function WorkflowsListClient({
                   <td className="px-3 py-3 font-mono text-xs">{wf.steps_count}</td>
                   <td className="px-3 py-3 font-mono text-xs">
                     {wf.active_requests_count > 0 ? (
-                      <Badge variant="outline" className="border-amber-400 text-amber-700">
+                      <Badge
+                        variant="outline"
+                        className="border-amber-400 text-amber-700 dark:text-amber-400"
+                      >
                         {wf.active_requests_count}
                       </Badge>
                     ) : (
@@ -238,7 +241,10 @@ export function WorkflowsListClient({
                   </td>
                   <td className="px-3 py-3">
                     {wf.is_active ? (
-                      <Badge variant="outline" className="border-emerald-400 text-emerald-700">
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-400 text-emerald-700 dark:text-emerald-400"
+                      >
                         Actif
                       </Badge>
                     ) : (

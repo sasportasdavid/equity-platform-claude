@@ -50,7 +50,7 @@ const ITEMS: Item[] = [
   },
   {
     href: '/dashboard/settings/compliance',
-    label: 'Compliance',
+    label: 'Conformité',
     icon: <ScrollText className="size-4" />,
   },
   {

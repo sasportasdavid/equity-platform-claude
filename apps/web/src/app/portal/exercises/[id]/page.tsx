@@ -118,9 +118,9 @@ export default async function PortalExerciseDetailPage({
           )}
 
           {request.rejected_reason && (
-            <div className="mt-6 rounded-md border border-rose-300 bg-rose-50 p-4">
-              <p className="text-overline text-rose-700">MOTIF · DE REJET</p>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-rose-900">
+            <div className="mt-6 rounded-md border border-rose-300 bg-rose-50 p-4 dark:border-rose-900 dark:bg-rose-950/30">
+              <p className="text-overline text-rose-700 dark:text-rose-400">MOTIF · DE REJET</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-rose-900 dark:text-rose-100">
                 {request.rejected_reason}
               </p>
             </div>
@@ -247,7 +247,7 @@ function DetailItem({
           accent === 'brass'
             ? 'text-brass-700 mt-1 font-mono text-sm font-semibold tabular-nums'
             : accent === 'emerald'
-              ? 'mt-1 font-mono text-sm font-semibold tabular-nums text-emerald-700'
+              ? 'mt-1 font-mono text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-400'
               : 'text-ink-900 mt-1 font-mono text-sm tabular-nums'
         }
       >

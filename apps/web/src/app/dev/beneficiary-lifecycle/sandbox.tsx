@@ -45,8 +45,8 @@ type AuditRow = {
 };
 
 const STATUS_TONE: Record<string, string> = {
-  active: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/40',
-  on_leave: 'bg-amber-500/10 text-amber-700 border-amber-500/40',
+  active: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/40 dark:text-emerald-400',
+  on_leave: 'bg-amber-500/10 text-amber-700 border-amber-500/40 dark:text-amber-400',
   terminated: 'bg-destructive/10 text-destructive border-destructive/40',
 };
 

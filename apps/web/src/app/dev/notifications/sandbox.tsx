@@ -334,7 +334,7 @@ export function Sandbox({
             <PlayCircle className="mr-2 size-4" /> Trigger consumer now
           </Button>
           {lastConsumerResult ? (
-            <pre className="rounded-md border bg-slate-50 p-2 font-mono text-[11px] text-slate-800">
+            <pre className="text-foreground rounded-md border bg-slate-50 p-2 font-mono text-[11px]">
               {JSON.stringify(lastConsumerResult, null, 2)}
             </pre>
           ) : null}
@@ -357,7 +357,9 @@ function Stat({
     <div
       className={
         'rounded-md border px-3 py-2 ' +
-        (tone === 'destructive' ? 'border-red-200 bg-red-50' : 'bg-slate-50')
+        (tone === 'destructive'
+          ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30'
+          : 'bg-slate-50')
       }
     >
       <p className="text-muted-foreground text-[11px]">{label}</p>

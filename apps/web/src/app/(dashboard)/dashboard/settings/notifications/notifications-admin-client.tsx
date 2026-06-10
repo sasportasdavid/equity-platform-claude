@@ -347,7 +347,7 @@ export function NotificationsAdminClient({
                 </div>
               </div>
               {previewRow.failure_reason ? (
-                <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800">
+                <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
                   <strong>Raison de l’échec :</strong> {previewRow.failure_reason}
                 </div>
               ) : null}

@@ -96,7 +96,7 @@ export function AdminApproveButton({ exerciseRequestId }: { exerciseRequestId: s
         </Button>
       </div>
       {error && (
-        <p className="rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-900">
+        <p className="rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-100">
           {error}
         </p>
       )}
@@ -131,7 +131,7 @@ export function AdminRejectButton({ exerciseRequestId }: { exerciseRequestId: st
         variant="outline"
         onClick={() => setOpen(true)}
         data-testid="admin-reject-button"
-        className="border-rose-300 text-rose-700 hover:bg-rose-50"
+        className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30"
       >
         Rejeter
       </Button>
@@ -142,7 +142,8 @@ export function AdminRejectButton({ exerciseRequestId }: { exerciseRequestId: st
     <ActionShell open={open} onClose={() => setOpen(false)} title="Rejeter la demande">
       <div className="space-y-2">
         <Label htmlFor="reject-comment">
-          Motif du rejet <span className="text-rose-700">(requis, ≥ 10 caractères)</span>
+          Motif du rejet{' '}
+          <span className="text-rose-700 dark:text-rose-400">(requis, ≥ 10 caractères)</span>
         </Label>
         <textarea
           id="reject-comment"
@@ -168,7 +169,7 @@ export function AdminRejectButton({ exerciseRequestId }: { exerciseRequestId: st
         </Button>
       </div>
       {error && (
-        <p className="rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-900">
+        <p className="rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-100">
           {error}
         </p>
       )}
@@ -269,7 +270,7 @@ export function AdminConfirmPaymentButton({
         </Button>
       </div>
       {error && (
-        <p className="rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-900">
+        <p className="rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-100">
           {error}
         </p>
       )}
@@ -335,7 +336,7 @@ export function AdminCancelButton({ exerciseRequestId }: { exerciseRequestId: st
         </Button>
       </div>
       {error && (
-        <p className="rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-900">
+        <p className="rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-100">
           {error}
         </p>
       )}

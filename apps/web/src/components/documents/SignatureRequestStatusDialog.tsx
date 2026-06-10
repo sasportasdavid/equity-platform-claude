@@ -19,10 +19,12 @@ import { cancelSignatureRequest } from '@/server/actions/documents';
 import type { AwardDocumentSignatureRequest } from '@/server/queries/documents';
 
 const SIGNER_STATUS_COLORS: Record<string, string> = {
-  PENDING: 'bg-slate-100 text-slate-700 border-slate-200',
-  SENT: 'bg-amber-100 text-amber-900 border-amber-200',
-  VIEWED: 'bg-indigo-100 text-indigo-900 border-indigo-200',
-  SIGNED: 'bg-emerald-100 text-emerald-900 border-emerald-200',
+  PENDING: 'bg-slate-100 text-slate-700 border-border dark:text-slate-300',
+  SENT: 'bg-amber-100 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-900',
+  VIEWED:
+    'bg-indigo-100 text-indigo-900 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-100 dark:border-indigo-900',
+  SIGNED:
+    'bg-emerald-100 text-emerald-900 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-100 dark:border-emerald-900',
   DECLINED: 'bg-destructive/10 text-destructive border-destructive/30',
 };
 

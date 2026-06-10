@@ -30,7 +30,7 @@ export function RequestResendAction({ token }: { token: string }) {
   if (sent) {
     return (
       <div
-        className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-700"
+        className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400"
         data-testid="invitation-resend-confirmed"
       >
         <CheckCircle2 className="mt-0.5 size-4 shrink-0" />

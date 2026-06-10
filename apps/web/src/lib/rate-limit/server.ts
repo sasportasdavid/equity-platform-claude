@@ -1,6 +1,6 @@
 import 'server-only';
 import { headers } from 'next/headers';
-import { getDefaultRateLimiter } from './memory-store';
+import { getServerRateLimiter } from './postgres-store';
 import type { RateLimitDecision } from './types';
 
 /**
@@ -26,6 +26,9 @@ const DEFAULT_LIMITS = {
   invitation_resend: { limit: 5, windowMs: 15 * 60 * 1000 },
   // Phase 3 password (V1.X)
   password_reset: { limit: 5, windowMs: 15 * 60 * 1000 },
+  // Audit 2026-06-10 P1 : oracle d'existence d'email (login) — limite un peu
+  // plus haute car un user légitime peut tâtonner, mais coupe l'énumération massive.
+  email_check: { limit: 10, windowMs: 15 * 60 * 1000 },
 } as const satisfies Record<string, { limit: number; windowMs: number }>;
 
 export type RateLimitCategory = keyof typeof DEFAULT_LIMITS;
@@ -55,7 +58,7 @@ export async function checkRateLimitForCurrentRequest(
   /** Optionnel : suffixe key pour différenciation fine (ex: email). */
   subject?: string,
 ): Promise<RateLimitDecision> {
-  const limiter = getDefaultRateLimiter();
+  const limiter = getServerRateLimiter();
   const ip = await getCurrentIp();
   const key = `${category}:${ip}${subject ? `:${subject}` : ''}`;
   const { limit, windowMs } = DEFAULT_LIMITS[category];

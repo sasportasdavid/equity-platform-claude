@@ -300,7 +300,7 @@ export function Sandbox({
                             type="button"
                             onClick={() => handleCancel(a.id)}
                             disabled={pending}
-                            className="rounded bg-red-100 px-2 py-0.5 text-red-700 hover:bg-red-200 disabled:opacity-50"
+                            className="rounded bg-red-100 px-2 py-0.5 text-red-700 hover:bg-red-200 disabled:opacity-50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60"
                           >
                             Cancel (reason)
                           </button>
@@ -312,7 +312,7 @@ export function Sandbox({
                             type="button"
                             onClick={() => handleForfeit(a.id)}
                             disabled={pending}
-                            className="rounded bg-orange-100 px-2 py-0.5 text-orange-700 hover:bg-orange-200 disabled:opacity-50"
+                            className="rounded bg-orange-100 px-2 py-0.5 text-orange-700 hover:bg-orange-200 disabled:opacity-50 dark:bg-orange-950/40 dark:text-orange-300 dark:hover:bg-orange-950/60"
                           >
                             Forfeit (leaver)
                           </button>

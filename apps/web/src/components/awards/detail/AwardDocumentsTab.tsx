@@ -151,7 +151,11 @@ export function AwardDocumentsTab({
           </CardHeader>
           <CardContent>
             {canGenerateNow ? (
-              <Button onClick={handleGenerate} disabled={generating || pending}>
+              <Button
+                onClick={handleGenerate}
+                disabled={generating || pending}
+                data-testid="generate-document"
+              >
                 {generating ? (
                   <Loader2 className="mr-2 size-4 animate-spin" />
                 ) : (
@@ -205,7 +209,9 @@ export function AwardDocumentsTab({
                 <div className="space-y-1">
                   <CardTitle className="flex items-center gap-2">
                     <span className="font-mono">{doc.document_number ?? '—'}</span>
-                    <DocumentStatusBadge status={doc.status} />
+                    <span data-testid={`document-status-badge-${doc.id}`}>
+                      <DocumentStatusBadge status={doc.status} />
+                    </span>
                   </CardTitle>
                   <CardDescription>
                     {doc.template_name ?? doc.template_code ?? 'Template inconnu'} · Généré{' '}
@@ -241,6 +247,7 @@ export function AwardDocumentsTab({
                   <Button
                     size="sm"
                     variant="outline"
+                    data-testid={`preview-document-${doc.id}`}
                     onClick={() =>
                       setPreviewState({
                         documentId: doc.id,

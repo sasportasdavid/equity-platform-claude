@@ -110,7 +110,7 @@ export function AwardVestingTab({
                 <Line
                   type="monotone"
                   dataKey="Programmé"
-                  stroke="#94a3b8"
+                  stroke="var(--muted-foreground)"
                   strokeWidth={2}
                   strokeDasharray="6 3"
                   dot={{ r: 3 }}
@@ -127,7 +127,7 @@ export function AwardVestingTab({
           </div>
           <div className="text-muted-foreground mt-2 flex flex-wrap gap-4 text-xs">
             <span className="flex items-center gap-1.5">
-              <span className="h-0.5 w-4 bg-slate-400" /> Programmé
+              <span className="bg-muted-foreground h-0.5 w-4" /> Programmé
             </span>
             <span className="flex items-center gap-1.5">
               <span className="h-0.5 w-4 bg-emerald-500" /> Acquis

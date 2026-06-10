@@ -96,22 +96,23 @@ export function CapTableEvolutionChart({ points, classTypes, rounds }: CapTableE
         <div className="h-[400px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={points} margin={{ top: 10, right: 16, left: 0, bottom: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis
                 dataKey="date"
                 tickFormatter={formatDate}
-                tick={{ fontSize: 11, fill: '#64748b' }}
-                stroke="#94a3b8"
+                tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+                stroke="var(--border)"
               />
               <YAxis
                 tickFormatter={formatNumber}
-                tick={{ fontSize: 11, fill: '#64748b' }}
-                stroke="#94a3b8"
+                tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+                stroke="var(--border)"
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #e2e8f0',
+                  backgroundColor: 'var(--popover)',
+                  color: 'var(--popover-foreground)',
+                  border: '1px solid var(--border)',
                   borderRadius: '4px',
                   fontSize: '12px',
                 }}

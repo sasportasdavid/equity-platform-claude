@@ -99,7 +99,7 @@ export function DecisionDialog({
 
         <div className="bg-muted/30 space-y-1 rounded-md border p-3 text-xs">
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Award</span>
+            <span className="text-muted-foreground">Attribution</span>
             <span className="font-mono">{context.awardNumber ?? '—'}</span>
           </div>
           <div className="flex justify-between">

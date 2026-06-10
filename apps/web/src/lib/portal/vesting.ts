@@ -83,20 +83,39 @@ export function buildVestingTimeline(
 
   const todayIso = toIsoDate(today);
 
-  return tranches
-    .map((t: PortalVestingScheduleTranche): VestingTimelineEntry => {
-      const isPast = t.vesting_date <= todayIso;
-      const units = Math.round((unitsGranted * Number(t.percentage_of_award)) / 100);
-      return {
-        date: t.vesting_date,
-        unitsToVest: units,
-        unitsVested: isPast ? units : 0,
-        status: isPast ? 'VESTED' : 'PENDING',
-        performanceMultiplier: 1.0,
-        fromSnapshot: true,
-      };
-    })
-    .sort((a: VestingTimelineEntry, b: VestingTimelineEntry) => a.date.localeCompare(b.date));
+  // On trie d'abord par date pour que la "dernière tranche" (qui absorbe
+  // le drift d'arrondi) soit déterministe et chronologiquement la dernière.
+  const sorted = [...tranches].sort(
+    (a: PortalVestingScheduleTranche, b: PortalVestingScheduleTranche) =>
+      a.vesting_date.localeCompare(b.vesting_date),
+  );
+
+  // round() par tranche puis correction du drift résiduel sur la dernière
+  // tranche pour garantir SUM(unitsToVest) === unitsGranted exact. Aligné
+  // sur le RPC SQL `materialize_vesting_events` (migration 00021), source
+  // de vérité. Sans ça, la somme des tranches arrondies peut différer de
+  // unitsGranted (ex: 3 × round(33,33% × 100) = 99 ≠ 100).
+  const perTrancheUnits = sorted.map((t) =>
+    Math.round((unitsGranted * Number(t.percentage_of_award)) / 100),
+  );
+  const totalAlloc = perTrancheUnits.reduce((acc, u) => acc + u, 0);
+  const drift = unitsGranted - totalAlloc;
+  if (drift !== 0 && perTrancheUnits.length > 0) {
+    perTrancheUnits[perTrancheUnits.length - 1]! += drift;
+  }
+
+  return sorted.map((t: PortalVestingScheduleTranche, i: number): VestingTimelineEntry => {
+    const isPast = t.vesting_date <= todayIso;
+    const units = perTrancheUnits[i]!;
+    return {
+      date: t.vesting_date,
+      unitsToVest: units,
+      unitsVested: isPast ? units : 0,
+      status: isPast ? 'VESTED' : 'PENDING',
+      performanceMultiplier: 1.0,
+      fromSnapshot: true,
+    };
+  });
 }
 
 /**

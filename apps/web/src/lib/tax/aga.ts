@@ -3,10 +3,15 @@
  *
  * Pour AGA post-2018 (default V1) :
  *   - Plus-value d'acquisition (FMV jour acquisition × units, strike = 0) :
- *       * Abattement 50% jusqu'à 300 000 €
- *       * Au-delà : barème IR sans abattement (formule charnière)
- *       * + CSG/CRDS revenus d'activité 9,7% sur base brute
- *       * + Contribution salariale spécifique 10% sur base brute
+ *       IR (barème) sur base après abattement :
+ *         * Abattement 50% jusqu'à 300 000 €
+ *         * Au-delà : barème IR sans abattement (formule charnière)
+ *       Régime SOCIAL (CSS L.137-14, CGI 80 quaterdecies), assiette BRUTE
+ *       splittée au seuil 300 000 € :
+ *         * fraction ≤ 300 000 € → prélèvements sociaux du CAPITAL (18,6%
+ *           en 2026), SANS contribution salariale 10%
+ *         * fraction > 300 000 € → régime salaire : CSG/CRDS activité 9,7%
+ *           + contribution salariale spécifique 10%
  *   - Plus-value de cession (FMV cession - FMV acquisition) :
  *       PFU 31,4% comme valeur mobilière standard
  *
@@ -17,11 +22,13 @@
 import {
   AGA_ABATTEMENT_RATE,
   AGA_ABATTEMENT_THRESHOLD,
-  AGA_CONTRIBUTION_SALARIALE_2026,
+  AGA_ACQUISITION_PS_CAPITAL_2026,
+  AGA_SOCIAL_REGIME_THRESHOLD,
   CSG_CRDS_ACTIVITY_2026,
   PFU_IR_2026,
   PS_CAPITAL_GAINS_2026,
   RATES_YEAR,
+  SALARIAL_CONTRIBUTION_10_2026,
   TAX_SOURCES,
 } from './rates';
 import { computeIncomeTax, round2 } from './helpers';
@@ -40,6 +47,53 @@ function applyAgaAbattement(taxableBase: number): number {
     return taxableBase * AGA_ABATTEMENT_RATE;
   }
   return AGA_ABATTEMENT_THRESHOLD * AGA_ABATTEMENT_RATE + (taxableBase - AGA_ABATTEMENT_THRESHOLD);
+}
+
+/**
+ * Calcule les prélèvements sociaux du gain d'acquisition AGA post-2018,
+ * sur la base BRUTE (pas après abattement), avec le split au seuil
+ * 300 000 € (CSS art. L 137-14) :
+ *
+ *   - fraction ≤ 300 000 € → PS du capital (18,6% en 2026), SANS contrib 10%
+ *   - fraction > 300 000 € → CSG/CRDS activité (9,7%) + contribution
+ *     salariale spécifique (10%)
+ *
+ * Retourne le détail pour traçabilité (utile aux tests et au breakdown).
+ */
+function computeAgaAcquisitionSocial(grossBase: number): {
+  capitalFraction: number;
+  salaryFraction: number;
+  capitalPs: number;
+  salaryCsgCrds: number;
+  salaryContribution10: number;
+  total: number;
+} {
+  if (grossBase <= 0) {
+    return {
+      capitalFraction: 0,
+      salaryFraction: 0,
+      capitalPs: 0,
+      salaryCsgCrds: 0,
+      salaryContribution10: 0,
+      total: 0,
+    };
+  }
+
+  const capitalFraction = Math.min(grossBase, AGA_SOCIAL_REGIME_THRESHOLD);
+  const salaryFraction = Math.max(0, grossBase - AGA_SOCIAL_REGIME_THRESHOLD);
+
+  const capitalPs = capitalFraction * AGA_ACQUISITION_PS_CAPITAL_2026;
+  const salaryCsgCrds = salaryFraction * CSG_CRDS_ACTIVITY_2026;
+  const salaryContribution10 = salaryFraction * SALARIAL_CONTRIBUTION_10_2026;
+
+  return {
+    capitalFraction,
+    salaryFraction,
+    capitalPs,
+    salaryCsgCrds,
+    salaryContribution10,
+    total: capitalPs + salaryCsgCrds + salaryContribution10,
+  };
 }
 
 export function simulateAga(
@@ -79,11 +133,22 @@ export function simulateAga(
     }),
   );
 
-  // CSG/CRDS 9,7% + contribution salariale 10% sur base BRUTE (pas
-  // après abattement — c'est la spécificité AGA).
-  const acquisitionSocialContributions = round2(
-    acquisitionTaxableBase * (CSG_CRDS_ACTIVITY_2026 + AGA_CONTRIBUTION_SALARIALE_2026),
-  );
+  // Prélèvements sociaux sur base BRUTE (pas après abattement) avec le
+  // split au seuil 300 000 € (CSS L.137-14) :
+  //   - fraction ≤ 300K → PS capital 18,6%, sans contrib 10%
+  //   - fraction > 300K → CSG activité 9,7% + contrib salariale 10%
+  const social = computeAgaAcquisitionSocial(acquisitionTaxableBase);
+  const acquisitionSocialContributions = round2(social.total);
+
+  if (social.salaryFraction > 0) {
+    warnings.push(
+      `Gain d'acquisition > 300 000 € : la fraction excédentaire` +
+        ` (${round2(social.salaryFraction)} €) supporte la CSG/CRDS` +
+        ` d'activité 9,7% + la contribution salariale spécifique 10%` +
+        ` (régime salaire). La fraction ≤ 300 000 € reste soumise aux` +
+        ` prélèvements sociaux du capital (18,6%).`,
+    );
+  }
 
   // Plus-value de cession = (FMV cession - FMV acquisition) × units
   const cessionTaxableBase = Math.max(

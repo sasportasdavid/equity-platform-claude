@@ -26,7 +26,7 @@ export function TaxBreakdownDisplay({ breakdown }: { breakdown: TaxBreakdown }) 
             className={cn(
               'text-h4 mt-1 font-medium',
               accent === 'brass' && 'text-brass-700',
-              accent === 'warning' && 'text-amber-700',
+              accent === 'warning' && 'text-amber-700 dark:text-amber-400',
               accent === 'ink' && 'text-ink-900',
             )}
           >
@@ -72,12 +72,12 @@ export function TaxBreakdownDisplay({ breakdown }: { breakdown: TaxBreakdown }) 
 
       {/* Warnings */}
       {breakdown.warnings.length > 0 && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-4">
-          <div className="mb-2 flex items-center gap-2 text-amber-800">
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+          <div className="mb-2 flex items-center gap-2 text-amber-800 dark:text-amber-300">
             <AlertTriangle className="size-4" strokeWidth={2} />
             <p className="text-sm font-medium">Points de vigilance</p>
           </div>
-          <ul className="space-y-2 text-sm text-amber-900">
+          <ul className="space-y-2 text-sm text-amber-900 dark:text-amber-100">
             {breakdown.warnings.map((w, idx) => (
               <li key={idx} className="leading-relaxed">
                 {w}
@@ -125,7 +125,7 @@ function BreakdownRow({
         className={cn(
           'mt-1 font-mono text-xl tabular-nums',
           accent === 'brass' && 'text-brass-700 font-semibold',
-          accent === 'warning' && 'text-amber-700',
+          accent === 'warning' && 'text-amber-700 dark:text-amber-400',
           accent === 'ink' && 'text-ink-900',
         )}
       >

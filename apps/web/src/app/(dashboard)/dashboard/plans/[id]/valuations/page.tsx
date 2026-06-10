@@ -155,19 +155,21 @@ export default async function PlanValuationsPage({ params }: { params: Promise<{
 function StatusBadge({ status }: { status: string }) {
   if (status === 'DONE') {
     return (
-      <Badge className="border-emerald-300 bg-emerald-100 font-mono text-xs text-emerald-900">
+      <Badge className="border-emerald-300 bg-emerald-100 font-mono text-xs text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
         DONE
       </Badge>
     );
   }
   if (status === 'ERROR') {
     return (
-      <Badge className="border-rose-300 bg-rose-100 font-mono text-xs text-rose-900">ERROR</Badge>
+      <Badge className="border-rose-300 bg-rose-100 font-mono text-xs text-rose-900 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-100">
+        ERROR
+      </Badge>
     );
   }
   if (status === 'RUNNING') {
     return (
-      <Badge className="border-amber-300 bg-amber-100 font-mono text-xs text-amber-900">
+      <Badge className="border-amber-300 bg-amber-100 font-mono text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
         RUNNING
       </Badge>
     );

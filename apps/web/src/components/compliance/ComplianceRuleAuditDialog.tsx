@@ -36,12 +36,13 @@ const dateFormatter = new Intl.DateTimeFormat('fr-FR', {
 
 function eventIcon(eventType: string) {
   if (eventType === 'compliance_rule.activated')
-    return <Check className="size-4 text-emerald-700" />;
-  if (eventType === 'compliance_rule.deactivated') return <X className="size-4 text-rose-700" />;
+    return <Check className="size-4 text-emerald-700 dark:text-emerald-400" />;
+  if (eventType === 'compliance_rule.deactivated')
+    return <X className="size-4 text-rose-700 dark:text-rose-400" />;
   if (eventType === 'compliance_rule.params_updated')
     return <Pencil className="text-brass-700 size-4" />;
   if (eventType === 'compliance_rule.reset_all')
-    return <RotateCcw className="size-4 text-amber-700" />;
+    return <RotateCcw className="size-4 text-amber-700 dark:text-amber-400" />;
   return <History className="text-ink-500 size-4" />;
 }
 
@@ -65,6 +66,9 @@ export function ComplianceRuleAuditDialog({
 
   useEffect(() => {
     if (!open) return;
+    // Fetch du journal d'audit à l'ouverture : on bascule en état "loading"
+    // avant l'appel async. Synchro one-shot sur `open`, pas une boucle.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading state before async fetch on open
     setLoading(true);
     setError(null);
     getComplianceRuleAuditLog(ruleCode)
@@ -137,10 +141,13 @@ export function ComplianceRuleAuditDialog({
                         {Object.entries(diff).map(([key, change]) => (
                           <div key={key}>
                             <span className="text-ink-500">{key}:</span>{' '}
-                            <span className="text-rose-700 line-through">
+                            <span className="text-rose-700 line-through dark:text-rose-400">
                               {String(change.from)}
                             </span>{' '}
-                            → <span className="text-emerald-700">{String(change.to)}</span>
+                            →{' '}
+                            <span className="text-emerald-700 dark:text-emerald-400">
+                              {String(change.to)}
+                            </span>
                           </div>
                         ))}
                       </div>

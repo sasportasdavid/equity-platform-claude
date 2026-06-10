@@ -9,8 +9,8 @@ import { DecisionDialog } from './DecisionDialog';
 import type { ApprovalRequestForAward } from '@/server/queries/approvals';
 
 const STATUS_TONE: Record<string, string> = {
-  IN_PROGRESS: 'border-amber-400 text-amber-700',
-  APPROVED: 'border-emerald-400 text-emerald-700',
+  IN_PROGRESS: 'border-amber-400 text-amber-700 dark:text-amber-400',
+  APPROVED: 'border-emerald-400 text-emerald-700 dark:text-emerald-400',
   REJECTED: 'border-destructive text-destructive',
   CANCELLED: 'border-muted-foreground/40 text-muted-foreground',
 };

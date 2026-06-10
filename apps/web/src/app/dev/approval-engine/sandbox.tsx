@@ -51,8 +51,8 @@ type AuditRow = {
 };
 
 const STATUS_TONE: Record<string, string> = {
-  IN_PROGRESS: 'bg-amber-500/10 text-amber-700 border-amber-500/40',
-  APPROVED: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/40',
+  IN_PROGRESS: 'bg-amber-500/10 text-amber-700 border-amber-500/40 dark:text-amber-400',
+  APPROVED: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/40 dark:text-emerald-400',
   REJECTED: 'bg-destructive/10 text-destructive border-destructive/40',
   CANCELLED: 'bg-muted text-muted-foreground border-muted-foreground/30',
 };

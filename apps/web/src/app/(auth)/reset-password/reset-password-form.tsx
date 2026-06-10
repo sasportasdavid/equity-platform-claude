@@ -60,7 +60,7 @@ export function ResetPasswordForm() {
     return (
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-emerald-700">
+          <CardTitle className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
             <CheckCircle2 className="size-5" /> Mot de passe mis à jour
           </CardTitle>
           <CardDescription>

@@ -275,7 +275,7 @@ export function ExerciseRequestForm({
           <h3 className="text-h4 text-ink-900 mt-1">Comment payer après approbation</h3>
         </header>
 
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-slate-800">
+        <div className="text-foreground rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 dark:border-emerald-900 dark:bg-emerald-950/30">
           <p>
             Pour exercer ces{' '}
             <strong className="font-mono">
@@ -290,7 +290,7 @@ export function ExerciseRequestForm({
         </div>
 
         {bankIban || bankBic || bankName ? (
-          <div className="border-paper-300 grid grid-cols-1 gap-4 rounded-md border bg-white p-4 text-sm sm:grid-cols-3">
+          <div className="border-paper-300 bg-card grid grid-cols-1 gap-4 rounded-md border p-4 text-sm sm:grid-cols-3">
             {bankName ? (
               <div>
                 <p className="text-overline text-ink-500">Banque</p>
@@ -311,7 +311,7 @@ export function ExerciseRequestForm({
             ) : null}
           </div>
         ) : (
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
             Coordonnées bancaires non renseignées par l'administration. Les coordonnées vous seront
             communiquées dans l'email d'approbation, ou contactez votre administrateur avant
             d'effectuer le virement.
@@ -349,7 +349,7 @@ export function ExerciseRequestForm({
       </footer>
 
       {error && (
-        <div className="rounded-md border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">
+        <div className="rounded-md border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-100">
           <p className="font-medium">Erreur</p>
           <p className="mt-1">{error}</p>
         </div>

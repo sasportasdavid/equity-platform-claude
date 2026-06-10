@@ -70,33 +70,34 @@ export function ConvergenceChart({ curve, finalFV, height = 240 }: ConvergenceCh
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={curve} margin={{ top: 8, right: 16, left: 4, bottom: 24 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis
               dataKey="n"
               scale="log"
               domain={['dataMin', 'dataMax']}
               type="number"
               tickFormatter={formatNAxis}
-              tick={{ fontSize: 10, fill: '#78716c' }}
-              stroke="#a8a29e"
+              tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+              stroke="var(--border)"
               label={{
                 value: 'N paths simulés (log)',
                 position: 'insideBottom',
                 offset: -8,
                 fontSize: 11,
-                fill: '#78716c',
+                fill: 'var(--muted-foreground)',
               }}
             />
             <YAxis
               tickFormatter={(v: number) => eurFormatter.format(v)}
-              tick={{ fontSize: 10, fill: '#78716c' }}
-              stroke="#a8a29e"
+              tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+              stroke="var(--border)"
               width={70}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#fff',
-                border: '1px solid #e7e5e4',
+                backgroundColor: 'var(--popover)',
+                color: 'var(--popover-foreground)',
+                border: '1px solid var(--border)',
                 borderRadius: '4px',
                 fontSize: '11px',
               }}
@@ -115,13 +116,13 @@ export function ConvergenceChart({ curve, finalFV, height = 240 }: ConvergenceCh
             />
             <ReferenceLine
               y={finalFV}
-              stroke="#a8a29e"
+              stroke="var(--muted-foreground)"
               strokeDasharray="4 4"
               label={{
                 value: `FV finale : ${eurFormatter.format(finalFV)}`,
                 position: 'right',
                 fontSize: 10,
-                fill: '#78716c',
+                fill: 'var(--muted-foreground)',
               }}
             />
           </LineChart>
