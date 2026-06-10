@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       api_keys: {
@@ -1873,7 +1898,7 @@ export type Database = {
           is_active: boolean
           is_locked: boolean
           name: string
-          org_id: string
+          org_id: string | null
           parent_template_id: string | null
           pdf_style: Json | null
           signature_workflow: Json | null
@@ -1897,7 +1922,7 @@ export type Database = {
           is_active?: boolean
           is_locked?: boolean
           name: string
-          org_id: string
+          org_id?: string | null
           parent_template_id?: string | null
           pdf_style?: Json | null
           signature_workflow?: Json | null
@@ -1921,7 +1946,7 @@ export type Database = {
           is_active?: boolean
           is_locked?: boolean
           name?: string
-          org_id?: string
+          org_id?: string | null
           parent_template_id?: string | null
           pdf_style?: Json | null
           signature_workflow?: Json | null
@@ -3349,6 +3374,24 @@ export type Database = {
           },
         ]
       }
+      rate_limit_counters: {
+        Row: {
+          count: number
+          key: string
+          window_start: string
+        }
+        Insert: {
+          count: number
+          key: string
+          window_start: string
+        }
+        Update: {
+          count?: number
+          key?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       reports: {
         Row: {
           created_at: string
@@ -3708,6 +3751,161 @@ export type Database = {
           },
           {
             foreignKeyName: "signature_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signature_settings: {
+        Row: {
+          default_expiry_days: number
+          default_signing_order: string
+          org_id: string
+          reminder_days: number
+          require_owner_cosigner: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          default_expiry_days?: number
+          default_signing_order?: string
+          org_id: string
+          reminder_days?: number
+          require_owner_cosigner?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          default_expiry_days?: number
+          default_signing_order?: string
+          org_id?: string
+          reminder_days?: number
+          require_owner_cosigner?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signature_settings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "effective_compliance_rules"
+            referencedColumns: ["org_id"]
+          },
+          {
+            foreignKeyName: "signature_settings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signature_workflow_signers: {
+        Row: {
+          created_at: string
+          id: string
+          is_required: boolean
+          signer_order: number
+          signer_role: string | null
+          signer_type: string
+          signer_user_id: string | null
+          workflow_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_required?: boolean
+          signer_order: number
+          signer_role?: string | null
+          signer_type: string
+          signer_user_id?: string | null
+          workflow_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_required?: boolean
+          signer_order?: number
+          signer_role?: string | null
+          signer_type?: string
+          signer_user_id?: string | null
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signature_workflow_signers_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "signature_workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signature_workflows: {
+        Row: {
+          applies_to_plan_types: string[]
+          applies_to_template_codes: string[]
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          expiry_days: number
+          id: string
+          is_active: boolean
+          is_default: boolean
+          name: string
+          org_id: string
+          reminder_days: number
+          signing_order: string
+          updated_at: string
+        }
+        Insert: {
+          applies_to_plan_types?: string[]
+          applies_to_template_codes?: string[]
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          expiry_days?: number
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name: string
+          org_id: string
+          reminder_days?: number
+          signing_order?: string
+          updated_at?: string
+        }
+        Update: {
+          applies_to_plan_types?: string[]
+          applies_to_template_codes?: string[]
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          expiry_days?: number
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name?: string
+          org_id?: string
+          reminder_days?: number
+          signing_order?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signature_workflows_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "effective_compliance_rules"
+            referencedColumns: ["org_id"]
+          },
+          {
+            foreignKeyName: "signature_workflows_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -4518,6 +4716,7 @@ export type Database = {
       }
     }
     Functions: {
+      _enforce_tenant_org: { Args: { p_org_id: string }; Returns: undefined }
       apply_award_modification: {
         Args: {
           p_award_id: string
@@ -4575,6 +4774,15 @@ export type Database = {
         Returns: string
       }
       compute_cap_table: {
+        Args: {
+          p_asof_date?: string
+          p_org_id: string
+          p_scenario_id?: string
+          p_view_mode?: string
+        }
+        Returns: Json
+      }
+      compute_cap_table_impl: {
         Args: {
           p_asof_date?: string
           p_org_id: string
@@ -4813,11 +5021,34 @@ export type Database = {
         }
         Returns: string
       }
+      materialize_snapshot_impl: {
+        Args: {
+          p_asof_date: string
+          p_label?: string
+          p_org_id: string
+          p_snapshot_type: string
+          p_triggered_by_round_id?: string
+        }
+        Returns: string
+      }
       materialize_vesting_events: {
         Args: { p_award_id: string }
         Returns: number
       }
+      materialize_vesting_events_impl: {
+        Args: { p_award_id: string }
+        Returns: number
+      }
       next_award_number: { Args: { p_org_id: string }; Returns: string }
+      next_award_number_impl: { Args: { p_org_id: string }; Returns: string }
+      rate_limit_hit: {
+        Args: { p_key: string; p_limit: number; p_window_ms: number }
+        Returns: {
+          allowed: boolean
+          remaining: number
+          retry_after_ms: number
+        }[]
+      }
       record_approval_decision: {
         Args: { p_comment: string; p_decision_id: string; p_status: string }
         Returns: Json
@@ -4834,6 +5065,10 @@ export type Database = {
         Returns: Json
       }
       seed_default_approval_workflow_for_org: {
+        Args: { p_org_id: string }
+        Returns: string
+      }
+      seed_signature_settings_for_org: {
         Args: { p_org_id: string }
         Returns: string
       }
@@ -5032,6 +5267,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

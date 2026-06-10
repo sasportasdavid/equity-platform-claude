@@ -45,6 +45,11 @@ const MAGIC_LINK_EXPIRES_MINUTES = 15;
 export async function checkEmailExistsForLogin(rawEmail: string): Promise<boolean> {
   const parsed = emailSchema.safeParse(rawEmail);
   if (!parsed.success) return false;
+  // Audit 2026-06-10 P1 : cet oracle booléen permet d'énumérer les emails.
+  // Rate limit par IP — au-delà du quota, on répond `false` (direction sûre :
+  // ne révèle rien et ne facilite pas l'énumération massive).
+  const rl = await checkRateLimitForCurrentRequest('email_check');
+  if (!rl.allowed) return false;
   const admin = getSupabaseAdminClient();
   const { data: profile } = await admin
     .from('user_profiles')
@@ -328,6 +333,15 @@ export async function sendMagicLink(
     return { success: false, error: 'Adresse email invalide' };
   }
   const { email, redirectTo } = parsed.data;
+
+  // Audit 2026-06-10 P1 : rate limit (IP + email) avant tout envoi Resend —
+  // empêche l'email-bombing ciblé et l'épuisement du quota Resend. Message
+  // explicite : ne révèle pas l'existence d'un compte (c'est l'IP qui est limitée).
+  const rl = await checkRateLimitForCurrentRequest('magic_link', email);
+  if (!rl.allowed) {
+    return { success: false, error: formatRateLimitedMessage(rl.retryAfterMs) };
+  }
+
   const env = getServerEnv();
   const admin = getSupabaseAdminClient();
 
