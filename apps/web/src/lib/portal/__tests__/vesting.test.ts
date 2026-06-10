@@ -99,7 +99,7 @@ describe('buildVestingTimeline — Cas B (fallback snapshot)', () => {
     expect(out[2]?.unitsVested).toBe(0); // PENDING → vested = 0
   });
 
-  it('gère arrondi sur units_granted impair (% non entier)', () => {
+  it('gère arrondi sur units_granted impair (% non entier) + drift sur dernière tranche', () => {
     const odd: PortalVestingScheduleSnapshot = {
       schedule: {},
       tranches: [
@@ -109,9 +109,49 @@ describe('buildVestingTimeline — Cas B (fallback snapshot)', () => {
       ],
     };
     const out = buildVestingTimeline(100, null, odd, FIXED_TODAY);
-    // 33.33 * 100 / 100 = 33.33 → arrondi 33 ; 33.34 * 100 / 100 = 33.34 → arrondi 33
+    // round() par tranche : 33, 33, 33 → somme 99, drift = +1 absorbé par
+    // la dernière tranche (chronologiquement la plus tardive) → 33, 33, 34.
+    // Aligné sur materialize_vesting_events (RPC 00021).
     expect(out[0]?.unitsToVest).toBe(33);
-    expect(out[2]?.unitsToVest).toBe(33);
+    expect(out[1]?.unitsToVest).toBe(33);
+    expect(out[2]?.unitsToVest).toBe(34);
+    const total = out.reduce((acc, e) => acc + e.unitsToVest, 0);
+    expect(total).toBe(100); // SUM === unitsGranted exact
+  });
+
+  it('drift correction : SUM(unitsToVest) === unitsGranted (cas qui sur-arrondit)', () => {
+    // 7 unités, 2 tranches à 50% : round(3,5) = 4 (JS arrondit au pair sup.)
+    // → 4 + 4 = 8 > 7. Drift = -1 absorbé par la dernière → 4, 3 = 7.
+    const snap: PortalVestingScheduleSnapshot = {
+      schedule: {},
+      tranches: [
+        { vesting_date: '2025-01-01', percentage_of_award: 50 },
+        { vesting_date: '2025-02-01', percentage_of_award: 50 },
+      ],
+    };
+    const out = buildVestingTimeline(7, null, snap, FIXED_TODAY);
+    const total = out.reduce((acc, e) => acc + e.unitsToVest, 0);
+    expect(out[0]?.unitsToVest).toBe(4);
+    expect(out[1]?.unitsToVest).toBe(3); // dernière tranche corrigée
+    expect(total).toBe(7); // SUM === unitsGranted exact
+  });
+
+  it('drift correction applique le drift sur la tranche chronologiquement la plus tardive (tri)', () => {
+    // Tranches fournies dans le désordre : la correction doit cibler
+    // 2025-03-01 (la plus tardive), pas la dernière du tableau d'entrée.
+    const unsorted: PortalVestingScheduleSnapshot = {
+      schedule: {},
+      tranches: [
+        { vesting_date: '2025-03-01', percentage_of_award: 33.34 },
+        { vesting_date: '2025-01-01', percentage_of_award: 33.33 },
+        { vesting_date: '2025-02-01', percentage_of_award: 33.33 },
+      ],
+    };
+    const out = buildVestingTimeline(100, null, unsorted, FIXED_TODAY);
+    expect(out[0]?.date).toBe('2025-01-01');
+    expect(out[2]?.date).toBe('2025-03-01');
+    expect(out[2]?.unitsToVest).toBe(34); // drift absorbé ici
+    expect(out.reduce((a, e) => a + e.unitsToVest, 0)).toBe(100);
   });
 
   it("retourne tableau vide si pas de tranches et pas d'events", () => {

@@ -76,6 +76,9 @@ export function ComplianceRuleEditDialog({
   // Reset values quand le dialog s'ouvre/ferme avec une nouvelle rule
   useEffect(() => {
     if (open) {
+      // Reset du formulaire à l'ouverture du dialog : synchro one-shot sur la
+      // prop `open`/`rule`, pas une boucle de rendu.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset form on dialog open
       setValues(getInitialValues(rule));
       setErrors({});
       setSimulation(null);

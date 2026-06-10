@@ -2,9 +2,11 @@
  * Régime fiscal Stock Options qualifiées (post-2017, art. 80 bis CGI).
  *
  * V1 simplifié :
- *   - Plus-value d'acquisition (FMV exercice - strike) :
- *       imposée au barème IR (TMI bénéficiaire) + CSG/CRDS revenus
- *       d'activité (9,7% forfait V1)
+ *   - Plus-value d'acquisition (gain de levée = FMV exercice - strike) :
+ *       imposée au barème IR (TMI bénéficiaire)
+ *       + CSG/CRDS revenus d'activité (9,7% forfait V1)
+ *       + contribution salariale spécifique 10% (CSS art. L 137-14),
+ *         due pour toute option attribuée depuis le 28/09/2012
  *   - Plus-value de cession (FMV cession - FMV exercice) :
  *       PFU 31,4% par défaut, option barème IR possible
  *
@@ -20,6 +22,7 @@ import {
   PFU_IR_2026,
   PS_CAPITAL_GAINS_2026,
   RATES_YEAR,
+  SALARIAL_CONTRIBUTION_10_2026,
   SO_NON_QUALIFIE_SOCIAL_CONTRIB_2026,
   TAX_SOURCES,
 } from './rates';
@@ -62,8 +65,13 @@ export function simulateStockOption(
     }),
   );
 
-  // CSG/CRDS revenus d'activité sur PV acquisition (9,7% forfait V1)
-  let acquisitionSocialContributions = round2(acquisitionTaxableBase * CSG_CRDS_ACTIVITY_2026);
+  // Régime social sur le gain de levée (PV acquisition), assiette brute :
+  //   - CSG/CRDS revenus d'activité 9,7% (forfait V1)
+  //   - contribution salariale spécifique 10% (CSS art. L 137-14), due
+  //     pour toute option attribuée depuis le 28/09/2012
+  let acquisitionSocialContributions = round2(
+    acquisitionTaxableBase * (CSG_CRDS_ACTIVITY_2026 + SALARIAL_CONTRIBUTION_10_2026),
+  );
 
   // Si non-qualifié : + 9,7% cotisations salariales sur PV acquisition
   if (variant === 'non_qualifie') {

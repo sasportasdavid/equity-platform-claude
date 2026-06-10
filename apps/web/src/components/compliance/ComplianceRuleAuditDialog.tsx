@@ -65,6 +65,9 @@ export function ComplianceRuleAuditDialog({
 
   useEffect(() => {
     if (!open) return;
+    // Fetch du journal d'audit à l'ouverture : on bascule en état "loading"
+    // avant l'appel async. Synchro one-shot sur `open`, pas une boucle.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading state before async fetch on open
     setLoading(true);
     setError(null);
     getComplianceRuleAuditLog(ruleCode)

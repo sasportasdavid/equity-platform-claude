@@ -20,6 +20,12 @@ const eslintConfig = defineConfig([
   {
     files: ['src/**/*.{ts,tsx,js,jsx}'],
     rules: {
+      // react/no-unescaped-entities : règle legacy qui flague les apostrophes/
+      // guillemets dans le JSX. Sur une app 100 % francophone (« l'attribution »,
+      // « d'exercice »…) c'est du bruit pur — React rend ces caractères sans
+      // ambiguïté. Désactivée volontairement (audit 2026-06-10 P0-6) pour ne pas
+      // imposer des `&apos;` partout.
+      'react/no-unescaped-entities': 'off',
       'no-restricted-syntax': [
         'error',
         {

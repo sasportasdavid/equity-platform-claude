@@ -63,12 +63,49 @@ export const CSG_CRDS_ACTIVITY_2026 = 0.097;
 export const SO_NON_QUALIFIE_SOCIAL_CONTRIB_2026 = 0.097;
 
 /**
- * Contribution salariale spécifique AGA post-2018 (CGI art. L 137-13)
- * = 10% sur la base brute du gain d'acquisition.
+ * Contribution salariale spécifique de 10% (CSS art. L 137-14).
  *
- * Source : BOFiP BOI-RSA-ES-20-20.
+ * - AGA post-2018 : due UNIQUEMENT sur la fraction du gain d'acquisition
+ *   > 300 000 € (la fraction ≤ 300 000 € relève des prélèvements sociaux
+ *   du capital, sans contribution salariale).
+ * - Stock-options attribuées depuis le 28/09/2012 : due sur l'intégralité
+ *   du gain de levée (PV d'acquisition).
+ *
+ * Source : CSS art. L 137-14 ; BOFiP BOI-RSA-ES-20-20.
  */
-export const AGA_CONTRIBUTION_SALARIALE_2026 = 0.1;
+export const SALARIAL_CONTRIBUTION_10_2026 = 0.1;
+
+/**
+ * @deprecated Alias historique. Utiliser `SALARIAL_CONTRIBUTION_10_2026`.
+ * Conservé pour ne pas casser d'éventuels imports externes.
+ */
+export const AGA_CONTRIBUTION_SALARIALE_2026 = SALARIAL_CONTRIBUTION_10_2026;
+
+/**
+ * Prélèvements sociaux sur revenus du capital applicables au gain
+ * d'acquisition AGA post-2018 pour la fraction ≤ 300 000 €.
+ *
+ * Réf. CGI art. 80 quaterdecies / CSS art. L 136-6 : cette fraction est
+ * assimilée à une plus-value mobilière et supporte les PS du capital
+ * (CSG capital + CRDS + prélèvement de solidarité), au taux 2026 de
+ * 18,6% (cf. PS_CAPITAL_GAINS_2026), SANS contribution salariale 10%.
+ *
+ * Aliasé sur PS_CAPITAL_GAINS_2026 : même assiette « capital ».
+ */
+export const AGA_ACQUISITION_PS_CAPITAL_2026 = PS_CAPITAL_GAINS_2026;
+
+/**
+ * Seuil de 300 000 € (CGI art. 80 quaterdecies / CSS art. L 137-14)
+ * séparant, pour le gain d'acquisition AGA post-2018 :
+ *   - la fraction ≤ 300 000 € → PS du capital (18,6%), pas de contrib 10%
+ *   - la fraction > 300 000 €  → régime salaire (CSG activité 9,7% +
+ *     contribution salariale 10%)
+ *
+ * Numériquement identique au plafond d'abattement IR
+ * (AGA_ABATTEMENT_THRESHOLD), mais distinct sémantiquement (assiette
+ * sociale ≠ assiette IR). Gardé séparé pour la traçabilité.
+ */
+export const AGA_SOCIAL_REGIME_THRESHOLD = 300_000;
 
 /**
  * Taux d'imposition pour BSPCE en cas d'ancienneté < 3 ans

@@ -32,10 +32,13 @@ export function CookieConsent() {
   const [visible, setVisible] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  // Read cookie au mount — useEffect car document n'est dispo que côté client
+  // Read cookie au mount — useEffect car document n'est dispo que côté client.
+  // setState one-shot au mount (pas de boucle de rendu) : on affiche le bandeau
+  // uniquement si aucun consentement n'a déjà été enregistré.
   useEffect(() => {
     const existing = readCookieConsent();
     if (!existing?.acknowledged) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot client-only (lecture cookie au mount)
       setVisible(true);
     }
   }, []);

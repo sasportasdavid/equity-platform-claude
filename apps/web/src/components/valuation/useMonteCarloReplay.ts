@@ -138,7 +138,11 @@ export function useMonteCarloReplay(
   // Mount : démarre l'animation si enabled, sinon rendu statique
   useEffect(() => {
     if (!enabled) {
+      // Rendu statique : on force l'état final (pas d'animation). setState
+      // synchronisé sur la prop `enabled`, déclenché à chaque toggle, pas une boucle.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync sur prop enabled (rendu statique)
       setProgress(1);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync sur prop enabled (rendu statique)
       setIsAnimating(false);
       return;
     }
