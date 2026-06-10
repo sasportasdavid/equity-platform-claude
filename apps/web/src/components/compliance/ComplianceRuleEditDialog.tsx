@@ -281,21 +281,23 @@ export function ComplianceRuleEditDialog({
                 <div
                   className={`rounded border p-2 text-xs ${
                     simulation.newlyBlocked > 0
-                      ? 'border-amber-300 bg-amber-50'
-                      : 'border-emerald-300 bg-emerald-50'
+                      ? 'border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30'
+                      : 'border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30'
                   }`}
                   data-testid="simulation-result"
                 >
                   <p className="font-medium">
                     {simulation.newlyBlocked > 0 ? (
-                      <span className="inline-flex items-center gap-1 text-amber-900">
+                      <span className="inline-flex items-center gap-1 text-amber-900 dark:text-amber-200">
                         <AlertTriangle className="size-3.5" strokeWidth={1.75} />
                         {simulation.newlyBlocked} entité
                         {simulation.newlyBlocked > 1 ? 's' : ''} nouvellement bloquée
                         {simulation.newlyBlocked > 1 ? 's' : ''}
                       </span>
                     ) : (
-                      <span className="text-emerald-900">Aucune entité nouvellement bloquée</span>
+                      <span className="text-emerald-900 dark:text-emerald-200">
+                        Aucune entité nouvellement bloquée
+                      </span>
                     )}
                   </p>
                   <p className="text-muted-foreground mt-1">

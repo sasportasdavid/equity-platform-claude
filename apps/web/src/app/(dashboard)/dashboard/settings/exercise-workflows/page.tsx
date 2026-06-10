@@ -26,12 +26,12 @@ export default async function ExerciseWorkflowsPage() {
 
       {/* Banner READ-ONLY */}
       <div
-        className="rounded-md border border-amber-300 bg-amber-50 p-4"
+        className="rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30"
         data-testid="readonly-banner"
       >
         <div className="flex items-start gap-3">
-          <Lock className="mt-0.5 size-4 text-amber-700" strokeWidth={2} />
-          <div className="text-sm text-amber-900">
+          <Lock className="mt-0.5 size-4 text-amber-700 dark:text-amber-400" strokeWidth={2} />
+          <div className="text-sm text-amber-900 dark:text-amber-100">
             <p className="font-medium">Configuration en lecture seule (V1)</p>
             <p className="mt-1 leading-relaxed">
               L&apos;édition des paliers est disponible en V2 (page admin dédiée). Pour modifier la

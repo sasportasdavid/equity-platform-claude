@@ -183,8 +183,8 @@ export default async function AdminExerciseDetailPage({
             )}
             {request.rejected_reason && (
               <div className="border-paper-300 border-t pt-4">
-                <p className="text-overline text-rose-700">MOTIF · DE REJET</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-rose-900">
+                <p className="text-overline text-rose-700 dark:text-rose-400">MOTIF · DE REJET</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-rose-900 dark:text-rose-100">
                   {request.rejected_reason}
                 </p>
               </div>
@@ -326,7 +326,7 @@ function KpiCell({
           accent === 'brass'
             ? 'text-brass-700 font-semibold'
             : accent === 'emerald'
-              ? 'font-semibold text-emerald-700'
+              ? 'font-semibold text-emerald-700 dark:text-emerald-400'
               : 'text-ink-900'
         }`}
       >
@@ -353,7 +353,7 @@ function DetailItem({
           accent === 'brass'
             ? 'text-brass-700 font-semibold'
             : accent === 'emerald'
-              ? 'font-semibold text-emerald-700'
+              ? 'font-semibold text-emerald-700 dark:text-emerald-400'
               : 'text-ink-900'
         }`}
       >

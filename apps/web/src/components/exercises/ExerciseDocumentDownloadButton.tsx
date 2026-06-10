@@ -59,7 +59,7 @@ export function ExerciseDocumentDownloadButton({
         {isPending ? 'Génération du lien…' : label}
       </Button>
       {error && (
-        <p className="rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-900">
+        <p className="rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-100">
           {error}
         </p>
       )}

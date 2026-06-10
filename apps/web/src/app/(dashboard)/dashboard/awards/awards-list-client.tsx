@@ -118,7 +118,7 @@ export function AwardsListClient({
               <Search className="text-muted-foreground absolute left-2 top-1/2 size-4 -translate-y-1/2" />
               <Input
                 type="text"
-                placeholder="Recherche nom / email / award #"
+                placeholder="Recherche nom / email / attribution #"
                 defaultValue={filters.search ?? ''}
                 onChange={(e) => debouncedUpdate(() => setParam('search', e.target.value))}
                 className="pl-8"

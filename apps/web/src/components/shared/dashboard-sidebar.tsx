@@ -63,7 +63,7 @@ const NAV_SECTIONS: ReadonlyArray<NavSection> = [
   {
     title: 'Opérations',
     items: [
-      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+      { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard, exact: true },
       { href: '/dashboard/plans', label: 'Plans', icon: FileText, countKey: 'plans' },
       {
         href: '/dashboard/beneficiaries',

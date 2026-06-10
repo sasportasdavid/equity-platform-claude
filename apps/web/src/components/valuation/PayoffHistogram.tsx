@@ -63,30 +63,31 @@ export function PayoffHistogram({ histogram, height = 240 }: PayoffHistogramProp
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 24 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis
               dataKey="binLabel"
-              tick={{ fontSize: 10, fill: '#78716c' }}
-              stroke="#a8a29e"
+              tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+              stroke="var(--border)"
               interval="preserveStartEnd"
               label={{
                 value: 'Payoff actualisé',
                 position: 'insideBottom',
                 offset: -8,
                 fontSize: 11,
-                fill: '#78716c',
+                fill: 'var(--muted-foreground)',
               }}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: '#78716c' }}
-              stroke="#a8a29e"
+              tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+              stroke="var(--border)"
               tickFormatter={(v: number) => intFormatter.format(v)}
               width={50}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#fff',
-                border: '1px solid #e7e5e4',
+                backgroundColor: 'var(--popover)',
+                color: 'var(--popover-foreground)',
+                border: '1px solid var(--border)',
                 borderRadius: '4px',
                 fontSize: '11px',
               }}
@@ -94,7 +95,7 @@ export function PayoffHistogram({ histogram, height = 240 }: PayoffHistogramProp
             />
             <Bar dataKey="count" isAnimationActive animationDuration={1200}>
               {data.map((d, i) => (
-                <Cell key={`cell-${i}`} fill={d.isZero ? '#a8a29e' : '#14b8a6'} />
+                <Cell key={`cell-${i}`} fill={d.isZero ? 'var(--muted-foreground)' : '#14b8a6'} />
               ))}
             </Bar>
           </BarChart>

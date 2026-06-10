@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ThemeToggle } from '@/components/shared/theme-toggle';
 import { PortalNav } from './PortalNav';
 import { PortalUserMenu } from './PortalUserMenu';
 
@@ -56,6 +57,7 @@ export function PortalHeader({
             {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
           </span>
         ) : null}
+        <ThemeToggle />
         <PortalUserMenu fullName={fullName} email={email} />
       </div>
     </header>

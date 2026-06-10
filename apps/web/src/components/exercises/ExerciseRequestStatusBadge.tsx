@@ -21,12 +21,12 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_TONE: Record<string, string> = {
-  PENDING: 'border-amber-500/40 bg-amber-500/10 text-amber-700',
-  APPROVED: 'border-indigo-500/40 bg-indigo-500/10 text-indigo-700',
-  SIGNED: 'border-indigo-500/40 bg-indigo-500/10 text-indigo-700',
-  COMPLETED: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700',
-  REJECTED: 'border-rose-500/40 bg-rose-500/10 text-rose-700',
-  CANCELLED: 'border-slate-500/40 bg-slate-500/10 text-slate-700',
+  PENDING: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  APPROVED: 'border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400',
+  SIGNED: 'border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400',
+  COMPLETED: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  REJECTED: 'border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-400',
+  CANCELLED: 'border-slate-500/40 bg-slate-500/10 text-slate-700 dark:text-slate-300',
 };
 
 export function ExerciseRequestStatusBadge({

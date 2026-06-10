@@ -26,8 +26,8 @@ import { cancelApprovalRequest } from '@/server/actions/approvals';
 import type { ApprovalRequestDetailFull } from '@/server/queries/approvals';
 
 const STATUS_TONE: Record<string, string> = {
-  IN_PROGRESS: 'border-amber-400 text-amber-700',
-  APPROVED: 'border-emerald-400 text-emerald-700',
+  IN_PROGRESS: 'border-amber-400 text-amber-700 dark:text-amber-400',
+  APPROVED: 'border-emerald-400 text-emerald-700 dark:text-emerald-400',
   REJECTED: 'border-destructive text-destructive',
   CANCELLED: 'border-muted-foreground/40 text-muted-foreground',
 };
@@ -163,9 +163,11 @@ export function ApprovalRequestDetailClient({
       {/* Section 1 — Award concerné */}
       {detail.award ? (
         <section className="bg-card rounded-lg border p-4">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide">Award concerné</h2>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide">
+            Attribution concernée
+          </h2>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Award">
+            <Field label="Attribution">
               <Link
                 href={`/dashboard/awards/${detail.award.id}`}
                 className="text-primary font-mono hover:underline"

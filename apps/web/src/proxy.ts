@@ -89,6 +89,57 @@ function isNoOrgAllowed(pathname: string): boolean {
   return NO_ORG_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
 }
 
+/**
+ * Construit la CSP nonce-based (audit 2026-06-10 P1).
+ *
+ * Déployée en **Report-Only** : ne bloque rien, remonte les violations
+ * (console navigateur) → permet de valider en preview AVANT de passer en
+ * enforcing, sans risquer de casser la prod.
+ *
+ * Pour PASSER EN ENFORCING (après validation des rapports en preview) :
+ *   1. Remplacer le nom de header `content-security-policy-report-only` →
+ *      `content-security-policy` (les 2 set : requestHeaders + response).
+ *   2. Wirer le nonce dans les scripts inline restants :
+ *      - next-themes : `<ThemeProvider nonce={nonce}>` dans app/layout.tsx
+ *        (nonce lu via `headers().get('x-nonce')`) — sinon le script anti-flash
+ *        est bloqué.
+ *      - Sentry replay : worker-src blob: déjà présent.
+ *   3. Re-tester login / dashboard / portal / charts / Yousign.
+ *
+ * Sources :
+ *   - script-src 'strict-dynamic' + nonce : Next 16 propage le nonce à ses
+ *     scripts dès qu'il voit une CSP avec nonce sur la request.
+ *   - style-src 'unsafe-inline' : Tailwind/Next injectent du style inline
+ *     (nonce sur styles impraticable, risque faible).
+ *   - connect-src : 'self' couvre Sentry (tunnelRoute /monitoring/tunnel) +
+ *     l'origine Supabase (REST) et son wss (Realtime).
+ */
+function buildCsp(nonce: string): string {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  let supabaseConnect = '';
+  try {
+    if (supabaseUrl) {
+      const origin = new URL(supabaseUrl).origin;
+      supabaseConnect = ` ${origin} ${origin.replace('https://', 'wss://')}`;
+    }
+  } catch {
+    /* URL invalide → on n'ajoute rien */
+  }
+  return [
+    `default-src 'self'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    `style-src 'self' 'unsafe-inline'`,
+    `img-src 'self' data: blob: https:`,
+    `font-src 'self'`,
+    `connect-src 'self'${supabaseConnect}`,
+    `worker-src 'self' blob:`,
+    `frame-ancestors 'none'`,
+    `base-uri 'self'`,
+    `form-action 'self'`,
+    `object-src 'none'`,
+  ].join('; ');
+}
+
 export async function proxy(request: NextRequest) {
   // On propage le pathname via header pour que les Server Components puissent
   // y accéder via `headers()`. Utilisé par `app/portal/layout.tsx` pour
@@ -97,9 +148,17 @@ export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-pathname', request.nextUrl.pathname);
 
+  // CSP nonce-based (Report-Only — cf. buildCsp). Le nonce est exposé via
+  // `x-nonce` pour que Next/next-themes puissent l'attacher à leurs scripts.
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const csp = buildCsp(nonce);
+  requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('content-security-policy-report-only', csp);
+
   const response = NextResponse.next({
     request: { headers: requestHeaders },
   });
+  response.headers.set('content-security-policy-report-only', csp);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

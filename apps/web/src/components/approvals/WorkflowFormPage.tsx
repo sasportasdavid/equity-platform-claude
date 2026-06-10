@@ -223,7 +223,7 @@ export function WorkflowFormPage({
       }
     >
       {editLocked ? (
-        <div className="rounded-md border border-amber-400 bg-amber-50 p-3 text-sm text-amber-900">
+        <div className="rounded-md border border-amber-400 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
           ⚠️ Ce workflow a {workflow?.active_requests_count} request(s) IN_PROGRESS. La modification
           est bloquée jusqu&apos;à résolution ou cancel manuel.
         </div>

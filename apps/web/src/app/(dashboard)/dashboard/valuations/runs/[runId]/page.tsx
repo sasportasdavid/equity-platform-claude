@@ -167,7 +167,7 @@ export default async function ValuationRunReplayPage({
           <Badge variant="outline" className="font-mono text-xs">
             {run.id.slice(0, 8)}
           </Badge>
-          <Badge className="border-emerald-300 bg-emerald-100 font-mono text-xs text-emerald-900">
+          <Badge className="border-emerald-300 bg-emerald-100 font-mono text-xs text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
             DONE
           </Badge>
         </span>

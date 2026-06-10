@@ -71,7 +71,7 @@ export function CancelExerciseDialog({ requestId }: { requestId: string }) {
         </Button>
       </div>
       {error && (
-        <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900">
+        <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-100">
           {error}
         </div>
       )}

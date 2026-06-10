@@ -117,7 +117,7 @@ export function ApprovalsInboxClient({
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2">
                       <Clock className="size-4 text-amber-600" />
-                      <span className="text-xs font-medium uppercase tracking-wide text-amber-700">
+                      <span className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
                         Étape {item.step_order}
                         {item.workflow_total_steps ? `/${item.workflow_total_steps}` : ''}
                         {item.step_name ? ` · ${item.step_name}` : ''}
@@ -193,7 +193,10 @@ export function ApprovalsInboxClient({
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center gap-2">
                     {item.decision_status === 'APPROVED' ? (
-                      <Badge variant="outline" className="border-emerald-400 text-emerald-700">
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-400 text-emerald-700 dark:text-emerald-400"
+                      >
                         ✓ Approved
                       </Badge>
                     ) : (

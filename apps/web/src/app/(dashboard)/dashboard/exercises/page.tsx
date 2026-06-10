@@ -100,7 +100,7 @@ export default async function ExerciseInboxPage({
               <tr>
                 <th className="px-4 py-3 text-left font-normal">N°</th>
                 <th className="px-4 py-3 text-left font-normal">Bénéficiaire</th>
-                <th className="px-4 py-3 text-left font-normal">Award</th>
+                <th className="px-4 py-3 text-left font-normal">Attribution</th>
                 <th className="px-4 py-3 text-right font-normal">Unités</th>
                 <th className="px-4 py-3 text-right font-normal">Montant</th>
                 <th className="px-4 py-3 text-left font-normal">Statut</th>

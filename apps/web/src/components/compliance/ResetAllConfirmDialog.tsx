@@ -58,7 +58,10 @@ export function ResetAllConfirmDialog({
       <DialogContent className="sm:max-w-md" data-testid="reset-all-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="size-5 text-amber-700" strokeWidth={1.75} />
+            <AlertTriangle
+              className="size-5 text-amber-700 dark:text-amber-400"
+              strokeWidth={1.75}
+            />
             Réinitialiser toute la configuration ?
           </DialogTitle>
           <DialogDescription className="pt-2 text-sm leading-relaxed">

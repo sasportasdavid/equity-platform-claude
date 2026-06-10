@@ -148,7 +148,7 @@ export function MarketDataInputs({ conditionIndex, indexDisplayName, ticker, asO
   const readonlyValues = mode === 'SNAPSHOT_AT_GRANT' && dataSource === 'EODHD';
 
   return (
-    <Card className="border-amber-200 bg-amber-50/40">
+    <Card className="border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20">
       <CardHeader>
         <CardTitle className="text-base">
           Paramètres de marché — {indexDisplayName ?? ticker ?? 'Indice'}
@@ -194,8 +194,11 @@ export function MarketDataInputs({ conditionIndex, indexDisplayName, ticker, asO
 
         {/* Warning IFRS 2 dégradé pour LIVE_AT_VALUATION */}
         {mode === 'LIVE_AT_VALUATION' ? (
-          <Alert variant="default" className="border-orange-300 bg-orange-50">
-            <AlertTriangle className="h-4 w-4 text-orange-700" />
+          <Alert
+            variant="default"
+            className="border-orange-300 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/20"
+          >
+            <AlertTriangle className="h-4 w-4 text-orange-700 dark:text-orange-400" />
             <AlertTitle>Reproductibilité IFRS 2 dégradée</AlertTitle>
             <AlertDescription className="space-y-2 text-xs">
               <p>
@@ -218,7 +221,7 @@ export function MarketDataInputs({ conditionIndex, indexDisplayName, ticker, asO
 
         {/* Auto-fetch button (mode SNAPSHOT only) */}
         {mode === 'SNAPSHOT_AT_GRANT' ? (
-          <div className="flex flex-col gap-2 rounded-md border border-dashed bg-white/60 p-3">
+          <div className="bg-card/60 flex flex-col gap-2 rounded-md border border-dashed p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="text-muted-foreground text-xs">
                 {capturedAt && dataSource === 'EODHD' ? (
@@ -269,8 +272,11 @@ export function MarketDataInputs({ conditionIndex, indexDisplayName, ticker, asO
 
         {/* Form values incomplete warning */}
         {requireValues && !allFilled ? (
-          <Alert variant="default" className="border-amber-300 bg-amber-100/50">
-            <AlertTriangle className="h-4 w-4 text-amber-700" />
+          <Alert
+            variant="default"
+            className="border-amber-300 bg-amber-100/50 dark:border-amber-900 dark:bg-amber-950/20"
+          >
+            <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-400" />
             <AlertTitle>Données incomplètes</AlertTitle>
             <AlertDescription>
               Remplir les 3 champs S₀, σ, ρ pour que la valuation Monte Carlo utilise les vraies
@@ -376,8 +382,11 @@ export function MarketDataInputs({ conditionIndex, indexDisplayName, ticker, asO
           </div>
         </div>
 
-        <Alert variant="default" className="border-blue-200 bg-blue-50/50">
-          <Info className="h-4 w-4 text-blue-700" />
+        <Alert
+          variant="default"
+          className="border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/20"
+        >
+          <Info className="h-4 w-4 text-blue-700 dark:text-blue-400" />
           <AlertDescription className="text-xs">
             <strong>Source recommandée</strong> : EODHD (auto-fetch) ou Yahoo Finance. Pour la
             corrélation, viser ≥ 252 jours de données historiques (3 ans recommandés en IFRS 2).
@@ -415,13 +424,13 @@ function ModeRadio({
         'flex flex-col items-start gap-1 rounded-md border p-3 text-left text-xs transition-colors',
         active
           ? 'border-primary bg-primary/5'
-          : 'border-border hover:border-primary/40 hover:bg-primary/2 bg-white',
+          : 'border-border hover:border-primary/40 hover:bg-primary/2 bg-card',
       ].join(' ')}
     >
       <div className="flex w-full items-center justify-between gap-2">
         <span className="text-sm font-medium">{label}</span>
         {recommended ? (
-          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-700">
+          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
             IFRS 2
           </span>
         ) : null}

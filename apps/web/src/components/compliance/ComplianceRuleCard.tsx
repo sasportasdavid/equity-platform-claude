@@ -77,11 +77,11 @@ export function ComplianceRuleCard({ rule, canEdit, onUpdate }: ComplianceRuleCa
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-ink-900 font-mono text-xs font-semibold">{rule.rule_code}</span>
             {rule.effective_severity === 'error' ? (
-              <Badge className="border-rose-300 bg-rose-100 font-mono text-[10px] text-rose-900">
+              <Badge className="border-rose-300 bg-rose-100 font-mono text-[10px] text-rose-900 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-100">
                 ERROR
               </Badge>
             ) : (
-              <Badge className="border-amber-300 bg-amber-100 font-mono text-[10px] text-amber-900">
+              <Badge className="border-amber-300 bg-amber-100 font-mono text-[10px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
                 WARNING
               </Badge>
             )}
@@ -100,7 +100,7 @@ export function ComplianceRuleCard({ rule, canEdit, onUpdate }: ComplianceRuleCa
             ) : null}
             {ruleHasMixedSeverity ? (
               <span
-                className="inline-flex items-center gap-1 text-amber-800"
+                className="inline-flex items-center gap-1 text-amber-800 dark:text-amber-400"
                 title="Cette règle est de type warning par défaut, mais peut bloquer si l'année d'embauche est < 1900 (validation absurde). Sera scindée en 2 règles distinctes en V2."
                 data-testid="badge-mixed-severity"
               >
